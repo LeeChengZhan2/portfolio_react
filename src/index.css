@@ -17,9 +17,14 @@ code {
 }
 
 .nav-link {
-  @apply relative inline-block transition-all duration-300 ease-in-out bg-gray-800 text-white rounded-full;
+  @apply relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
 }
 
-.nav-link:hover {
-  @apply bg-gray-400 px-3 font-bold text-lg;
+.nav-link::after {
+  @apply absolute left-0 -bottom-1 w-full h-0.5 bg-blue-500 scale-x-0 transition-transform duration-300;
+  content: '';
+}
+
+.nav-link:hover::after {
+  @apply scale-x-100;
 }
