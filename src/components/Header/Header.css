@@ -1,0 +1,20 @@
+.header-container{
+    @apply bg-white p-4 shadow-md;
+}
+
+.nav-container{
+    @apply flex justify-center space-x-8;
+}
+
+.nav-link {
+    @apply relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
+  }
+
+.nav-link::after {
+@apply absolute left-0 -bottom-1 w-full h-0.5 bg-blue-500 scale-x-0 transition-transform duration-300;
+content: '';
+}
+
+.nav-link:hover::after {
+@apply scale-x-100;
+}
