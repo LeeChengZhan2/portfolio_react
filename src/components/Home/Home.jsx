@@ -4,7 +4,6 @@ import './Home.css';
 function Home(){
     return(
         <main className="main-container">
-            {/* Introduction Section */}
             <section className="content-container">
                 <section className="text-container">
                     <h1 className="introduction">Hi, I'm Lee Cheng Zhan from Malaysia</h1>

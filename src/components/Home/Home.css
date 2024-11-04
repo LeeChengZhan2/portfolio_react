@@ -4,17 +4,19 @@
 
 .content-container {
     @apply bg-blue-500 relative;
-    @apply h-[24rem] md:h-[32rem] lg:h-[40rem]
+    @apply h-[24rem] md:h-[32rem] lg:h-[40rem] xl:h-[54rem]
 }
 
 .text-container{
-    @apply text-white absolute bottom-0 left-0 p-14
+    @apply text-white absolute bottom-0 left-0;
+    @apply p-14 xl:p-16
 }
 
 .introduction{
-    @apply text-4xl font-bold mb-4
+    @apply font-bold mb-4;
+    @apply text-4xl xl:text-5xl
 }
 
 .occupation{
-    @apply text-2xl
+    @apply text-2xl xl:text-3xl
 }
