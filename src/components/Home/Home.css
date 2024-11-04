@@ -1,0 +1,20 @@
+.main-container{
+    @apply bg-gray-100 p-4;
+}
+
+.content-container {
+    @apply bg-blue-500 relative;
+    @apply h-[24rem] md:h-[32rem] lg:h-[40rem]
+}
+
+.text-container{
+    @apply text-white absolute bottom-0 left-0 p-14
+}
+
+.introduction{
+    @apply text-4xl font-bold mb-4
+}
+
+.occupation{
+    @apply text-2xl
+}
