@@ -15,15 +15,15 @@
 
 .personalities{
     @apply text-left mb-4;
-    @apply text-lg lg:text-xl 2xl:text-3xl
+    @apply text-xl lg:text-2xl 2xl:text-3xl
 }
 
 .occupation{
     @apply text-left mb-4;
-    @apply text-lg lg:text-xl 2xl:text-4xl
+    @apply text-2xl lg:text-3xl 2xl:text-4xl
 }
 
 .introduction{
     @apply font-bold;
-    @apply text-2xl lg:text-3xl 2xl:text-5xl
+    @apply text-3xl lg:text-4xl 2xl:text-5xl
 }
