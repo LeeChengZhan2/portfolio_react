@@ -1,22 +1,29 @@
 .main-container{
-    @apply bg-gray-100 p-4;
+    @apply bg-gray-100;
+    @apply p-4 lg:p-6 2xl:p-8;
 }
 
 .content-container {
-    @apply bg-blue-500 relative;
-    @apply h-[24rem] md:h-[32rem] lg:h-[40rem] xl:h-[54rem]
+    @apply bg-blue-500 relative rounded-xl;
+    @apply h-[24rem] lg:h-[32rem] 2xl:h-[51rem]
 }
 
 .text-container{
     @apply text-white absolute bottom-0 left-0;
-    @apply p-14 xl:p-16
+    @apply p-4 lg:p-8 2xl:p-24
 }
 
-.introduction{
-    @apply font-bold mb-4;
-    @apply text-4xl xl:text-5xl
+.personalities{
+    @apply text-left mb-4;
+    @apply text-lg lg:text-xl 2xl:text-3xl
 }
 
 .occupation{
-    @apply text-2xl xl:text-3xl
+    @apply text-left mb-4;
+    @apply text-lg lg:text-xl 2xl:text-4xl
+}
+
+.introduction{
+    @apply font-bold;
+    @apply text-2xl lg:text-3xl 2xl:text-5xl
 }

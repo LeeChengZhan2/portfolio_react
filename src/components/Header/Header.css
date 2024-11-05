@@ -7,7 +7,7 @@
 }
 
 .nav-link {
-    @apply relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
+    @apply text-lg relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
     /* @apple text-sm md:text-md lg:text-lg  */
   }
 
