@@ -1,3 +1,15 @@
-.main-container{
-    @apply bg-gray-100 p-4;
+.about-container{
+    @apply flex justify-center min-h-screen p-32 bg-gray-100 text-gray-900;
+}
+
+.about-flex-container{
+    @apply flex max-w-5xl w-full space-x-8
+}
+
+.about-picture-container{
+    @apply flex-1 basis-1/2 w-48 h-48 rounded-lg overflow-hidden shadow-lg
+}
+
+.about-content-container{
+    @apply flex-1 basis-1/2 
 }
