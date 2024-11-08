@@ -1,0 +1,15 @@
+.footer-container{
+    @apply bg-white p-16 shadow-md;
+}
+
+.footer-flex-container{
+    @apply flex
+}
+
+.contact-container{
+    @apply flex-1 basis-3/4 bg-blue-500
+}
+
+.cv-download-container{
+    @apply flex-1 basis-1/4 bg-gray-200
+}

@@ -1,9 +1,9 @@
 .about-container{
-    @apply flex justify-center min-h-screen p-32 bg-gray-100 text-gray-900;
+    @apply flex justify-center min-h-screen p-48 bg-gray-100 text-gray-900;
 }
 
 .about-flex-container{
-    @apply flex max-w-5xl w-full space-x-8
+    @apply flex space-x-12
 }
 
 .about-picture-container{
@@ -11,5 +11,5 @@
 }
 
 .about-content-container{
-    @apply flex-1 basis-1/2 
+    @apply flex-1 basis-1/2 w-full text-left 
 }

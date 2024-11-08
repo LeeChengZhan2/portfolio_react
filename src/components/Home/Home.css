@@ -1,4 +1,4 @@
-.main-container{
+.home-container{
     @apply bg-gray-100;
     @apply p-4 lg:p-6 2xl:p-8;
 }
