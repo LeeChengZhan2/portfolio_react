@@ -3,17 +3,17 @@ import './Footer.css';
 
 function Footer(){
     return(
-        <Footer className="footer-container">
+        <footer className="footer-container">
             <section className="footer-flex-container">
                 <div className="contact-container">
-                    
+                    <p>123</p>
                 </div>
                 <div className="cv-download-container">
-
+                    <p>456</p>
                 </div>
             </section>
-        </Footer>
+        </footer>
     );
-  };
+};
   
-  export default Footer;
+export default Footer;
