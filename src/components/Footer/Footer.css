@@ -3,13 +3,25 @@
 }
 
 .footer-flex-container{
-    @apply flex
+    @apply flex items-center justify-center
 }
 
 .contact-container{
-    @apply flex-1 basis-3/4 bg-blue-500
+    @apply flex-1 basis-3/4 text-left
+}
+
+.contact-header{
+    @apply text-4xl font-bold mb-4
+}
+
+.contact{
+    @apply text-lg text-gray-600
 }
 
 .cv-download-container{
-    @apply flex-1 basis-1/4 bg-gray-200
+    @apply flex-1 basis-1/4
+}
+
+.download-button{
+    @apply rounded-full text-4xl font-bold
 }

@@ -6,10 +6,14 @@ function Footer(){
         <footer className="footer-container">
             <section className="footer-flex-container">
                 <div className="contact-container">
-                    <p>123</p>
+                    <p className="contact-header">Contact</p>
+                    <div classNae="contact">
+                        <p>Email - Leechengzhan7@gmail.com</p>
+                        <p>Phone - +65 8127 3530</p>
+                    </div>
                 </div>
                 <div className="cv-download-container">
-                    <p>456</p>
+                    <button className='download-button'>Download CV</button>
                 </div>
             </section>
         </footer>
