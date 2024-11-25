@@ -1,9 +1,9 @@
 .footer-container{
-    @apply bg-white p-16 shadow-md;
+    @apply bg-white px-32 py-8 shadow-md;
 }
 
 .footer-flex-container{
-    @apply flex items-center justify-center
+    @apply flex items-center
 }
 
 .contact-container{
@@ -11,17 +11,21 @@
 }
 
 .contact-header{
-    @apply text-4xl font-bold mb-4
+    @apply text-4xl font-bold mb-3
 }
 
 .contact{
-    @apply text-lg text-gray-600
+    @apply text-lg text-gray-600 flex
+}
+
+.contact p{
+    @apply inline-block
 }
 
 .cv-download-container{
-    @apply flex-1 basis-1/4
+    @apply flex-1 basis-1/4 text-right
 }
 
 .download-button{
-    @apply rounded-full text-4xl font-bold
+    @apply rounded-full text-2xl font-bold border border-gray-500 px-6 py-3;
 }
