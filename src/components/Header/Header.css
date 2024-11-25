@@ -1,4 +1,4 @@
-.header-container{
+.navbar{
     @apply bg-white p-4 shadow-md;
 }
 
@@ -7,7 +7,7 @@
 }
 
 .nav-link {
-    @apply text-lg relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
+    @apply relative font-semibold text-gray-700 hover:text-blue-500 transition-colors duration-300;
     /* @apple text-sm md:text-md lg:text-lg  */
   }
 

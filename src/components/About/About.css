@@ -11,5 +11,5 @@
 }
 
 .about-content-container{
-    @apply flex-1 basis-1/2 w-full text-left 
+    @apply flex-1 basis-1/2 w-full text-left
 }

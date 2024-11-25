@@ -1,11 +1,10 @@
 .home-container{
-    @apply bg-gray-100;
-    @apply p-4 lg:p-6 2xl:p-8;
+    @apply flex h-[calc(100vh-var(--navbar-height))] bg-gray-100;
+    @apply p-4 lg:p-8 2xl:p-12;
 }
 
 .content-container {
-    @apply bg-blue-500 relative rounded-xl;
-    @apply h-[24rem] lg:h-[32rem] 2xl:h-[51rem]
+    @apply flex-auto bg-blue-500 relative rounded-xl;
 }
 
 .text-container{
@@ -15,15 +14,15 @@
 
 .personalities{
     @apply text-left mb-4;
-    @apply text-xl lg:text-2xl 2xl:text-3xl
+    @apply text-xl lg:text-2xl 2xl:text-2xl
 }
 
 .occupation{
     @apply text-left mb-4;
-    @apply text-2xl lg:text-3xl 2xl:text-4xl
+    @apply text-2xl lg:text-3xl 2xl:text-3xl
 }
 
 .introduction{
     @apply font-bold;
-    @apply text-3xl lg:text-4xl 2xl:text-5xl
+    @apply text-3xl lg:text-4xl 2xl:text-4xl
 }

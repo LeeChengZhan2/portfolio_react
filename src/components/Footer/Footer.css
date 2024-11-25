@@ -1,9 +1,5 @@
-.footer-container{
-    @apply bg-white px-32 py-8 shadow-md;
-}
-
 .footer-flex-container{
-    @apply flex items-center
+    @apply flex items-center bg-white px-32 py-8 shadow-md
 }
 
 .contact-container{
@@ -15,11 +11,7 @@
 }
 
 .contact{
-    @apply text-lg text-gray-600 flex
-}
-
-.contact p{
-    @apply inline-block
+    @apply flex space-x-4 text-gray-900
 }
 
 .cv-download-container{
@@ -27,5 +19,9 @@
 }
 
 .download-button{
-    @apply rounded-full text-2xl font-bold border border-gray-500 px-6 py-3;
+    @apply rounded-full font-bold border border-gray-500 px-6 py-3;
+}
+
+.copyright{
+    @apply p-2 bg-gray-700 text-white text-center text-xs font-serif
 }

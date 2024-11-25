@@ -3,11 +3,11 @@ import './Footer.css';
 
 function Footer(){
     return(
-        <footer className="footer-container">
+        <footer>
             <section className="footer-flex-container">
                 <div className="contact-container">
                     <p className="contact-header">Contact</p>
-                    <div classNae="contact">
+                    <div className="contact">
                         <p>Email - Leechengzhan7@gmail.com</p>
                         <p>Phone - +65 8127 3530</p>
                     </div>
@@ -16,6 +16,9 @@ function Footer(){
                     <button className='download-button'>Download CV</button>
                 </div>
             </section>
+            <div class="copyright">
+                 <p>Copyright &copy; Lee Cheng Zhan</p>
+            </div>
         </footer>
     );
 };
