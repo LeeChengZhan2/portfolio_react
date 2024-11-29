@@ -4,7 +4,8 @@
 }
 
 .content-container {
-    @apply flex-auto bg-blue-500 relative rounded-xl;
+    @apply flex-auto relative rounded-xl;
+    /* background-image: url('/images/Portrait_Landscape.png'); */
 }
 
 .text-container{
