@@ -1,3 +1,3 @@
 module.exports = {
-    homeBackground: "url('./public/images/HomeLandscapeImage1.DNG')",
+    homebg: "url('http://localhost:3000/portfolio_react/images/HomeLandscapeImage1.jpg')"
 };

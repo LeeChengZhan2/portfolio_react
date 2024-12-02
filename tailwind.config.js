@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 
-import { images } from './src/config/images.js';
+import { images } from './src/config/images';
 
 export const content = ['./src/**/*.{js,jsx}'];
 export const theme = {
@@ -14,7 +14,7 @@ export const theme = {
       lavendarblue: '#C6E7FF'
     },
     backgroundImage: {
-      ...images,
+    homebg: "url('http://localhost:3000/portfolio_react/images/HomeLandscapeImage1.png')"
     },
   },
 };

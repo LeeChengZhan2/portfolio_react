@@ -1,11 +1,11 @@
 .home-container{
     @apply flex h-[calc(100vh-var(--navbar-height))] bg-gray-100;
-    @apply p-4 lg:p-8 2xl:p-12;
+    @apply p-4 lg:p-8 2xl:p-16;
 }
 
 .content-container {
-    @apply flex-auto relative rounded-xl;
-    /* background-image: url('/images/Portrait_Landscape.png'); */
+    @apply flex-auto relative rounded-xl bg-homebg bg-cover bg-center;
+    /* background-image: url('http://localhost:3000/portfolio_react/images/Portrait_Landscape.jpg'); */
 }
 
 .text-container{
