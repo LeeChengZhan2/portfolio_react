@@ -14,7 +14,7 @@ export const theme = {
       lavendarblue: '#C6E7FF'
     },
     backgroundImage: {
-     homebg: "url('/public/images/HomeLandscapeImage1.png')"
+     homebg: "url('/src/assets/images/HomeLandscapeImage1.png')"
     },
   },
 };
