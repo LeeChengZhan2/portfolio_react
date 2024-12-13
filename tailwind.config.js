@@ -14,9 +14,10 @@ export const theme = {
       lavendarblue: '#C6E7FF'
     },
     backgroundImage: {
-    homebg: "url('http://localhost:3000/portfolio_react/images/HomeLandscapeImage1.png')"
+     homebg: "url('/public/images/HomeLandscapeImage1.png')"
     },
   },
 };
 export const plugins = [];
+
 
