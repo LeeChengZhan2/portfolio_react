@@ -11,5 +11,21 @@
 }
 
 .about-content-container{
-    @apply flex-1 basis-1/2 w-full text-left
+    @apply flex-1 basis-1/2 w-full text-justify text-left
+}
+
+.about-sub-title{
+    @apply text-4xl font-bold mb-2
+}
+
+.about-occupation{
+    @apply text-lg text-gray-600 mb-4
+}
+
+.about-content{
+    @apply text-gray-700
+}
+
+.spacing{
+    @apply block mb-6
 }
