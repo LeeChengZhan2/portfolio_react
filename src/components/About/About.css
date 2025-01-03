@@ -29,3 +29,11 @@
 .spacing{
     @apply block mb-6
 }
+
+.more-button-container{
+    @apply flex-1 basis-1/4 text-left
+}
+
+.more-button{
+    @apply flex items-center justify-center gap-2 rounded-full font-bold border border-gray-500 px-8 py-3 text-gray-700 hover:bg-gray-700 hover:text-white transition
+}

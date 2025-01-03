@@ -3,7 +3,7 @@ import './Home.css';
 
 function Home(){
     return(
-        <main className="home-container">
+        <main className="home-container" id='home'>
             <section className="content-container">
                 <div className="text-container">
                     <p className="personalities">INFJ</p>

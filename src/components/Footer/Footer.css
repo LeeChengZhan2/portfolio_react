@@ -1,5 +1,5 @@
 .footer-flex-container{
-    @apply flex items-center bg-white px-32 py-8 shadow-md
+    @apply flex items-center bg-white px-32 py-6 shadow-md
 }
 
 .contact-container{
@@ -19,7 +19,7 @@
 }
 
 .download-button{
-    @apply rounded-full font-bold border border-gray-500 px-6 py-3;
+    @apply rounded-full font-bold border border-gray-500 px-6 py-3 hover:bg-gray-700 hover:text-white transition
 }
 
 .copyright{
