@@ -1,4 +1,4 @@
-.portfolio-container{
+/* .portfolio-container{
     @apply bg-gray-100;
     @apply p-4 lg:p-6 2xl:p-32;
 }
@@ -18,4 +18,49 @@
 
 .portfolio-3-container{
     @apply flex-1 basis-1/3 text-white bg-gray-200 rounded-xl;
-}
+} */
+
+/* Overall white background for the page */
+.portfolio-container {
+    @apply bg-gray-100 min-h-screen flex items-center justify-center p-8;
+  }
+  
+  /* Horizontal flex container with symmetry */
+  .portfolio-flex-container {
+    @apply flex flex-row gap-8 max-w-7xl;
+  }
+  
+  /* Shared styling for all three containers with larger padding */
+  .portfolio-1-container,
+  .portfolio-2-container,
+  .portfolio-3-container {
+    @apply bg-white border border-gray-200 rounded-3xl p-10 shadow-lg text-center flex-1;
+  }
+  
+  /* Larger container dimensions on medium screens and up */
+  @media (min-width: 768px) {
+    .portfolio-1-container,
+    .portfolio-2-container,
+    .portfolio-3-container {
+      @apply min-w-[350px] min-h-[400px];
+    }
+  }
+  
+  /* Styling for the container titles */
+  .portfolio-title {
+    @apply text-3xl font-bold mb-4 text-gray-800;
+  }
+  
+  /* Styling for descriptive text */
+  .portfolio-text {
+    @apply text-lg mb-6 text-gray-600 text-justify;
+  }
+  
+  /* Styling for the GitHub link button in the first container */
+  .portfolio-link {
+    @apply inline-block bg-gray-800 text-white px-8 py-3 rounded-lg font-semibold transition-colors;
+  }
+  
+  .portfolio-link:hover {
+    @apply bg-gray-900;
+  }
