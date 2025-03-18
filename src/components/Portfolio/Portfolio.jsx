@@ -1,4 +1,3 @@
-// import React, { useState, useEffect } from 'react';
 import React from 'react';
 import { motion } from 'motion/react';
 import './Portfolio.css';
@@ -7,7 +6,7 @@ function Portfolio() {
   return (
     <main id="portfolio" className="portfolio-container">
       <section className="portfolio-flex-container">
-        {/* First Container with advanced animation */}
+        {/* First Container */}
         <motion.div
           className="portfolio-1-container"
           initial={{ opacity: 0, x: -50 }}
@@ -31,16 +30,18 @@ function Portfolio() {
           >
             This section showcases my personal projects, including previous school assignments and independent work. All projects are uploaded to GitHub.
           </motion.p>
-          <motion.a
-            href="https://github.com/LeeChengZhan2?tab=repositories"
-            target="_blank"
-            rel="noopener noreferrer"
-            whileHover={{ scale: 1.05, color: '#ff4500' }}
-            transition={{ type: 'spring', stiffness: 300 }}
-            className="portfolio-link"
-          >
-            View My GitHub Repositories
-          </motion.a>
+          <div className="mt-auto text-center">
+            <motion.a
+              href="https://github.com/LeeChengZhan2?tab=repositories"
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.05, color: '#ff4500' }}
+              transition={{ type: 'spring', stiffness: 300 }}
+              className="portfolio-link"
+            >
+              View My GitHub Repositories
+            </motion.a>
+          </div>
         </motion.div>
 
         {/* Second Container */}
@@ -62,20 +63,5 @@ function Portfolio() {
     </main>
   );
 }
-
-// function Portfolio(){
-//     return(
-//         <main className="portfolio-container" id='portfolio'>
-//             <section className="portfolio-flex-container">
-//                 <div className="portfolio-1-container">
-//                 </div>
-//                 <div className="portfolio-2-container">
-//                 </div>
-//                 <div className="portfolio-3-container">
-//                 </div>
-//             </section>
-//         </main>
-//     );
-// };
   
   export default Portfolio;
