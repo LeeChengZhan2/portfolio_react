@@ -10,22 +10,25 @@ function Portfolio() {
         <motion.div
           className="portfolio-1-container"
           initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 1 }}
           whileHover={{ scale: 1.02 }}
         >
           <motion.h2
             className="portfolio-title"
             initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
             transition={{ duration: 0.8, delay: 0.2 }}
           >
-            Personal Projects
+            Github
           </motion.h2>
           <motion.p
             className="portfolio-text"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
             transition={{ duration: 0.8, delay: 0.4 }}
           >
             This section showcases my personal projects, including previous school assignments and independent work. All projects are uploaded to GitHub.
@@ -46,7 +49,7 @@ function Portfolio() {
 
         {/* Second Container */}
         <div className="portfolio-2-container">
-          <h2 className="portfolio-title">Container 2</h2>
+          <h2 className="portfolio-title">FYP Project</h2>
           <p className="portfolio-text">
             This is a placeholder for your second container. You can add additional details or projects here.
           </p>
@@ -54,7 +57,7 @@ function Portfolio() {
 
         {/* Third Container */}
         <div className="portfolio-3-container">
-          <h2 className="portfolio-title">Container 3</h2>
+          <h2 className="portfolio-title">Personal Blog</h2>
           <p className="portfolio-text">
             This is a placeholder for your third container. Customize this section with your desired content.
           </p>
