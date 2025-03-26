@@ -1,6 +1,7 @@
 .home-container{
-    @apply flex h-[calc(100vh-var(--navbar-height))] bg-gray-100;
+    @apply flex h-screen bg-gray-100;
     @apply p-4 lg:p-8 2xl:p-16;
+    /*h-[calc(100vh-var(--navbar-height))]*/
 }
 
 .content-container {

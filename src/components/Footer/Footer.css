@@ -19,7 +19,7 @@
 }
 
 .download-button{
-    @apply rounded-full font-bold border border-gray-500 px-6 py-3 hover:bg-gray-700 hover:text-white transition
+    @apply rounded-full font-bold border border-gray-500 px-6 py-3 hover:bg-gray-700 hover:text-white
 }
 
 .copyright{
