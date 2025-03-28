@@ -13,7 +13,7 @@ function Portfolio() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 1.8 }}
-          whileHover={{ rotate: -2 }}
+          whileHover={{ scale:1.05, rotate: -2 }}
         >
           <motion.h2
             className="portfolio-title"
@@ -75,6 +75,7 @@ function Portfolio() {
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               transition={{ type: "spring", stiffness: 250 }}
             >
               View My GitHub Repositories
@@ -89,7 +90,7 @@ function Portfolio() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 1.8 }}
-          whileHover={{ rotate: 2 }}
+          whileHover={{ scale:1.05, rotate: 2 }}
         >
           <motion.h2
            className="portfolio-title"
@@ -122,6 +123,7 @@ function Portfolio() {
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               transition={{type: "spring", stiffness: 250 }}
             >
               View Project
@@ -131,6 +133,7 @@ function Portfolio() {
               href="/assets/documents/LeeChengZhan_FYP.pdf"
               download
               whileHover={{ scale: 1.1, rotate: -2 }}
+              whileTap={{ scale: 0.9 }}
               transition={{ type: "spring", stiffness: 250 }}
             >
               Download Report

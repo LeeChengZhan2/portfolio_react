@@ -42,6 +42,7 @@ function Footer() {
         <motion.button
             className="download-button"
             whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
             transition={{ type: "spring", stiffness: 250 }}
         >
             Download CV 
