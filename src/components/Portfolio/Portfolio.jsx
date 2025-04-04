@@ -11,7 +11,7 @@ function Portfolio() {
           className="portfolio-1-container"
           initial={{ opacity: 0, y: -50 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
+          viewport={{ once: true, margin: "-300px" }}
           transition={{ duration: 1.8 }}
           whileHover={{ scale:1.05, rotate: -2 }}
         >
@@ -40,7 +40,7 @@ function Portfolio() {
           className="portfolio-2-container"
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-100px" }}
+          viewport={{ once: true, margin: "-300px"}}
           transition={{ duration: 1.8 }}
           whileHover={{ scale: 1.05 }}
         >
@@ -66,7 +66,7 @@ function Portfolio() {
             className="mt-auto text-center"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
+            viewport={{ once: true}}
             transition={{ duration: 1.2, delay: 0.6 }}
           >
             <motion.a
@@ -88,7 +88,7 @@ function Portfolio() {
           className="portfolio-3-container"
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
+          viewport={{ once: true, margin: "-300px"}}
           transition={{ duration: 1.8 }}
           whileHover={{ scale:1.05, rotate: 2 }}
         >

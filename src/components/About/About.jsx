@@ -10,7 +10,7 @@ function About(){
           className="about-picture-container"
           initial={{ opacity: 0, x: -20 }}
           whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
+          viewport={{ once: true, margin: "-200px"}}
           transition={{ duration: 1.8 }}
         >
           <img
@@ -24,7 +24,7 @@ function About(){
           className="about-content-container"
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-100px" }}
+          viewport={{ once: true, margin: "-200px"}}
           transition={{ duration: 1.8 }}
         >
           <motion.h1 
