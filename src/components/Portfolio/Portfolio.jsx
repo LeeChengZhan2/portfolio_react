@@ -11,7 +11,7 @@ function Portfolio() {
           className="portfolio-1-container"
           initial={{ opacity: 0, y: -50 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-300px" }}
+          viewport={{ once: true, margin: "-200px" }}
           transition={{ duration: 1.8 }}
           whileHover={{ scale:1.05, rotate: -2 }}
         >
@@ -40,8 +40,8 @@ function Portfolio() {
           className="portfolio-2-container"
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-300px"}}
-          transition={{ duration: 1.8 }}
+          viewport={{ once: true, margin: "-200px"}}
+          transition={{ duration: 2.0 }}
           whileHover={{ scale: 1.05 }}
         >
           <motion.h2 
@@ -49,7 +49,7 @@ function Portfolio() {
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 1.5, delay: 0.3 }}
+            transition={{ duration: 1.5, delay: 0.5 }}
           >
             GitHub
           </motion.h2>
@@ -58,7 +58,7 @@ function Portfolio() {
            initial={{ opacity: 0 }}
            whileInView={{ opacity: 1 }}
            viewport={{ once: true }}
-           transition={{ duration: 1.2, delay: 0.6 }}
+           transition={{ duration: 1.2, delay: 0.8 }}
           >
             This section showcases my personal projects, including previous school assignments and independent work. All projects are uploaded to GitHub.
           </motion.p>
@@ -67,7 +67,7 @@ function Portfolio() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true}}
-            transition={{ duration: 1.2, delay: 0.6 }}
+            transition={{ duration: 1.2, delay: 0.8 }}
           >
             <motion.a
               className="portfolio-link"
@@ -88,8 +88,8 @@ function Portfolio() {
           className="portfolio-3-container"
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-300px"}}
-          transition={{ duration: 1.8 }}
+          viewport={{ once: true, margin: "-200px"}}
+          transition={{ duration: 2.2 }}
           whileHover={{ scale:1.05, rotate: 2 }}
         >
           <motion.h2
@@ -97,7 +97,7 @@ function Portfolio() {
            initial={{ opacity: 0, x: 20 }}
            whileInView={{ opacity: 1, x: 0 }}
            viewport={{ once: true }}
-           transition={{ duration: 1.5, delay: 0.3 }}
+           transition={{ duration: 1.5, delay: 0.7 }}
           >
             FYP Project
           </motion.h2>
@@ -106,7 +106,7 @@ function Portfolio() {
            initial={{ opacity: 0 }}
            whileInView={{ opacity: 1 }}
            viewport={{ once: true }}
-           transition={{ duration: 1.2, delay: 0.6 }}
+           transition={{ duration: 1.2, delay: 1.0 }}
           >
             My Final Year Project (FYP) explores innovative solutions in my field of study. You can view the full report and download a copy below.
           </motion.p>
@@ -115,7 +115,7 @@ function Portfolio() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            transition={{ duration: 1.2, delay: 0.6 }}
+            transition={{ duration: 1.2, delay: 1.0 }}
           >
             <motion.a
               className="portfolio-link"

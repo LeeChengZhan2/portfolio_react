@@ -9,12 +9,14 @@ function Home() {
         className="content-container"
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true }}
         transition={{ duration: 1.8 }}
       >
         <motion.div
           className="text-container"
-          initial={{ opacity: 0, y: 50 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
           transition={{ duration: 1.2, delay: 0.6 }}
         >
           <p className="personalities">INFJ</p>

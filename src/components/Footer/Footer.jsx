@@ -4,12 +4,7 @@ import "./Footer.css";
 
 function Footer() {
   return (
-    <motion.footer
-      initial={{ opacity: 0, y: 50 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 1.8 }}
-    >
+    <footer>
       <section className="footer-flex-container" id="contact">
         <div className="contact-container">
         <motion.h2
@@ -59,7 +54,7 @@ function Footer() {
             Copyright &copy; Lee Cheng Zhan
         </motion.p>
       </div>
-    </motion.footer>
+    </footer>
   );
 }
 
