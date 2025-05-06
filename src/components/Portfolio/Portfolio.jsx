@@ -75,7 +75,7 @@ function Portfolio() {
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+              whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 250 }}
             >
               View My GitHub Repositories
@@ -123,7 +123,7 @@ function Portfolio() {
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+              whileTap={{ scale: 0.95 }}
               transition={{type: "spring", stiffness: 250 }}
             >
               View Project
@@ -133,7 +133,7 @@ function Portfolio() {
               href="/assets/documents/LeeChengZhan_FYP.pdf"
               download
               whileHover={{ scale: 1.1, rotate: -2 }}
-              whileTap={{ scale: 0.9 }}
+              whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 250 }}
             >
               Download Report
