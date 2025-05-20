@@ -34,14 +34,16 @@ function Footer() {
             viewport={{ once: true }}
             transition={{ duration: 1.2, delay: 0.6 }}
         >
-        <motion.button
+        <motion.a
             className="download-button"
+            href="/assets/documents/LeeChengZhan_Resume_Mar2023.docx"
+            download
             whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 250 }}
         >
             Download CV 
-        </motion.button>
+        </motion.a>
         </motion.div>
       </section>
       <div className="copyright">

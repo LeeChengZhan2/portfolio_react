@@ -63,7 +63,7 @@ function About(){
               <motion.button 
                 className="more-button"
                 whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
+                whileTap={{ scale: 0.95 }}
                 transition={{type: "spring", stiffness: 250 }}
               >
                   More
