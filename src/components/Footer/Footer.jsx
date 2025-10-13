@@ -23,8 +23,12 @@ function Footer() {
             viewport={{ once: true }}
             transition={{ duration: 1.2, delay: 0.6 }}
             >
-            <p>Email - Leechengzhan7@gmail.com</p>
-            <p>Phone - +65 8127 3530</p>
+          <p><img src={process.env.PUBLIC_URL + "/assets/icon/gmail_colourful.png"} alt="Email" className="icon"/>Leechengzhan7@gmail.com</p>                                                                                                                                         
+          <p>
+          <img src={process.env.PUBLIC_URL + "/assets/icon/call_apple.png"} alt="Phone" className="icon" /><span>+65 8127 3530</span>
+          <img src={process.env.PUBLIC_URL + "/assets/icon/whatsapp_square.png"} alt="WhatsApp" className="icon ml-4" />
+          <img src={process.env.PUBLIC_URL + "/assets/icon/linkedin_darkBlue.png"} alt="LinkedIn" className="icon" />
+          </p>
         </motion.div>
         </div>
         <motion.div 

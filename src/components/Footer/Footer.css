@@ -14,6 +14,14 @@
     @apply flex space-x-4 text-gray-900
 }
 
+.contact p {
+    @apply flex items-center;
+}
+
+.icon {
+    @apply w-5 h-5 inline-block mr-2;
+}
+
 .cv-download-container{
     @apply flex-1 basis-1/4 text-right
 }
