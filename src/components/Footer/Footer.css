@@ -1,13 +1,13 @@
 .footer {
-    @apply bg-gray-800 text-gray-200 px-8 py-10;
+    @apply bg-gray-800 text-gray-200 px-8 py-8;
 }
 
 .footer-contact-text {
     @apply text-center text-sm text-white mb-8;
 }
 
-.footer-contact-text p {
-    @apply mb-2;
+.footer-contact-text span {
+    @apply mx-2;
 }
 
 .footer-clickable-icons {
@@ -29,5 +29,17 @@
 }
 
 .copyright {
-    @apply text-center text-xs text-gray-400 mt-10 pt-6 border-t border-gray-700;
+    @apply text-center text-xs text-gray-400 mt-8 pt-6 border-t border-gray-700;
+}
+
+.email-container {
+    @apply flex justify-center items-center space-x-2;
+}
+
+.copy-icon {
+    @apply w-4 h-4 cursor-pointer;
+}
+
+.copied-message {
+    @apply text-xs text-green-400;
 }

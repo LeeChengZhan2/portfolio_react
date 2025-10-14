@@ -1,8 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import './Footer.css';
 
 const Footer = () => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleEmailCopy = () => {
+    navigator.clipboard.writeText('leechengzhan7@gmail.com');
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 1000);
+  };
+
+  const handleSgNumberCopy = () => {
+    navigator.clipboard.writeText('+65 81273530');
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 1000);
+  };
+
+  const handleMyNumberCopy = () => {
+    navigator.clipboard.writeText('+60 183221917');
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 1000);
+  };
 
   const footerAnimate = {
     initial: { opacity: 0, y: 20 },
@@ -16,8 +41,14 @@ const Footer = () => {
 
       {/* Static Contact Info */}
       <motion.div className="footer-contact-text" {...footerAnimate}>
-        <p>leechengzhan7@gmail.com</p>
-        <p>SG: +65 8127 3530  |  MY: +60183221917</p>
+        <div className="email-container mb-4">
+          <p>leechengzhan7@gmail.com</p>
+          <img src={process.env.PUBLIC_URL + '/assets/icon/copy.png'} alt="Copy" className="copy-icon" onClick={handleEmailCopy} />
+          {isCopied && <span className="copied-message">Copied!</span>}
+        </div>
+        <div>
+          <span className="footer-contact-number">SG: +65 81273530</span> |  <span>MY: +60 183221917</span>
+        </div>
       </motion.div>
 
       {/* Clickable Icons */}
@@ -26,7 +57,7 @@ const Footer = () => {
           <img src={process.env.PUBLIC_URL + '/assets/icon/gmail_colourful.png'} alt="Email" className="icon" />
         </a>
         <a href="https://www.linkedin.com/in/leechengzhan/" target="_blank" rel="noopener noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/phone.png'} alt="Phone" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/phone_blue.png'} alt="Phone" className="icon" />
         </a>
         <a href="https://wa.me/6581273530" target="_blank" rel="noopener noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/whatsapp_circle_black.png'} alt="WhatsApp" className="icon" />
