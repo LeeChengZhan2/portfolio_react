@@ -22,13 +22,14 @@ function Footer() {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 1.2, delay: 0.6 }}
-            >
-          <p><img src={process.env.PUBLIC_URL + "/assets/icon/gmail_colourful.png"} alt="Email" className="icon"/>Leechengzhan7@gmail.com</p>                                                                                                                                         
-          <p>
-          <img src={process.env.PUBLIC_URL + "/assets/icon/call_apple.png"} alt="Phone" className="icon" /><span>+65 8127 3530</span>
-          <img src={process.env.PUBLIC_URL + "/assets/icon/whatsapp_square.png"} alt="WhatsApp" className="icon ml-4" />
-          <img src={process.env.PUBLIC_URL + "/assets/icon/linkedin_darkBlue.png"} alt="LinkedIn" className="icon" />
-          </p>
+        >
+        <p>
+          <img src={process.env.PUBLIC_URL + "/assets/icon/gmail_colourful.png"} alt="Email" className="icon"/>                                                                                                                                    
+          <img src={process.env.PUBLIC_URL + "/assets/icon/telephone_white.png"} alt="Phone" className="icon" />
+          <img src={process.env.PUBLIC_URL + "/assets/icon/whatsapp_circle_black.png"} alt="WhatsApp" className="icon" />
+          <img src={process.env.PUBLIC_URL + "/assets/icon/linkedin_blue.png"} alt="LinkedIn" className="icon" />
+          <img src={process.env.PUBLIC_URL + "/assets/icon/instagram_square_white.png"} alt="Instagram" className="icon" />
+        </p>
         </motion.div>
         </div>
         <motion.div 

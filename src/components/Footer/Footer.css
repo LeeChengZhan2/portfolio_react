@@ -19,7 +19,7 @@
 }
 
 .icon {
-    @apply w-5 h-5 inline-block mr-2;
+    @apply w-5 h-5 inline-block mr-2 align-middle items-center;
 }
 
 .cv-download-container{
