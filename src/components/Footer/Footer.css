@@ -1,35 +1,33 @@
-.footer-flex-container{
-    @apply flex items-center bg-white px-32 py-6 shadow-md
+.footer {
+    @apply bg-gray-800 text-gray-200 px-8 py-10;
 }
 
-.contact-container{
-    @apply flex-1 basis-3/4 text-left
+.footer-contact-text {
+    @apply text-center text-sm text-white mb-8;
 }
 
-.contact-header{
-    @apply text-4xl font-bold mb-3
+.footer-contact-text p {
+    @apply mb-2;
 }
 
-.contact{
-    @apply flex space-x-4 text-gray-900
+.footer-clickable-icons {
+    @apply flex justify-center items-center space-x-6 mb-8;
 }
 
-.contact p {
-    @apply flex items-center;
+.footer-clickable-icons .icon {
+    @apply w-6 h-6 transition-all duration-300 ease-in-out hover:scale-150 hover:-translate-y-1;
 }
 
-.icon {
-    @apply w-5 h-5 inline-block mr-2 align-middle items-center;
+.footer-cv-section {
+    @apply text-center mb-8;
 }
 
-.cv-download-container{
-    @apply flex-1 basis-1/4 text-right
+.download-button {
+    @apply inline-block bg-transparent text-white font-semibold border border-white rounded-full px-6 py-2
+           transition-all duration-300 ease-in-out;
+    @apply hover:bg-white hover:text-gray-800;
 }
 
-.download-button{
-    @apply rounded-full font-bold border border-gray-500 px-6 py-3 hover:bg-gray-700 hover:text-white
-}
-
-.copyright{
-    @apply p-2 bg-gray-700 text-white text-center text-xs font-serif
+.copyright {
+    @apply text-center text-xs text-gray-400 mt-10 pt-6 border-t border-gray-700;
 }
