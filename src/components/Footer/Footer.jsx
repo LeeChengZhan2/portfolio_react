@@ -62,10 +62,10 @@ const Footer = () => {
         <a href="https://wa.me/6581273530" target="_blank" rel="noopener noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/whatsapp_circle_black.png'} alt="WhatsApp" className="icon" />
         </a>
-        <a href="tel:+6581273530">
+        <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220/" target="_blank">
           <img src={process.env.PUBLIC_URL + '/assets/icon/linkedin_blue.png'} alt="LinkedIn" className="icon" />
         </a>
-        <a href="#" target="_blank" rel="noopener noreferrer"> {/* Placeholder for Instagram */}
+        <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noopener noreferrer"> {/* Placeholder for Instagram */}
           <img src={process.env.PUBLIC_URL + '/assets/icon/instagram_square_white.png'} alt="Instagram" className="icon" />
         </a>
       </motion.div>
