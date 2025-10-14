@@ -53,19 +53,19 @@ const Footer = () => {
 
       {/* Clickable Icons */}
       <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: 0.2}}>
-        <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noopener noreferrer">
+        <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/gmail_colourful.png'} alt="Email" className="icon" />
         </a>
-        <a href="https://www.linkedin.com/in/leechengzhan/" target="_blank" rel="noopener noreferrer">
+        <a href="tel:+6581273530" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/phone_blue.png'} alt="Phone" className="icon" />
         </a>
-        <a href="https://wa.me/6581273530" target="_blank" rel="noopener noreferrer">
+        <a href="https://wa.me/6581273530" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/whatsapp_circle_black.png'} alt="WhatsApp" className="icon" />
         </a>
-        <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220/" target="_blank">
+        <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220/" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/linkedin_blue.png'} alt="LinkedIn" className="icon" />
         </a>
-        <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noopener noreferrer"> {/* Placeholder for Instagram */}
+        <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noreferrer"> {/* Placeholder for Instagram */}
           <img src={process.env.PUBLIC_URL + '/assets/icon/instagram_square_white.png'} alt="Instagram" className="icon" />
         </a>
       </motion.div>

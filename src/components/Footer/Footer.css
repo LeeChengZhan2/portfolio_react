@@ -3,7 +3,7 @@
 }
 
 .footer-contact-text {
-    @apply text-center text-sm text-white mb-8;
+    @apply text-center text-sm text-white mb-6;
 }
 
 .footer-contact-text span {
@@ -29,7 +29,7 @@
 }
 
 .copyright {
-    @apply text-center text-xs text-gray-400 mt-8 pt-6 border-t border-gray-700;
+    @apply text-center text-xs text-gray-400 mt-6 pt-6 border-t border-gray-700;
 }
 
 .email-container {
