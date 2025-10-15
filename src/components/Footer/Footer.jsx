@@ -54,22 +54,22 @@ const Footer = () => {
       {/* Clickable Icons */}
       <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: 0.2}}>
         <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/gmail_colourful.png'} alt="Email" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/gmail-colourful.png'} alt="Email" className="icon" />
         </a>
         <a href="tel:+6581273530" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/phone_blue.png'} alt="Phone" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/phone-blue.png'} alt="Phone" className="icon" />
         </a>
         <a href="https://wa.me/6581273530" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/whatsapp_circle_black.png'} alt="WhatsApp" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/whatsapp-circle-black.png'} alt="WhatsApp" className="icon" />
         </a>
         <a href="https://github.com/LeeChengZhan2" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/github_black.png'} alt="Github" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/github-black.png'} alt="Github" className="icon" />
         </a>
         <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220/" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/linkedin_blue.png'} alt="LinkedIn" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/linkedin-blue.png'} alt="LinkedIn" className="icon" />
         </a>
         <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/instagram_square_white.png'} alt="Instagram" className="icon" />
+          <img src={process.env.PUBLIC_URL + '/assets/icon/instagram-square-white.png'} alt="Instagram" className="icon" />
         </a>
       </motion.div>
 
@@ -77,7 +77,7 @@ const Footer = () => {
       <motion.div className="footer-cv-section" {...footerAnimate} transition={{...footerAnimate.transition, delay: 0.4}}>
         <motion.a
           className="download-button"
-          href="/assets/documents/LeeChengZhan_Resume_Mar2023.docx"
+          href="/assets/documents/leechengzhan-resume-mar-2023.docx"
           download
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}

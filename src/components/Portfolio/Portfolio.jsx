@@ -130,7 +130,7 @@ function Portfolio() {
             </motion.a>
             <motion.a
               className="portfolio-link"
-              href="/assets/documents/LeeChengZhan_FYP.pdf"
+              href="/assets/documents/leechengzhan-fyp.pdf"
               download
               whileHover={{ scale: 1.1, rotate: -2 }}
               whileTap={{ scale: 0.95 }}

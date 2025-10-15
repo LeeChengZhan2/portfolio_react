@@ -12,7 +12,7 @@ export const theme = {
       lavendarblue: '#C6E7FF'
     },
     backgroundImage: {
-     homebg: "url('/public/assets/images/HomeLandscapeImage1.png')"
+     homebg: "url('/public/assets/images/home-landscape-image-1.png')"
     },
   },
 };
