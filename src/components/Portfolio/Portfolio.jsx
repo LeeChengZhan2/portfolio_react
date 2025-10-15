@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { enter, delay, hoverSpring, viewportOnce } from '../../motionConfig';
 import './Portfolio.css';
 
 function Portfolio() {
@@ -12,15 +13,15 @@ function Portfolio() {
           initial={{ opacity: 0, y: -50 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-200px" }}
-          transition={{ duration: 1.8 }}
+          transition={enter.section}
           whileHover={{ scale:1.05, rotate: -2 }}
         >
           <motion.h2
             className="portfolio-title"
             initial={{ opacity: 0, x: -20 }}
             whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.5, delay: 0.3 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.block, delay: delay.sm }}
           >
             Personal
           </motion.h2>
@@ -28,8 +29,8 @@ function Portfolio() {
             className="portfolio-text"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.2, delay: 0.6 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.text, delay: delay.md }}
           >
             This section highlights my personal achievements and projects outside of academic and professional work. It includes hobbies, personal interests, and self-driven learning experiences.
           </motion.p>
@@ -41,15 +42,15 @@ function Portfolio() {
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true, margin: "-200px"}}
-          transition={{ duration: 2.0 }}
+          transition={enter.section}
           whileHover={{ scale: 1.05 }}
         >
           <motion.h2 
             className="portfolio-title"
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.5, delay: 0.5 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.block, delay: delay.md }}
           >
             GitHub
           </motion.h2>
@@ -57,8 +58,8 @@ function Portfolio() {
            className="portfolio-text"
            initial={{ opacity: 0 }}
            whileInView={{ opacity: 1 }}
-           viewport={{ once: true }}
-           transition={{ duration: 1.2, delay: 0.8 }}
+           viewport={viewportOnce}
+           transition={{ ...enter.text, delay: delay.lg }}
           >
             This section showcases my personal projects, including previous school assignments and independent work. All projects are uploaded to GitHub.
           </motion.p>
@@ -66,8 +67,8 @@ function Portfolio() {
             className="mt-auto text-center"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            viewport={{ once: true}}
-            transition={{ duration: 1.2, delay: 0.8 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.text, delay: delay.lg }}
           >
             <motion.a
               className="portfolio-link"
@@ -76,7 +77,7 @@ function Portfolio() {
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 250 }}
+              transition={hoverSpring}
             >
               View My GitHub Repositories
             </motion.a>
@@ -89,15 +90,15 @@ function Portfolio() {
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-200px"}}
-          transition={{ duration: 2.2 }}
+          transition={enter.section}
           whileHover={{ scale:1.05, rotate: 2 }}
         >
           <motion.h2
            className="portfolio-title"
            initial={{ opacity: 0, x: 20 }}
            whileInView={{ opacity: 1, x: 0 }}
-           viewport={{ once: true }}
-           transition={{ duration: 1.5, delay: 0.7 }}
+           viewport={viewportOnce}
+           transition={{ ...enter.block, delay: delay.lg }}
           >
             FYP Project
           </motion.h2>
@@ -105,8 +106,8 @@ function Portfolio() {
            className="portfolio-text"
            initial={{ opacity: 0 }}
            whileInView={{ opacity: 1 }}
-           viewport={{ once: true }}
-           transition={{ duration: 1.2, delay: 1.0 }}
+           viewport={viewportOnce}
+           transition={{ ...enter.text, delay: delay.lg }}
           >
             My Final Year Project (FYP) explores innovative solutions in my field of study. You can view the full report and download a copy below.
           </motion.p>
@@ -114,8 +115,8 @@ function Portfolio() {
             className="mt-auto text-center flex flex-col gap-4"
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.2, delay: 1.0 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.text, delay: delay.lg }}
           >
             <motion.a
               className="portfolio-link"
@@ -124,7 +125,7 @@ function Portfolio() {
               rel="noopener noreferrer"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
-              transition={{type: "spring", stiffness: 250 }}
+              transition={hoverSpring}
             >
               View Project
             </motion.a>
@@ -134,7 +135,7 @@ function Portfolio() {
               download
               whileHover={{ scale: 1.1, rotate: -2 }}
               whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 250 }}
+              transition={hoverSpring}
             >
               Download Report
             </motion.a>

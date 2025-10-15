@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { enter, delay, viewportOnce } from "../../motionConfig";
 import "./Home.css";
 
 function Home() {
@@ -9,15 +10,15 @@ function Home() {
         className="content-container"
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 1.8 }}
+        viewport={viewportOnce}
+        transition={enter.section}
       >
         <motion.div
           className="text-container"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.2, delay: 0.6 }}
+          viewport={viewportOnce}
+          transition={{ ...enter.block, delay: delay.md }}
         >
           <p className="personalities">INFJ</p>
           <p className="occupation">Software Engineer</p>

@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { enter, delay, hoverSpring, viewportOnce } from "../../motionConfig";
 import './About.css';
 
 function About(){
@@ -11,7 +12,7 @@ function About(){
           initial={{ opacity: 0, scale: 0.8, x: -20 }}
           whileInView={{ opacity: 1, scale: 1, x: 0 }}
           viewport={{ once: true, margin: "-100px"}}
-          transition={{ duration: 1.8 }}
+          transition={enter.section}
         >
           <img
             src="your-profile-picture.jpg" // Replace with your actual image path
@@ -25,22 +26,22 @@ function About(){
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true, margin: "-100px"}}
-          transition={{ duration: 1.8 }}
+          transition={enter.section}
         >
           <motion.h1 
             className="about-sub-title"
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.5, delay: 0.3 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.block, delay: delay.sm }}
           >
             About Me
           </motion.h1>
           <motion.div 
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.2, delay: 0.6 }}
+            viewport={viewportOnce}
+            transition={{ ...enter.text, delay: delay.md }}
           >
           <p className="about-occupation">Software Engineer</p>
           <p className="about-contain">
@@ -64,7 +65,7 @@ function About(){
                 className="more-button"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
-                transition={{type: "spring", stiffness: 250 }}
+                transition={hoverSpring}
               >
                   More
               </motion.button>

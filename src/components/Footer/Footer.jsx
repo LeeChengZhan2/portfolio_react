@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { enter, delay, hoverSpring, viewportOnce } from '../../motionConfig';
 import './Footer.css';
 
 const Footer = () => {
@@ -32,8 +33,8 @@ const Footer = () => {
   const footerAnimate = {
     initial: { opacity: 0, y: 20 },
     whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true },
-    transition: { duration: 0.8 }
+    viewport: viewportOnce,
+    transition: enter.block,
   };
 
   return (
@@ -42,7 +43,7 @@ const Footer = () => {
       {/* Static Contact Info */}
       <motion.div className="footer-contact-text" {...footerAnimate}>
         <div className="email-container mb-4">
-          <p>leechengzhan7@gmail.com</p>
+          <p>LeeChengZhan7@gmail.com</p>
           <img src={process.env.PUBLIC_URL + '/assets/icon/copy.png'} alt="Copy" className="copy-icon" onClick={handleEmailCopy} />
           {isCopied && <span className="copied-message">Copied!</span>}
         </div>
@@ -52,7 +53,7 @@ const Footer = () => {
       </motion.div>
 
       {/* Clickable Icons */}
-      <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: 0.2}}>
+      <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.sm}}>
         <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/gmail-colourful.png'} alt="Email" className="icon" />
         </a>
@@ -74,13 +75,14 @@ const Footer = () => {
       </motion.div>
 
       {/* CV Download Section */}
-      <motion.div className="footer-cv-section" {...footerAnimate} transition={{...footerAnimate.transition, delay: 0.4}}>
+      <motion.div className="footer-cv-section" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.md}}>
         <motion.a
           className="download-button"
           href="/assets/documents/leechengzhan-resume-mar-2023.docx"
           download
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
+          transition={hoverSpring}
         >
           Download CV
         </motion.a>
@@ -91,7 +93,7 @@ const Footer = () => {
         className="copyright"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1, delay: 0.8 }}
+        transition={{ ...enter.text, delay: delay.md }}
       >
         <p>Copyright &copy; {new Date().getFullYear()} Lee Cheng Zhan. All Rights Reserved.</p>
       </motion.div>
