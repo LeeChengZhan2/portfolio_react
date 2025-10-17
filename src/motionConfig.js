@@ -1,8 +1,8 @@
 // Shared motion configuration for consistent, snappy animations
 export const enter = {
-  section: { duration: 0.6, ease: 'easeOut' },
-  block: { duration: 0.45, ease: 'easeOut' },
-  text: { duration: 0.35, ease: 'easeOut' },
+  section: { duration: 1, ease: 'easeOut' },
+  block: { duration: 0.75, ease: 'easeOut' },
+  text: { duration: 0.6, ease: 'easeOut' },
 };
 
 export const delay = {

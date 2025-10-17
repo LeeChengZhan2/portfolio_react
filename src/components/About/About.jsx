@@ -15,7 +15,7 @@ function About(){
           transition={enter.section}
         >
           <img
-            src="your-profile-picture.jpg" // Replace with your actual image path
+            src={process.env.PUBLIC_URL + '/assets/images/home-landscape-image-1.png'}
             alt="Profile"
             className="w-full h-full object-cover"
           />

@@ -80,7 +80,7 @@ const Footer = () => {
           className="download-button"
           href="/assets/documents/leechengzhan-resume-mar-2023.docx"
           download
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           transition={hoverSpring}
         >
