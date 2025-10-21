@@ -3,7 +3,7 @@
 }
 
 .footer-contact-text {
-    @apply text-center text-sm text-white mb-6;
+    @apply font-semibold text-center text-sm text-white mb-4;
 }
 
 .footer-contact-text span {
@@ -18,21 +18,20 @@
     @apply w-6 h-6 transition-all duration-300 ease-in-out hover:scale-150 hover:-translate-y-1;
 }
 
-/* Second row: broker icons */
 .footer-broker-icons {
-    @apply flex flex-col justify-center items-center mb-4;
+    @apply flex flex-col justify-center items-center mb-2;
 }
 
 .broker-item {
-    @apply flex items-center justify-center h-10 w-40;
+    @apply flex items-center justify-center mb-3 w-40;
 }
 
 .footer-broker-icons .broker-icon {
-    @apply h-6 w-auto transition-all duration-300 ease-in-out hover:scale-110 hover:-translate-y-1;
+    @apply h-5 w-auto transition-all duration-300 ease-in-out hover:scale-110 hover:-translate-y-1;
 }
 
 .footer-cv-section {
-    @apply text-center mb-8;
+    @apply text-center mb-6;
 }
 
 .download-button {
@@ -42,7 +41,7 @@
 }
 
 .copyright {
-    @apply text-center text-xs text-gray-400 mt-6 pt-6 border-t border-gray-700;
+    @apply text-center text-xs text-gray-400 pt-6 border-t border-gray-700;
 }
 
 .email-container {
