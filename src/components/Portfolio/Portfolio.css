@@ -31,3 +31,7 @@
     @apply min-w-[350px] min-h-[400px];
   }
 }
+
+.portfolio-subsections { @apply max-w-5xl mx-auto mt-16 grid grid-cols-1 md:grid-cols-3 gap-6; }
+.portfolio-subsection { @apply bg-white border border-gray-200 rounded-2xl p-6 shadow; }
+.portfolio-subtitle { @apply text-2xl font-semibold mb-2 text-gray-800; }

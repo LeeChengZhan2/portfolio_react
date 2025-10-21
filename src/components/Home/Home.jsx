@@ -20,7 +20,6 @@ function Home() {
           viewport={viewportOnce}
           transition={{ ...enter.block, delay: delay.md }}
         >
-          <p className="personalities">INFJ</p>
           <p className="occupation">Software Engineer</p>
           <h1 className="introduction">Hi, I'm Lee Cheng Zhan from Malaysia</h1>
         </motion.div>

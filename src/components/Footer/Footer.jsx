@@ -4,56 +4,72 @@ import { enter, delay, hoverSpring, viewportOnce } from '../../motionConfig';
 import './Footer.css';
 
 const Footer = () => {
-  const [isCopied, setIsCopied] = useState(false);
+  const [copied, setCopied] = useState(null);
 
-  const handleEmailCopy = () => {
-    navigator.clipboard.writeText('leechengzhan7@gmail.com');
-    setIsCopied(true);
+  const handleCopy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
     setTimeout(() => {
-      setIsCopied(false);
+      setCopied(null);
     }, 1000);
   };
 
-  const handleSgNumberCopy = () => {
-    navigator.clipboard.writeText('+65 81273530');
-    setIsCopied(true);
-    setTimeout(() => {
-      setIsCopied(false);
-    }, 1000);
-  };
-
-  const handleMyNumberCopy = () => {
-    navigator.clipboard.writeText('+60 183221917');
-    setIsCopied(true);
-    setTimeout(() => {
-      setIsCopied(false);
-    }, 1000);
-  };
-
-  const footerAnimate = {
+  // Animation helpers
+  const fadeIn = (d = null, t = enter.block) => ({
     initial: { opacity: 0, y: 20 },
     whileInView: { opacity: 1, y: 0 },
     viewport: viewportOnce,
-    transition: enter.block,
-  };
+    transition: { ...t, ...(d ? { delay: d } : {}) },
+  });
+
+  const rise = (d = null, t = enter.text) => ({
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { ...t, ...(d ? { delay: d } : {}) },
+  });
 
   return (
     <footer className="footer" id="contact">
 
       {/* Static Contact Info */}
-      <motion.div className="footer-contact-text" {...footerAnimate}>
-        <div className="email-container mb-4">
+      <motion.div className="footer-contact-text" {...fadeIn()}>
+        <div className="email-container">
           <p>LeeChengZhan7@gmail.com</p>
-          <img src={process.env.PUBLIC_URL + '/assets/icon/copy.png'} alt="Copy" className="copy-icon" onClick={handleEmailCopy} />
-          {isCopied && <span className="copied-message">Copied!</span>}
+          <img
+            src={process.env.PUBLIC_URL + '/assets/icon/copy.png'}
+            alt="Copy email"
+            className="copy-icon"
+            onClick={() => handleCopy('leechengzhan7@gmail.com', 'email')}
+          />
+          {copied === 'email' && <span className="copied-message">Copied!</span>}
         </div>
-        <div>
-          <span className="footer-contact-number">SG: +65 81273530</span> |  <span>MY: +60 183221917</span>
+        <div className="numbers-wrapper">
+          <div className="number-container">
+            <p>SG: +65 81273530</p>
+            <img
+              src={process.env.PUBLIC_URL + '/assets/icon/copy.png'}
+              alt="Copy SG number"
+              className="copy-icon"
+              onClick={() => handleCopy('+65 81273530', 'sg')}
+            />
+            {copied === 'sg' && <span className="copied-message">Copied!</span>}
+          </div>
+          <span className="separator">|</span>
+          <div className="number-container">
+            <p>MY: +60 183221917</p>
+            <img
+              src={process.env.PUBLIC_URL + '/assets/icon/copy.png'}
+              alt="Copy MY number"
+              className="copy-icon"
+              onClick={() => handleCopy('+60 183221917', 'my')}
+            />
+            {copied === 'my' && <span className="copied-message">Copied!</span>}
+          </div>
         </div>
       </motion.div>
 
       {/* Clickable Icons (first row) */}
-      <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.sm}}>
+      <motion.div className="footer-clickable-icons" {...fadeIn(delay.sm)}>
         <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/gmail-colourful.png'} alt="Email" className="icon" />
         </a>
@@ -66,7 +82,7 @@ const Footer = () => {
         <a href="https://github.com/LeeChengZhan2" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/github-black.png'} alt="Github" className="icon" />
         </a>
-        <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220/" target="_blank" rel="noreferrer">
+        <a href="https://www.linkedin.com/in/cheng-zhan-lee-a87959220" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/linkedin-blue.png'} alt="LinkedIn" className="icon" />
         </a>
         <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noreferrer">
@@ -74,18 +90,17 @@ const Footer = () => {
         </a>
       </motion.div>
 
-      {/* Broker Icons (second row) */}
-      <motion.div className="footer-broker-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.sm}}>
+      <motion.div className="footer-broker-icons" {...fadeIn(delay.sm)}>
         <a className="broker-item" href="https://www.moomoo.com/" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/moomoo-horizon.png'} alt="Moomoo" className="broker-icon" />
         </a>
-        <a className="broker-item" href="https://www.etoro.com/" target="_blank" rel="noreferrer">
+        <a className="broker-item" href="https://www.etoro.com/people/chengzhanlee" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/etoro-horizon.png'} alt="eToro" className="broker-icon" />
         </a>
       </motion.div>
 
       {/* CV Download Section */}
-      <motion.div className="footer-cv-section" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.md}}>
+      <motion.div className="footer-cv-section" {...fadeIn(delay.md)}>
         <motion.a
           className="download-button"
           href="/assets/documents/leechengzhan-resume-mar-2023.docx"
@@ -99,12 +114,7 @@ const Footer = () => {
       </motion.div>
 
       {/* Copyright */}
-      <motion.div 
-        className="copyright"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...enter.text, delay: delay.md }}
-      >
+      <motion.div className="copyright" {...rise(delay.md)}>
         <p>Copyright &copy; {new Date().getFullYear()} Lee Cheng Zhan. All Rights Reserved.</p>
       </motion.div>
 

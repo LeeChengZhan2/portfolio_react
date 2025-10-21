@@ -6,10 +6,6 @@
     @apply font-semibold text-center text-sm text-white mb-4;
 }
 
-.footer-contact-text span {
-    @apply mx-2;
-}
-
 .footer-clickable-icons {
     @apply flex justify-center items-center space-x-6 mb-4;
 }
@@ -27,7 +23,7 @@
 }
 
 .footer-broker-icons .broker-icon {
-    @apply h-5 w-auto transition-all duration-300 ease-in-out hover:scale-110 hover:-translate-y-1;
+    @apply h-5 w-auto transition-all duration-300 ease-in-out hover:scale-125 hover:-translate-y-1;
 }
 
 .footer-cv-section {
@@ -45,7 +41,19 @@
 }
 
 .email-container {
+    @apply flex justify-center items-center space-x-2 mb-4;
+}
+
+.number-container {
     @apply flex justify-center items-center space-x-2;
+}
+
+.numbers-wrapper {
+    @apply flex justify-center items-center;
+}
+
+.separator {
+    @apply mx-2;
 }
 
 .copy-icon {
@@ -53,5 +61,5 @@
 }
 
 .copied-message {
-    @apply text-xs text-green-400;
+    @apply text-xs text-green-400 ml-2;
 }
