@@ -52,7 +52,7 @@ const Footer = () => {
         </div>
       </motion.div>
 
-      {/* Clickable Icons */}
+      {/* Clickable Icons (first row) */}
       <motion.div className="footer-clickable-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.sm}}>
         <a href="mailto:leechengzhan7@gmail.com" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/gmail-colourful.png'} alt="Email" className="icon" />
@@ -72,12 +72,15 @@ const Footer = () => {
         <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/instagram-square-white.png'} alt="Instagram" className="icon" />
         </a>
-        {/* Moomoo and eToro icons (rightmost, eToro last) */}
-        <a href="https://www.moomoo.com/" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/moomoo-orange-512.png'} alt="Moomoo" className="icon" />
+      </motion.div>
+
+      {/* Broker Icons (second row) */}
+      <motion.div className="footer-broker-icons" {...footerAnimate} transition={{...footerAnimate.transition, delay: delay.sm}}>
+        <a className="broker-item" href="https://www.moomoo.com/" target="_blank" rel="noreferrer">
+          <img src={process.env.PUBLIC_URL + '/assets/icon/moomoo-horizon.png'} alt="Moomoo" className="broker-icon" />
         </a>
-        <a href="https://www.etoro.com/" target="_blank" rel="noreferrer">
-          <img src={process.env.PUBLIC_URL + '/assets/icon/etoro-green.png'} alt="eToro" className="icon" />
+        <a className="broker-item" href="https://www.etoro.com/" target="_blank" rel="noreferrer">
+          <img src={process.env.PUBLIC_URL + '/assets/icon/etoro-horizon.png'} alt="eToro" className="broker-icon" />
         </a>
       </motion.div>
 
