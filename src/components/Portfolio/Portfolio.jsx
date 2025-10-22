@@ -100,7 +100,7 @@ function Portfolio() {
            viewport={viewportOnce}
            transition={{ ...enter.block, delay: delay.lg }}
           >
-            FYP Project
+            School FYP Project
           </motion.h2>
           <motion.p
            className="portfolio-text"
@@ -141,13 +141,6 @@ function Portfolio() {
             </motion.a>
           </motion.div>
         </motion.div>
-      </section>
-      {/* Additional subsections for anchor navigation */}
-      <section className="portfolio-subsections">
-        <div id="portfolio-school" className="portfolio-subsection">
-          <h3 className="portfolio-subtitle">School</h3>
-          <p className="portfolio-text">Coming soon.</p>
-        </div>
         <div id="portfolio-investing" className="portfolio-subsection">
           <h3 className="portfolio-subtitle">Investing</h3>
           <p className="portfolio-text">Coming soon.</p>
