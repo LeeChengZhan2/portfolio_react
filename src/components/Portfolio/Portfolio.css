@@ -7,16 +7,36 @@
   --slide-spacing: 1rem;
   --slides-per-view: 1;
   --peek: 0.25; /* fraction of an extra slide to show */
+  --edge-fade: 64px; /* width of the side fade */
+  --fade-color: 243, 244, 246; /* rgb for bg-gray-100 */
 }
-.embla__viewport { overflow: hidden; width: 100%; }
-.embla__container { display: flex; gap: var(--slide-spacing); }
-/* Show ~1.25 slides on small, ~2.25 on md, ~3.2 on lg for a peek */
+.embla__viewport { position: relative; overflow: hidden; width: 100%; }
+.embla__viewport::before,
+.embla__viewport::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--edge-fade);
+  pointer-events: none;
+  z-index: 10;
+}
+.embla__viewport::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(var(--fade-color), 1) 0%, rgba(var(--fade-color), 0) 100%);
+}
+.embla__viewport::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(var(--fade-color), 1) 0%, rgba(var(--fade-color), 0) 100%);
+}
+.embla__container { display: flex; margin-left: calc(var(--slide-spacing) * -1); }
+/* Use slide padding for consistent gaps; negative container margin removes extra left edge space */
 .embla__slide {
+  box-sizing: border-box;
   min-width: 0;
-  flex: 0 0 calc(
-    (100% - (var(--slide-spacing) * (var(--slides-per-view) - 1))) /
-    (var(--slides-per-view) + var(--peek))
-  );
+  padding-left: var(--slide-spacing);
+  /* Fill width by slides-per-view and reserve uniform spacing via padding-left */
+  flex: 0 0 calc((100% / (var(--slides-per-view) + var(--peek))) - var(--slide-spacing));
 }
 
 @media (min-width: 640px) { /* sm */
