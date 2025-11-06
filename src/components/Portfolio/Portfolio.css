@@ -2,13 +2,15 @@
 
 /* Embla Carousel layout */
 .embla {
-  @apply w-full max-w-7xl mx-auto;
+  @apply w-full max-w-screen-2xl mx-auto;
   /* Controls slides per view and peek of the next slide */
-  --slide-spacing: 1rem;
+  --slide-spacing: 1.25rem;
   --slides-per-view: 1;
   --peek: 0.25; /* fraction of an extra slide to show */
-  --edge-fade: 64px; /* width of the side fade */
+  --edge-fade: 80px; /* width of the side fade */
   --fade-color: 243, 244, 246; /* rgb for bg-gray-100 */
+  --edge-fade-y: 56px; /* height of the top/bottom fade */
+  position: relative;
 }
 .embla__viewport { position: relative; overflow: hidden; width: 100%; }
 .embla__viewport::before,
@@ -29,6 +31,8 @@
   right: 0;
   background: linear-gradient(to left, rgba(var(--fade-color), 1) 0%, rgba(var(--fade-color), 0) 100%);
 }
+
+/* Top/bottom fades removed per request; side fades remain */
 .embla__container { display: flex; margin-left: calc(var(--slide-spacing) * -1); }
 /* Use slide padding for consistent gaps; negative container margin removes extra left edge space */
 .embla__slide {
@@ -47,7 +51,8 @@
 }
 
 /* Unified card so all five slides share the same size */
-.portfolio-card { @apply bg-white border border-gray-200 rounded-3xl p-10 shadow-lg flex flex-col min-h-[420px]; }
+.portfolio-card { @apply bg-white border border-gray-200 rounded-3xl p-12 shadow-lg flex flex-col min-h-[500px]; }
+.portfolio-card { will-change: transform, box-shadow; transform-origin: center; }
 
 .portfolio-title {
   @apply text-3xl font-bold mb-6 text-gray-800 text-left;
@@ -61,7 +66,7 @@
 
 /* Ensure a comfortable minimum height on md+ screens */
 @media (min-width: 768px) {
-  .portfolio-card { @apply min-h-[460px]; }
+  .portfolio-card { @apply min-h-[560px]; }
 }
 
 /* Legacy subsection styles kept for reference but not used in slider */
