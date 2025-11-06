@@ -1,16 +1,33 @@
-.portfolio-container {
-  @apply bg-gray-100 min-h-screen flex items-center justify-center p-8;
+.portfolio-container { @apply bg-gray-100 min-h-screen flex items-center justify-center p-8; }
+
+/* Embla Carousel layout */
+.embla {
+  @apply w-full max-w-7xl mx-auto;
+  /* Controls slides per view and peek of the next slide */
+  --slide-spacing: 1rem;
+  --slides-per-view: 1;
+  --peek: 0.25; /* fraction of an extra slide to show */
+}
+.embla__viewport { overflow: hidden; width: 100%; }
+.embla__container { display: flex; gap: var(--slide-spacing); }
+/* Show ~1.25 slides on small, ~2.25 on md, ~3.2 on lg for a peek */
+.embla__slide {
+  min-width: 0;
+  flex: 0 0 calc(
+    (100% - (var(--slide-spacing) * (var(--slides-per-view) - 1))) /
+    (var(--slides-per-view) + var(--peek))
+  );
 }
 
-.portfolio-flex-container {
-  @apply flex flex-row gap-8 max-w-7xl;
+@media (min-width: 640px) { /* sm */
+  .embla { --slides-per-view: 2; --peek: 0.25; }
+}
+@media (min-width: 1024px) { /* lg */
+  .embla { --slides-per-view: 3; --peek: 0.2; }
 }
 
-.portfolio-1-container,
-.portfolio-2-container,
-.portfolio-3-container {
-  @apply bg-white border border-gray-200 rounded-3xl p-10 shadow-lg flex flex-col flex-1;
-}
+/* Unified card so all five slides share the same size */
+.portfolio-card { @apply bg-white border border-gray-200 rounded-3xl p-10 shadow-lg flex flex-col min-h-[420px]; }
 
 .portfolio-title {
   @apply text-3xl font-bold mb-6 text-gray-800 text-left;
@@ -20,18 +37,14 @@
   @apply text-lg mb-8 text-gray-600 text-left leading-relaxed;
 }
 
-.portfolio-link {
-  @apply inline-block bg-gray-800 text-white px-8 py-3 rounded-lg font-semibold transition-colors hover:bg-gray-900 mx-auto;
-}
+.portfolio-link { @apply inline-block bg-gray-800 text-white px-8 py-3 rounded-lg font-semibold transition-colors hover:bg-gray-900 mx-auto; }
 
+/* Ensure a comfortable minimum height on md+ screens */
 @media (min-width: 768px) {
-  .portfolio-1-container,
-  .portfolio-2-container,
-  .portfolio-3-container {
-    @apply min-w-[350px] min-h-[400px];
-  }
+  .portfolio-card { @apply min-h-[460px]; }
 }
 
+/* Legacy subsection styles kept for reference but not used in slider */
 .portfolio-subsections { @apply max-w-5xl mx-auto mt-16 grid grid-cols-1 md:grid-cols-3 gap-6; }
 .portfolio-subsection { @apply bg-white border border-gray-200 rounded-2xl p-6 shadow; }
 .portfolio-subtitle { @apply text-2xl font-semibold mb-2 text-gray-800; }

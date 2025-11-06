@@ -88,6 +88,13 @@ const Footer = () => {
         <a href="https://www.instagram.com/aaaaaaazhan/?next=%2F" target="_blank" rel="noreferrer">
           <img src={process.env.PUBLIC_URL + '/assets/icon/instagram-square-white.png'} alt="Instagram" className="icon" />
         </a>
+        <a href="https://www.strava.com/athletes/109951375" target="_blank" rel="noreferrer">
+          <img
+            src={process.env.PUBLIC_URL + '/assets/icon/strava-orange.png'}
+            alt="Strava"
+            className="icon icon-strava"
+          />
+        </a>
       </motion.div>
 
       <motion.div className="footer-broker-icons" {...fadeIn(delay.sm)}>

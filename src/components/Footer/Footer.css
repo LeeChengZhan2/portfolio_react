@@ -14,6 +14,10 @@
     @apply w-6 h-6 transition-all duration-300 ease-in-out hover:scale-150 hover:-translate-y-1;
 }
 
+.footer-clickable-icons .icon-strava {
+    @apply transform scale-125;
+}
+
 .footer-broker-icons {
     @apply flex flex-col justify-center items-center mb-2;
 }
