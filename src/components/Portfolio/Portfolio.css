@@ -12,6 +12,22 @@
   --edge-fade-y: 56px; /* height of the top/bottom fade */
   position: relative;
 }
+/* Subtle bottom fade to mask stacked shadows forming a line */
+.embla::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--edge-fade-y);
+  pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(
+    to top,
+    rgba(var(--fade-color), 1) 0%,
+    rgba(var(--fade-color), 0) 100%
+  );
+}
 .embla__viewport { position: relative; overflow: hidden; width: 100%; }
 .embla__viewport::before,
 .embla__viewport::after {
@@ -33,14 +49,22 @@
 }
 
 /* Top/bottom fades removed per request; side fades remain */
-.embla__container { display: flex; margin-left: calc(var(--slide-spacing) * -1); }
+.embla__container {
+  display: flex;
+  margin-left: calc(var(--slide-spacing) * -1);
+  /* Balance right edge so padding is symmetric */
+  margin-right: calc(var(--slide-spacing) * -1);
+}
 /* Use slide padding for consistent gaps; negative container margin removes extra left edge space */
 .embla__slide {
   box-sizing: border-box;
   min-width: 0;
-  padding-left: var(--slide-spacing);
-  /* Fill width by slides-per-view and reserve uniform spacing via padding-left */
-  flex: 0 0 calc((100% / (var(--slides-per-view) + var(--peek))) - var(--slide-spacing));
+  /* Symmetric padding so card shadows are visible */
+  padding: var(--slide-spacing);
+  /* Extra bottom padding to avoid shadow clipping on hover */
+  padding-bottom: calc(var(--slide-spacing) * 2.5);
+  /* Fill width by slides-per-view and reserve spacing via both paddings */
+  flex: 0 0 calc((100% / (var(--slides-per-view) + var(--peek))) - (var(--slide-spacing) * 2));
 }
 
 @media (min-width: 640px) { /* sm */
