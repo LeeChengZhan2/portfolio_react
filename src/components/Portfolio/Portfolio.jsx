@@ -179,6 +179,41 @@ function Portfolio() {
                 </motion.p>
               </motion.div>
             </div>
+            {/* Investing */}
+            <div className="embla__slide">
+              <motion.div
+                className="portfolio-card"
+                initial={{ opacity: 0, y: 40, rotate: 0.5 }}
+                whileInView={{ opacity: 1, y: 0, rotate: 0 }}
+                viewport={{ once: true, margin: '-200px' }}
+                transition={enter.section}
+                whileHover={{
+                  scale: 1.02,
+                  boxShadow: '0 24px 48px rgba(17, 24, 39, 0.18)',
+                  transition: { type: 'spring', stiffness: 260, damping: 22, mass: 0.3 }
+                }}
+                whileTap={{ scale: 0.995 }}
+              >
+                <motion.h3
+                  className="portfolio-title"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={viewportOnce}
+                  transition={{ ...enter.block, delay: delay.sm }}
+                >
+                  Investing
+                </motion.h3>
+                <motion.p
+                  className="portfolio-text"
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={viewportOnce}
+                  transition={{ ...enter.text, delay: delay.md }}
+                >
+                  Coming soon.
+                </motion.p>
+              </motion.div>
+            </div>
 
             {/* GitHub */}
             <div className="embla__slide">
@@ -232,6 +267,26 @@ function Portfolio() {
                     View My GitHub Repositories
                   </motion.a>
                 </motion.div>
+              </motion.div>
+            </div>
+
+            {/* Photography */}
+            <div className="embla__slide">
+              <motion.div
+                className="portfolio-card"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-200px' }}
+                transition={enter.section}
+                whileHover={{
+                  scale: 1.02,
+                  boxShadow: '0 24px 48px rgba(17, 24, 39, 0.18)',
+                  transition: { type: 'spring', stiffness: 260, damping: 22, mass: 0.3 }
+                }}
+                whileTap={{ scale: 0.995 }}
+              >
+                <h3 className="portfolio-title">Photography</h3>
+                <p className="portfolio-text">Coming soon.</p>
               </motion.div>
             </div>
 
@@ -297,62 +352,6 @@ function Portfolio() {
                     Download Report
                   </motion.a>
                 </motion.div>
-              </motion.div>
-            </div>
-
-            {/* Investing */}
-            <div className="embla__slide">
-              <motion.div
-                className="portfolio-card"
-                initial={{ opacity: 0, y: 40, rotate: 0.5 }}
-                whileInView={{ opacity: 1, y: 0, rotate: 0 }}
-                viewport={{ once: true, margin: '-200px' }}
-                transition={enter.section}
-                whileHover={{
-                  scale: 1.02,
-                  boxShadow: '0 24px 48px rgba(17, 24, 39, 0.18)',
-                  transition: { type: 'spring', stiffness: 260, damping: 22, mass: 0.3 }
-                }}
-                whileTap={{ scale: 0.995 }}
-              >
-                <motion.h3
-                  className="portfolio-title"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={viewportOnce}
-                  transition={{ ...enter.block, delay: delay.sm }}
-                >
-                  Investing
-                </motion.h3>
-                <motion.p
-                  className="portfolio-text"
-                  initial={{ opacity: 0, y: 12 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={viewportOnce}
-                  transition={{ ...enter.text, delay: delay.md }}
-                >
-                  Coming soon.
-                </motion.p>
-              </motion.div>
-            </div>
-
-            {/* Photography */}
-            <div className="embla__slide">
-              <motion.div
-                className="portfolio-card"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-200px' }}
-                transition={enter.section}
-                whileHover={{
-                  scale: 1.02,
-                  boxShadow: '0 24px 48px rgba(17, 24, 39, 0.18)',
-                  transition: { type: 'spring', stiffness: 260, damping: 22, mass: 0.3 }
-                }}
-                whileTap={{ scale: 0.995 }}
-              >
-                <h3 className="portfolio-title">Photography</h3>
-                <p className="portfolio-text">Coming soon.</p>
               </motion.div>
             </div>
           </div>
