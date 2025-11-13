@@ -1,5 +1,5 @@
 .navbar{
-    @apply bg-white p-4 shadow-md;
+    @apply relative z-50 bg-white p-4 shadow-md;
 }
 
 .nav-container{
@@ -20,10 +20,4 @@
     @apply scale-x-100;
 }
 
-/* Dropdown menu */
-.dropdown{ @apply relative inline-block; }
-.dropdown-menu{
-  @apply absolute left-1/2 -translate-x-1/2 mt-2 bg-white border border-gray-200 rounded-md shadow-lg px-3 py-2 flex flex-col gap-1 opacity-0 pointer-events-none transition-opacity duration-200 whitespace-nowrap;
-}
-.dropdown:hover .dropdown-menu{ @apply opacity-100 pointer-events-auto; }
-.submenu-link{ @apply text-gray-600 hover:text-blue-500 text-sm; }
+/* Headless UI Menus now handle dropdown behavior and focus */
