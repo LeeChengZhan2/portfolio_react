@@ -1,18 +1,18 @@
-import React from "react";
-import { motion } from "framer-motion";
-import { enter, delay, hoverSpring, viewportOnce } from "../../motionConfig";
+import React from 'react';
+import { motion } from 'framer-motion';
+import { delay, hoverSpring, viewportOnce } from '../../motionConfig';
 import './About.css';
 
-function About(){
-  return(
+function About() {
+  return (
     <section className="about-container" id="about">
       <div className="about-flex-container">
-        <motion.div 
+        <motion.div
           className="about-picture-container"
           initial={{ opacity: 0, scale: 0.8, x: -20 }}
           whileInView={{ opacity: 1, scale: 1, x: 0 }}
-          viewport={{ once: true, margin: "-100px"}}
-          transition={enter.section}
+          viewport={{ once: true, margin: '-100px' }}
+          transition={{ duration: 0.9, ease: 'easeOut' }}
         >
           <img
             src={process.env.PUBLIC_URL + '/assets/images/home-landscape-image-1.png'}
@@ -21,28 +21,28 @@ function About(){
           />
         </motion.div>
 
-        <motion.div 
+        <motion.div
           className="about-content-container"
-          initial={{ opacity: 0, scale: 0.8 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-100px"}}
-          transition={enter.section}
+          initial={{ opacity: 0, y: 60 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-120px' }}
+          transition={{ duration: 0.9, ease: 'easeOut' }}
         >
-          <motion.h1 
+          <motion.h1
             className="about-sub-title"
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={viewportOnce}
-            transition={{ ...enter.block, delay: delay.sm }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: delay.sm }}
           >
             About Me
           </motion.h1>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={viewportOnce}
-            transition={{ ...enter.text, delay: delay.md }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: delay.md }}
           >
             {/* Section 1: Introduction / Background */}
             <div className="about-section">
@@ -76,7 +76,7 @@ function About(){
             </div>
 
             <div className="more-button-container">
-              <motion.button 
+              <motion.button
                 className="more-button"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
@@ -90,6 +90,6 @@ function About(){
       </div>
     </section>
   );
-};
-  
+}
+
 export default About;

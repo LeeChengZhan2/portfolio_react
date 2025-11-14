@@ -1,47 +1,89 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import Lenis from 'lenis';
 
 function SmoothScroll({ children }) {
   useEffect(() => {
+    const sections = [
+      { id: 'home', cssVar: '--home-bg-parallax', maxShift: 80 },
+      { id: 'portfolio', cssVar: '--portfolio-bg-parallax', maxShift: 60 },
+    ];
+
+    const prefersReducedMotion = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)'
+    )?.matches;
+
+    if (prefersReducedMotion) {
+      sections.forEach(({ cssVar }) => {
+        document.documentElement.style.setProperty(cssVar, '0px');
+      });
+      return undefined;
+    }
+
     const lenis = new Lenis({
-      lerp: 0.08,
+      lerp: 0.16,
       smoothWheel: true,
+      smoothTouch: true,
       wheelMultiplier: 0.9,
+      touchMultiplier: 1.2,
+    });
+
+    const targetOffsets = {};
+    const currentOffsets = {};
+
+    sections.forEach(({ id }) => {
+      targetOffsets[id] = 0;
+      currentOffsets[id] = 0;
     });
 
     let animationFrame;
 
     const raf = (time) => {
       lenis.raf(time);
+
+      const damping = 0.08;
+
+      sections.forEach(({ id, cssVar }) => {
+        const current = currentOffsets[id];
+        const target = targetOffsets[id];
+        const next = current + (target - current) * damping;
+        currentOffsets[id] = next;
+
+        document.documentElement.style.setProperty(cssVar, `${next}px`);
+      });
+
       animationFrame = requestAnimationFrame(raf);
     };
 
     animationFrame = requestAnimationFrame(raf);
 
     const handleScroll = ({ scroll }) => {
-      const homeEl = document.getElementById('home');
-      const portfolioEl = document.getElementById('portfolio');
+      const viewportHeight = window.innerHeight || 1;
 
-      if (!homeEl || !portfolioEl) {
-        document.documentElement.style.setProperty('--home-bg-parallax', '0px');
-        return;
-      }
+      sections.forEach(({ id, maxShift }) => {
+        const el = document.getElementById(id);
 
-      const homeHeight = homeEl.offsetHeight || 1;
-      const portfolioTop = portfolioEl.offsetTop;
+        if (!el) {
+          targetOffsets[id] = 0;
+          return;
+        }
 
-      const startScroll = 0;
-      const endScroll = Math.max(portfolioTop - homeHeight * 0.3, startScroll + 1);
+        const sectionTop = el.offsetTop || 0;
+        const sectionHeight = el.offsetHeight || viewportHeight;
+        const maxShiftPx = maxShift; // max px the background will move
 
-      const clamped = Math.min(Math.max(scroll - startScroll, 0), endScroll - startScroll);
-      const t = clamped / (endScroll - startScroll);
+        const startScroll = sectionTop;
+        const distance = sectionHeight || 1;
 
-      const eased = 1 - Math.pow(1 - t, 2);
+        const clamped = Math.min(
+          Math.max(scroll - startScroll, 0),
+          distance
+        );
+        const t = clamped / distance;
 
-      const maxShift = 120;
-      const offset = -maxShift * eased;
+        const eased = t * (2 - t); // ease-out
 
-      document.documentElement.style.setProperty('--home-bg-parallax', `${offset}px`);
+        targetOffsets[id] = -maxShiftPx * eased;
+      });
     };
 
     lenis.on('scroll', handleScroll);
@@ -52,7 +94,9 @@ function SmoothScroll({ children }) {
       }
       lenis.off('scroll', handleScroll);
       lenis.destroy();
-      document.documentElement.style.removeProperty('--home-bg-parallax');
+      sections.forEach(({ cssVar }) => {
+        document.documentElement.style.removeProperty(cssVar);
+      });
     };
   }, []);
 
@@ -60,4 +104,3 @@ function SmoothScroll({ children }) {
 }
 
 export default SmoothScroll;
-

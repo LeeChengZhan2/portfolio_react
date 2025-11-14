@@ -6,8 +6,8 @@
 
 .content-container {
     @apply flex-auto relative rounded-xl bg-homebg bg-cover bg-center;
-    background-position-y: calc(50% + var(--home-bg-parallax, 0px));
-    will-change: background-position-y;
+    background-position: center calc(50% + var(--home-bg-parallax, 0px));
+    will-change: background-position;
     /* background-image: url('http://localhost:3000/portfolio_react/images/Portrait_Landscape.jpg'); */
 }
 
