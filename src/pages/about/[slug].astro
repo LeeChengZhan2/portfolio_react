@@ -1,0 +1,124 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSections } from '../../lib/content';
+
+// getStaticPaths runs at BUILD time and tells Astro every URL this template
+// should produce. One file generates /about/personal, /about/travel, and so on.
+export const getStaticPaths = (async () => {
+  const sections = await getSections();
+  return sections.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}) satisfies GetStaticPaths;
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const sections = await getSections();
+const index = sections.findIndex((s) => s.id === entry.id);
+const prev = sections[index - 1];
+const next = sections[index + 1];
+---
+
+<BaseLayout title={entry.data.title} description={entry.data.summary}>
+  <article class="page">
+    <header class="page__header">
+      <a href="/about" class="back">&larr; About</a>
+      <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
+      <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
+    </header>
+
+    <div class="page__body" data-reveal="fade-up">
+      <Content />
+    </div>
+
+    <nav class="pager" aria-label="Other sections">
+      {
+        prev ? (
+          <a href={`/about/${prev.id}`} class="pager__link">
+            <span class="pager__dir">Previous</span>
+            <span class="pager__title">{prev.data.title}</span>
+          </a>
+        ) : (
+          <span />
+        )
+      }
+      {
+        next && (
+          <a href={`/about/${next.id}`} class="pager__link pager__link--next">
+            <span class="pager__dir">Next</span>
+            <span class="pager__title">{next.data.title}</span>
+          </a>
+        )
+      }
+    </nav>
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-2xl px-6 py-20 lg:py-28;
+  }
+
+  .page__header {
+    @apply mb-10 flex flex-col gap-3;
+  }
+
+  .back {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-kleinblue;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .page__summary {
+    @apply text-lg leading-relaxed text-gray-600;
+  }
+
+  /* Markdown output lands here, so descendant selectors are the right tool. */
+  .page__body :global(p) {
+    @apply mb-4 leading-relaxed text-gray-700;
+  }
+
+  .page__body :global(h2) {
+    @apply mt-10 mb-3 text-2xl font-semibold tracking-tight;
+  }
+
+  .page__body :global(h3) {
+    @apply mt-8 mb-2 text-lg font-semibold;
+  }
+
+  .page__body :global(ul) {
+    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-gray-700;
+  }
+
+  .page__body :global(a) {
+    @apply text-kleinblue underline decoration-kleinblue/30 underline-offset-2 hover:decoration-kleinblue;
+  }
+
+  .pager {
+    @apply mt-20 grid grid-cols-2 gap-4 border-t border-gray-200 pt-8;
+  }
+
+  .pager__link {
+    @apply flex flex-col gap-1 rounded-xl border border-gray-200 p-4 transition-colors hover:border-kleinblue/40;
+  }
+
+  .pager__link--next {
+    @apply text-right;
+  }
+
+  .pager__dir {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500;
+  }
+
+  .pager__title {
+    @apply font-semibold text-gray-900;
+  }
+</style>

@@ -1,0 +1,101 @@
+---
+import "../styles/global.css";
+import Header from "../components/astro/Header.astro";
+import Footer from "../components/astro/Footer.astro";
+
+interface Props {
+  /** Page title. Rendered as `<title> · Lee Cheng Zhan` unless isHome. */
+  title: string;
+  /** Meta description. Keep under ~160 characters. */
+  description: string;
+  /** Path to an OG image under public/. Falls back to the hero shot. */
+  ogImage?: string;
+  /** Home page uses the bare site name rather than the suffixed form. */
+  isHome?: boolean;
+  /** Keep out of search results. Used by 404 and any thin/utility page. */
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description,
+  ogImage = "/assets/images/home-landscape-image-1.png",
+  isHome = false,
+  noindex = false,
+} = Astro.props;
+
+const SITE_NAME = "Lee Cheng Zhan";
+const fullTitle = isHome ? `${SITE_NAME} · Software Engineer` : `${title} · ${SITE_NAME}`;
+
+// TODO(domain): Astro.site is https://leechengzhan.com, which is NOT REGISTERED YET.
+// Canonical + OG URLs below are built from it, so they currently point at a domain
+// that does not resolve. This is harmless while the site is unpublished, but it
+// MUST be registered (or `site` changed in astro.config.mjs) before any public
+// deploy — otherwise search engines follow canonicals into a dead domain.
+// See docs/REBUILD.md §12.
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImageUrl = new URL(ogImage, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <link rel="icon" type="image/png" href="/assets/icon/cz.png" />
+    <link rel="apple-touch-icon" href="/assets/icon/cz.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImageUrl} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <meta name="theme-color" content="#002fa7" />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+
+    <!-- Marks the document as script-capable before first paint. global.css
+         gates every `opacity: 0` reveal starting state behind `html.js`, so a
+         JS failure degrades to "no animation" rather than "no visible content".
+         `is:inline` is required: a bundled or module script runs after paint,
+         which would show the content and then hide it again. -->
+    <script is:inline>
+      document.documentElement.classList.add("js");
+    </script>
+  </head>
+
+  <body>
+    <a href="#main" class="sr-only focus:not-sr-only">Skip to content</a>
+
+    <Header />
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <Footer />
+
+    <script>
+      // Smooth scroll + the ScrollTrigger wiring. Loaded as a module so it is
+      // deferred automatically. This is a plain script, NOT a React island —
+      // Lenis is page-wide behaviour, not a component.
+      import "../scripts/smooth-scroll";
+      import "../scripts/reveal";
+      // Clipboard buttons in the footer. Event-delegated, so one listener
+      // covers every button on the page.
+      import "../scripts/copy";
+    </script>
+  </body>
+</html>

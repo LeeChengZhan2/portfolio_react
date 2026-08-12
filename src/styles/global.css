@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Theme
+   Tailwind v4 has no tailwind.config.js — the theme lives here and every token
+   below is emitted as both a CSS variable and a utility class. `--color-kleinblue`
+   gives you `bg-kleinblue`, `text-kleinblue`, `border-kleinblue`, and so on.
+
+   Palette carried over verbatim from legacy/tailwind.config.js. Spelling of
+   `schenbrunnyellow`, `prusianblue` and `lavendarblue` is preserved so existing
+   markup keeps working — do not "fix" it without a find-and-replace.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-kleinblue: #002fa7;
+  --color-schenbrunnyellow: #f7e14d;
+  --color-tiffanyblue: #81d8d0;
+  --color-prusianblue: #003153;
+  --color-bluenova: #5b6d92;
+  --color-lavendarblue: #c6e7ff;
+
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+
+/* NOTE: legacy/src/index.css set `html { scroll-behavior: smooth }`. That is
+   deliberately NOT carried over — it fights Lenis for control of the scroll
+   position and produces stuttering. Lenis is the only smooth-scroll layer.
+   See CLAUDE.md § Animation rules. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-white);
+  color: #111827;
+}
+
+/* Lenis requires this to take over the scroll container. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+/* Visible focus for keyboard users — the legacy site had none. */
+:focus-visible {
+  outline: 2px solid var(--color-kleinblue);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Screen-reader-only text, used for skip links and icon labels. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Reveal animations
+   Elements opt in with `data-reveal="…"`. src/scripts/reveal.ts finds them and
+   attaches the matching ScrollTrigger. These starting styles live in CSS so the
+   element is already hidden on first paint — otherwise it flashes visible before
+   the script runs.
+
+   Everything is reset to its resting state when the user prefers reduced motion,
+   so the content is simply there with no animation at all.
+--------------------------------------------------------------------------- */
+[data-reveal] {
+  will-change: transform, opacity;
+}
+
+/* Every hidden starting state is gated behind `html.js`, which BaseLayout's
+   inline head script sets before first paint. Ungated, an `opacity: 0` here
+   means content is permanently invisible whenever the script never runs —
+   JS disabled, a CSP block, a chunk 404, a syntax error in another module.
+   Gated, the failure mode degrades to "no animation" instead of "no content". */
+html.js [data-reveal="fade-up"] {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0);
+}
+
+html.js [data-reveal="fade"] {
+  opacity: 0;
+}
+
+html.js [data-reveal="slide-left"] {
+  opacity: 0;
+  transform: translate3d(-40px, 0, 0);
+}
+
+html.js [data-reveal="slide-right"] {
+  opacity: 0;
+  transform: translate3d(40px, 0, 0);
+}
+
+/* Split reveals hide the container; reveal.ts restores it to opacity 1 once
+   SplitText has built the pieces, and animates those instead. SplitText is a
+   dynamic import, so this waits a beat longer than the tweens above — and
+   reveal.ts has a catch() that un-hides these if that chunk fails to load. */
+html.js [data-reveal="split-chars"],
+html.js [data-reveal="split-lines"] {
+  opacity: 0;
+}
+
+/* Escape hatch: reveal.ts sets this when it bails out (reduced motion), so
+   anything already hidden is restored rather than stranded. */
+html.reveal-off [data-reveal] {
+  opacity: 1 !important;
+  transform: none !important;
+  will-change: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

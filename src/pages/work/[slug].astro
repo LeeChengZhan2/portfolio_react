@@ -1,0 +1,140 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getWork } from '../../lib/content';
+
+export const getStaticPaths = (async () => {
+  const work = await getWork();
+  return work.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}) satisfies GetStaticPaths;
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+---
+
+<BaseLayout title={entry.data.title} description={entry.data.summary}>
+  <article class="page">
+    <header class="page__header">
+      <a href="/work" class="back">&larr; Work</a>
+      <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
+      <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
+
+      <dl class="facts" data-reveal="fade-up">
+        <div>
+          <dt>Role</dt>
+          <dd>{entry.data.role}</dd>
+        </div>
+        <div>
+          <dt>Year</dt>
+          <dd>{entry.data.year}</dd>
+        </div>
+        {
+          entry.data.stack.length > 0 && (
+            <div class="facts__stack">
+              <dt>Stack</dt>
+              <dd>{entry.data.stack.join(' · ')}</dd>
+            </div>
+          )
+        }
+      </dl>
+    </header>
+
+    <div class="page__body" data-reveal="fade-up">
+      <Content />
+    </div>
+
+    {
+      (entry.data.repo || entry.data.external || entry.data.doc) && (
+        <div class="actions">
+          {entry.data.external && (
+            <a href={entry.data.external} target="_blank" rel="noopener noreferrer" class="action">
+              View publication
+            </a>
+          )}
+          {entry.data.repo && (
+            <a href={entry.data.repo} target="_blank" rel="noopener noreferrer" class="action">
+              View on GitHub
+            </a>
+          )}
+          {entry.data.doc && (
+            <a href={entry.data.doc} download class="action action--ghost">
+              Download report
+            </a>
+          )}
+        </div>
+      )
+    }
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-2xl px-6 py-20 lg:py-28;
+  }
+
+  .page__header {
+    @apply mb-10 flex flex-col gap-3;
+  }
+
+  .back {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-kleinblue;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .page__summary {
+    @apply text-lg leading-relaxed text-gray-600;
+  }
+
+  .facts {
+    @apply mt-4 grid grid-cols-2 gap-4 border-y border-gray-200 py-4 sm:grid-cols-3;
+  }
+
+  .facts__stack {
+    @apply col-span-2 sm:col-span-1;
+  }
+
+  .facts dt {
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-gray-500;
+  }
+
+  .facts dd {
+    @apply mt-0.5 text-sm text-gray-800;
+  }
+
+  .page__body :global(p) {
+    @apply mb-4 leading-relaxed text-gray-700;
+  }
+
+  .page__body :global(h2) {
+    @apply mt-10 mb-3 text-2xl font-semibold tracking-tight;
+  }
+
+  .page__body :global(ul) {
+    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-gray-700;
+  }
+
+  .page__body :global(a) {
+    @apply text-kleinblue underline decoration-kleinblue/30 underline-offset-2 hover:decoration-kleinblue;
+  }
+
+  .actions {
+    @apply mt-12 flex flex-wrap gap-3 border-t border-gray-200 pt-8;
+  }
+
+  .action {
+    @apply inline-block rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-kleinblue;
+  }
+
+  .action--ghost {
+    @apply border border-gray-300 bg-transparent text-gray-800 hover:border-kleinblue hover:bg-transparent hover:text-kleinblue;
+  }
+</style>

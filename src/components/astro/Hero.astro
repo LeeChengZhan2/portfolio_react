@@ -1,0 +1,89 @@
+---
+// Hero parallax rebuilt per docs/REBUILD.md §8.1.
+//
+// The legacy version animated `background-position` on a div, driven by a
+// hand-rolled rAF loop in SmoothScroll.jsx with its own 0.08 lerp stacked on
+// top of Lenis. Two separate faults: background-position forces a full repaint
+// every scroll frame, and two smoothing filters in series felt mushy.
+//
+// Now the image is a real <img> that gets `transform`ed — GPU-composited — and
+// Lenis is the only smoothing layer. Animation is attached in scripts/reveal.ts
+// via the data-hero* hooks below.
+---
+
+<section class="hero" data-hero>
+  <div class="hero__frame">
+    <img
+      src="/assets/images/home-landscape-image-1.png"
+      alt=""
+      class="hero__img"
+      data-hero-img
+      fetchpriority="high"
+      decoding="async"
+    />
+    <div class="hero__scrim" aria-hidden="true"></div>
+  </div>
+
+  <div class="hero__text" data-hero-text>
+    <p class="hero__occupation">Software Engineer</p>
+    <h1 class="hero__headline">Hi, I'm Lee Cheng Zhan from Malaysia</h1>
+  </div>
+</section>
+
+<style>
+  @reference "#styles";
+
+  .hero {
+    @apply relative p-4 lg:p-8 2xl:p-16;
+    height: 100svh;
+  }
+
+  .hero__frame {
+    @apply absolute overflow-hidden rounded-xl;
+    inset: 1rem;
+  }
+
+  @media (min-width: 1024px) {
+    .hero__frame { inset: 2rem; }
+  }
+  @media (min-width: 1536px) {
+    .hero__frame { inset: 4rem; }
+  }
+
+  .hero__img {
+    /* Overscanned vertically so the parallax shift never exposes an edge.
+       12% top/bottom bleed covers the 12% yPercent travel. */
+    @apply absolute w-full object-cover;
+    top: -12%;
+    height: 124%;
+    left: 0;
+    will-change: transform;
+  }
+
+  /* Keeps white text legible regardless of what the photo is doing. The
+     legacy site put white text straight onto the image. */
+  .hero__scrim {
+    @apply absolute inset-0;
+    background: linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.55) 0%,
+      rgb(0 0 0 / 0.15) 45%,
+      rgb(0 0 0 / 0) 70%
+    );
+  }
+
+  .hero__text {
+    @apply absolute bottom-0 left-0 z-10 text-white;
+    @apply p-8 lg:p-16 2xl:p-32;
+    will-change: transform, opacity;
+  }
+
+  .hero__occupation {
+    @apply mb-3 text-xl font-medium lg:text-2xl 2xl:text-3xl;
+  }
+
+  .hero__headline {
+    @apply max-w-3xl text-3xl font-bold lg:text-5xl 2xl:text-6xl;
+    text-wrap: balance;
+  }
+</style>

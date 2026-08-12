@@ -1,0 +1,113 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getWork } from '../../lib/content';
+
+const work = await getWork();
+---
+
+<BaseLayout
+  title="Work"
+  description="Projects and engineering work — BMS driver development, Java services in finance, and a Mathematics with Computing final year project."
+>
+  <article class="page">
+    <header class="page__header">
+      <p class="eyebrow" data-reveal="fade">Work</p>
+      <h1 class="page__title" data-reveal="split-lines">Projects and engineering</h1>
+    </header>
+
+    <ul class="list">
+      {
+        work.map((entry, i) => (
+          <li data-reveal="fade-up" data-reveal-delay={String(i * 0.07)}>
+            <a href={`/work/${entry.id}`} class="row">
+              <div class="row__main">
+                <h2 class="row__title">{entry.data.title}</h2>
+                <p class="row__summary">{entry.data.summary}</p>
+                {entry.data.stack.length > 0 && (
+                  <ul class="chips">
+                    {entry.data.stack.map((tech) => (
+                      <li class="chip">{tech}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div class="row__meta">
+                <span class="row__year">{entry.data.year}</span>
+                <span class="row__role">{entry.data.role}</span>
+              </div>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-4xl px-6 py-20 lg:py-28;
+  }
+
+  .page__header {
+    @apply mb-12 flex flex-col gap-3;
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.16em] text-gray-500;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .list {
+    @apply flex flex-col;
+  }
+
+  .row {
+    @apply flex flex-col gap-4 border-t border-gray-200 py-8 transition-colors sm:flex-row sm:items-start sm:justify-between;
+    @apply hover:border-kleinblue/40;
+  }
+
+  .list li:last-child .row {
+    @apply border-b;
+  }
+
+  .row__main {
+    @apply flex flex-col gap-2;
+  }
+
+  .row__title {
+    @apply text-xl font-semibold tracking-tight text-gray-900;
+  }
+
+  .row:hover .row__title {
+    @apply text-kleinblue;
+  }
+
+  .row__summary {
+    @apply max-w-xl text-sm leading-relaxed text-gray-600;
+  }
+
+  .row__meta {
+    @apply flex flex-none flex-row items-baseline gap-3 sm:w-40 sm:flex-col sm:items-end sm:gap-1;
+  }
+
+  .row__year {
+    @apply font-mono text-sm tabular-nums text-gray-500;
+  }
+
+  .row__role {
+    @apply text-xs text-gray-500;
+  }
+
+  .chips {
+    @apply flex flex-wrap gap-1.5 pt-1;
+  }
+
+  .chip {
+    @apply rounded bg-gray-100 px-2 py-0.5 font-mono text-[0.7rem] text-gray-600;
+  }
+</style>

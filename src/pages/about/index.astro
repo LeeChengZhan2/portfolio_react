@@ -1,0 +1,138 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSections } from '../../lib/content';
+
+const sections = await getSections();
+---
+
+<BaseLayout
+  title="About"
+  description="Software engineer in Singapore. Mathematics with Computing graduate from TARUMT, previously a Java developer in finance, now working on Building Management Systems."
+>
+  <article class="page">
+    <header class="page__header">
+      <p class="eyebrow" data-reveal="fade">About</p>
+      <h1 class="page__title" data-reveal="split-lines">Who I am</h1>
+    </header>
+
+    <div class="page__body">
+      <section data-reveal="fade-up">
+        <p class="lead">Software Engineer</p>
+        <p>
+          My name is Lee Cheng Zhan. I was born in 2000 and I work as a software
+          engineer in Singapore, in the Building Management System (BMS) industry.
+        </p>
+        <p>
+          I hold a degree in Mathematics with Computing from Tunku Abdul Rahman
+          University of Management and Technology (TARUMT), graduating with a CGPA
+          of 3.63. The programme paired mathematics as the major with computer
+          science as the minor — an unusual combination, and the reason I tend to
+          reach for the analytical framing of a problem before the code.
+        </p>
+      </section>
+
+      <section data-reveal="fade-up">
+        <h2>Career journey</h2>
+        <p>
+          I started as a software developer in the financial industry, where I spent
+          over a year developing, debugging, and maintaining Java applications.
+          Working with cross-functional teams there is where I picked up Spring
+          Boot, Hibernate, and Kafka.
+        </p>
+        <p>
+          I then moved into the Building Management System industry, where I now
+          develop and debug the software and drivers that let a BMS platform
+          communicate with building equipment — HVAC, lighting, fans. The work is
+          mostly integration: making two systems that were designed separately
+          agree on what a message means, and keeping that reliable.
+        </p>
+      </section>
+
+      <section data-reveal="fade-up">
+        <h2>Beyond work</h2>
+        <p>
+          Outside work I'm usually moving — basketball, football, running, the gym.
+          I also shoot photographs and make the occasional vlog, which has done
+          more for my confidence on camera than anything else I've tried.
+        </p>
+      </section>
+    </div>
+
+    <nav class="subnav" aria-label="About sections">
+      <p class="eyebrow" data-reveal="fade">Read more</p>
+      <ul class="subnav__list">
+        {
+          sections.map((section, i) => (
+            <li data-reveal="fade-up" data-reveal-delay={String(i * 0.06)}>
+              <a href={`/about/${section.id}`} class="subnav__card">
+                <h3>{section.data.title}</h3>
+                <p>{section.data.summary}</p>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-3xl px-6 py-20 lg:py-28;
+  }
+
+  .page__header {
+    @apply mb-12 flex flex-col gap-3;
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.16em] text-gray-500;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .page__body {
+    @apply flex flex-col gap-12;
+  }
+
+  .page__body section {
+    @apply flex flex-col gap-4;
+  }
+
+  .lead {
+    @apply text-lg text-gray-500;
+  }
+
+  .page__body h2 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .page__body p {
+    @apply leading-relaxed text-gray-700;
+  }
+
+  .subnav {
+    @apply mt-20 flex flex-col gap-4 border-t border-gray-200 pt-12;
+  }
+
+  .subnav__list {
+    @apply grid gap-4 sm:grid-cols-2;
+  }
+
+  .subnav__card {
+    @apply flex h-full flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-5 transition-all duration-300;
+    @apply hover:-translate-y-1 hover:border-kleinblue/40 hover:shadow-md;
+  }
+
+  .subnav__card h3 {
+    @apply font-semibold text-gray-900;
+  }
+
+  .subnav__card p {
+    @apply text-sm leading-relaxed text-gray-600;
+  }
+</style>

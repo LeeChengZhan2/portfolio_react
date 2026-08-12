@@ -1,0 +1,132 @@
+---
+import CopyButton from './CopyButton.astro';
+
+const EMAIL = 'leechengzhan7@gmail.com';
+const PHONE_SG = '+65 81273530';
+const PHONE_MY = '+60 183221917';
+
+const socials = [
+  { href: `mailto:${EMAIL}`, icon: 'gmail-colourful.png', label: 'Email', external: false },
+  { href: 'tel:+6581273530', icon: 'phone-blue.png', label: 'Phone', external: false },
+  { href: 'https://wa.me/6581273530', icon: 'whatsapp-circle-black.png', label: 'WhatsApp', external: true },
+  { href: 'https://github.com/LeeChengZhan2', icon: 'github-black.png', label: 'GitHub', external: true },
+  { href: 'https://www.linkedin.com/in/cheng-zhan-lee-a87959220', icon: 'linkedin-blue.png', label: 'LinkedIn', external: true },
+  { href: 'https://www.instagram.com/aaaaaaazhan/', icon: 'instagram-square-white.png', label: 'Instagram', external: true },
+  { href: 'https://www.strava.com/athletes/109951375', icon: 'strava-orange.png', label: 'Strava', external: true },
+];
+
+const brokers = [
+  { href: 'https://www.moomoo.com/', icon: 'moomoo-horizon.png', label: 'Moomoo' },
+  { href: 'https://www.etoro.com/people/chengzhanlee', icon: 'etoro-horizon.png', label: 'eToro' },
+];
+
+const year = new Date().getFullYear();
+---
+
+<footer class="footer" id="contact">
+  <div class="footer__contact" data-reveal="fade-up">
+    <p class="footer__row">
+      <span>{EMAIL}</span>
+      <CopyButton value={EMAIL} label="email address" />
+    </p>
+
+    <p class="footer__row">
+      <span>SG: {PHONE_SG}</span>
+      <CopyButton value={PHONE_SG} label="Singapore number" />
+      <span class="mx-2 text-gray-500" aria-hidden="true">|</span>
+      <span>MY: {PHONE_MY}</span>
+      <CopyButton value={PHONE_MY} label="Malaysia number" />
+    </p>
+  </div>
+
+  <ul class="footer__socials" data-reveal="fade-up" data-reveal-delay="0.1">
+    {
+      socials.map((social) => (
+        <li>
+          <a
+            href={social.href}
+            aria-label={social.label}
+            {...(social.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          >
+            <img src={`/assets/icon/${social.icon}`} alt="" class="footer__icon" width="24" height="24" loading="lazy" />
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <ul class="footer__brokers" data-reveal="fade-up" data-reveal-delay="0.15">
+    {
+      brokers.map((broker) => (
+        <li>
+          <a href={broker.href} target="_blank" rel="noopener noreferrer" aria-label={broker.label}>
+            <img src={`/assets/icon/${broker.icon}`} alt="" class="footer__broker" height="20" loading="lazy" />
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <div class="footer__cv">
+    <!-- Root-relative and correct: this site is served from a domain root,
+         not a /portfolio_react/ subpath. That subpath is what 404'd both
+         download links on GitHub Pages. -->
+    <a href="/assets/documents/leechengzhan-resume-mar-2023.docx" download class="footer__download">
+      Download CV
+    </a>
+    <p class="footer__cv-note">
+      <!-- TODO: replace with a current PDF. This file is from March 2023 and
+           describes a role you have since left. -->
+    </p>
+  </div>
+
+  <p class="footer__copyright">
+    Copyright &copy; {year} Lee Cheng Zhan. All Rights Reserved.
+  </p>
+</footer>
+
+<style>
+  @reference "#styles";
+
+  .footer {
+    @apply bg-gray-800 px-6 py-10 text-gray-200;
+  }
+
+  .footer__contact {
+    @apply mb-6 flex flex-col items-center gap-2 text-center text-sm font-semibold text-white;
+  }
+
+  .footer__row {
+    @apply flex flex-wrap items-center justify-center gap-x-2 gap-y-1;
+  }
+
+  .footer__socials {
+    @apply mb-5 flex flex-wrap items-center justify-center gap-6;
+  }
+
+  .footer__icon {
+    @apply h-6 w-6 transition-transform duration-300 ease-in-out hover:-translate-y-1 hover:scale-125;
+  }
+
+  .footer__brokers {
+    @apply mb-6 flex flex-col items-center gap-3;
+  }
+
+  .footer__broker {
+    @apply h-5 w-auto transition-transform duration-300 ease-in-out hover:-translate-y-1 hover:scale-110;
+  }
+
+  .footer__cv {
+    @apply mb-8 text-center;
+  }
+
+  .footer__download {
+    @apply inline-block rounded-full border border-white bg-transparent px-6 py-2 font-semibold text-white transition-colors duration-300;
+    @apply hover:bg-white hover:text-gray-800;
+  }
+
+  .footer__copyright {
+    @apply border-t border-gray-700 pt-6 text-center text-xs text-gray-400;
+  }
+
+</style>

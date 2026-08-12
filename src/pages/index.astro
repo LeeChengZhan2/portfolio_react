@@ -1,0 +1,165 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/astro/Hero.astro';
+import { getSections, getFeaturedWork } from '../lib/content';
+
+const sections = await getSections();
+const featured = await getFeaturedWork();
+---
+
+<BaseLayout
+  isHome
+  title="Lee Cheng Zhan"
+  description="Software engineer in Singapore working on Building Management Systems. Mathematics with Computing graduate, ex-Java developer in finance."
+>
+  <Hero />
+
+  <section class="section" id="about">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal="fade">About</p>
+      <h2 class="section-title" data-reveal="split-lines">
+        Software engineer, currently building the layer between software and buildings.
+      </h2>
+
+      <div class="prose" data-reveal="fade-up">
+        <p>
+          I'm a software engineer in Singapore working in the Building Management
+          System industry, where I develop and debug the drivers that let a BMS
+          platform communicate with HVAC, lighting, and fan systems.
+        </p>
+        <p>
+          Before that I spent over a year writing Java in the financial industry.
+          I hold a degree in Mathematics with Computing from Tunku Abdul Rahman
+          University of Management and Technology, an unusual pairing of a
+          mathematics major with a computer science minor.
+        </p>
+      </div>
+
+      <a href="/about" class="link-button" data-reveal="fade-up" data-reveal-delay="0.1">
+        More about me
+      </a>
+    </div>
+  </section>
+
+  {
+    featured.length > 0 && (
+      <section class="section section--alt" id="work">
+        <div class="wrap">
+          <p class="eyebrow" data-reveal="fade">Selected work</p>
+          <h2 class="section-title" data-reveal="fade-up">What I've been building</h2>
+
+          <ul class="card-grid">
+            {featured.map((entry, i) => (
+              <li data-reveal="fade-up" data-reveal-delay={String(i * 0.08)}>
+                <a href={`/work/${entry.id}`} class="card">
+                  <p class="card__year">{entry.data.year}</p>
+                  <h3 class="card__title">{entry.data.title}</h3>
+                  <p class="card__summary">{entry.data.summary}</p>
+                  {entry.data.stack.length > 0 && (
+                    <ul class="chips">
+                      {entry.data.stack.map((tech) => (
+                        <li class="chip">{tech}</li>
+                      ))}
+                    </ul>
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <a href="/work" class="link-button" data-reveal="fade-up">See all work</a>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section" id="explore">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal="fade">Elsewhere</p>
+      <h2 class="section-title" data-reveal="fade-up">Beyond the day job</h2>
+
+      <ul class="card-grid card-grid--tight">
+        {
+          sections.map((section, i) => (
+            <li data-reveal="fade-up" data-reveal-delay={String(i * 0.08)}>
+              <a href={`/about/${section.id}`} class="card">
+                <h3 class="card__title">{section.data.title}</h3>
+                <p class="card__summary">{section.data.summary}</p>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .section {
+    @apply px-6 py-24 lg:px-12 lg:py-32;
+  }
+
+  .section--alt {
+    @apply bg-white;
+  }
+
+  .wrap {
+    @apply mx-auto flex max-w-5xl flex-col items-start gap-6;
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.16em] text-gray-500;
+  }
+
+  .section-title {
+    @apply max-w-3xl text-3xl font-bold tracking-tight lg:text-4xl;
+    text-wrap: balance;
+  }
+
+  .prose {
+    @apply flex max-w-2xl flex-col gap-4 text-gray-700;
+  }
+
+  .link-button {
+    @apply mt-2 inline-block rounded-lg bg-gray-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-kleinblue;
+  }
+
+  .card-grid {
+    @apply mt-4 grid w-full gap-5 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .card-grid--tight {
+    @apply lg:grid-cols-4;
+  }
+
+  .card {
+    @apply flex h-full flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-6 transition-all duration-300;
+    @apply hover:-translate-y-1 hover:border-kleinblue/40 hover:shadow-lg;
+  }
+
+  .section--alt .card {
+    @apply bg-gray-50;
+  }
+
+  .card__year {
+    @apply font-mono text-xs text-gray-500;
+  }
+
+  .card__title {
+    @apply text-lg font-semibold text-gray-900;
+  }
+
+  .card__summary {
+    @apply text-sm leading-relaxed text-gray-600;
+  }
+
+  .chips {
+    @apply mt-auto flex flex-wrap gap-1.5 pt-3;
+  }
+
+  .chip {
+    @apply rounded bg-gray-100 px-2 py-0.5 font-mono text-[0.7rem] text-gray-600;
+  }
+</style>

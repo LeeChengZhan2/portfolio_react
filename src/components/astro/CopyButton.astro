@@ -1,0 +1,55 @@
+---
+interface Props {
+  /** The value written to the clipboard. */
+  value: string;
+  /** What the button announces, e.g. "email address". */
+  label: string;
+}
+
+const { value, label } = Astro.props;
+---
+
+<span class="copy">
+  <button type="button" class="copy__btn" data-copy={value} aria-label={`Copy ${label}`}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path
+        d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
+        stroke-linecap="round"
+        stroke-linejoin="round"></path>
+    </svg>
+  </button>
+
+  <!-- aria-live so the result is announced, not only shown. -->
+  <span class="copy__status" data-copy-status role="status" aria-live="polite"></span>
+</span>
+
+<style>
+  @reference "#styles";
+
+  .copy {
+    @apply inline-flex items-center gap-1.5;
+  }
+
+  .copy__btn {
+    @apply inline-flex h-6 w-6 flex-none items-center justify-center rounded text-gray-400 transition-colors;
+    @apply hover:bg-white/10 hover:text-white;
+  }
+
+  .copy__btn svg {
+    @apply h-4 w-4;
+  }
+
+  .copy__status {
+    @apply text-xs font-normal;
+    min-width: 4.5rem;
+    text-align: left;
+  }
+
+  .copy__status[data-tone='ok'] {
+    @apply text-green-400;
+  }
+
+  .copy__status[data-tone='warn'] {
+    @apply text-amber-400;
+  }
+</style>

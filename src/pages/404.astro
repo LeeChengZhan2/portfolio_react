@@ -1,0 +1,50 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Page not found" description="That page doesn't exist." noindex>
+  <div class="page">
+    <p class="code">404</p>
+    <h1 class="title">That page doesn't exist</h1>
+    <p class="body">
+      The link may be out of date, or the page may have moved. Try the work index
+      or head back to the start.
+    </p>
+    <div class="actions">
+      <a href="/" class="action">Home</a>
+      <a href="/work" class="action action--ghost">All work</a>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto flex min-h-[60svh] max-w-xl flex-col items-start justify-center gap-4 px-6 py-24;
+  }
+
+  .code {
+    @apply font-mono text-sm tracking-[0.2em] text-gray-500;
+  }
+
+  .title {
+    @apply text-4xl font-bold tracking-tight;
+  }
+
+  .body {
+    @apply leading-relaxed text-gray-600;
+  }
+
+  .actions {
+    @apply mt-4 flex flex-wrap gap-3;
+  }
+
+  .action {
+    @apply inline-block rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-kleinblue;
+  }
+
+  .action--ghost {
+    @apply border border-gray-300 bg-transparent text-gray-800 hover:border-kleinblue hover:bg-transparent hover:text-kleinblue;
+  }
+</style>
