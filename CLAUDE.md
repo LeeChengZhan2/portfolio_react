@@ -30,6 +30,22 @@ Routes live: `/`, `/about`, `/about/personal`, `/about/photography`, `/work`,
 `/about/travel` and `/about/investing` exist as `draft: true` and so build in dev only —
 they have no content yet.
 
+### Next up (resume here)
+
+1. **Phase 4 — carousel island.** `src/components/react/Carousel.tsx`, GSAP `horizontalLoop()`
+   with a tweened `timeScale()` for slow-on-hover, mounted `client:visible` on one page only.
+   This is the first `.tsx` in the project and what finally uses the orphaned React chunk.
+   Copy `horizontalLoop` from the GreenSock helper into `src/scripts/horizontal-loop.ts`.
+2. **Verify the hero parallax on a real phone** before building on it. It is rewritten but has
+   only been type-checked, never watched scrolling.
+3. **Phase 5 — content.** The long pole. BMS drivers and FYP carry the most weight; write those
+   first. Flip `draft: false` on travel/investing once they have substance.
+4. **Decide: site-wide noindex until launch.** `BaseLayout` supports `noindex` per page but
+   defaults false, and canonicals point at the unregistered `leechengzhan.com`.
+
+**Always run `npm run build && npm run links` before committing.** The link checker is what
+stops the dead-anchor bug from coming back.
+
 ## Legacy app (`legacy/`, reference only)
 
 The CRA 5.0.1 / React 18 original, moved out of `src/` on 12 Aug 2026. Excluded from
