@@ -63,21 +63,44 @@ const ogImageUrl = new URL(ogImage, Astro.site);
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
 
-    <meta name="theme-color" content="#002fa7" />
+    <!-- Retargeted by the inline script below and by src/scripts/theme.ts to
+         match the resolved theme. The value here is only the light default —
+         it is what a no-JS visitor gets. -->
+    <meta id="theme-color" name="theme-color" content="#ffffff" />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
 
-    <!-- Marks the document as script-capable before first paint. global.css
-         gates every `opacity: 0` reveal starting state behind `html.js`, so a
-         JS failure degrades to "no animation" rather than "no visible content".
+    <!-- Runs before first paint, and does two jobs.
+         1. Marks the document script-capable. global.css gates every
+            `opacity: 0` reveal starting state behind `html.js`, so a JS failure
+            degrades to "no animation" rather than "no visible content".
+         2. Applies the dark theme if the visitor has chosen it, so the page
+            paints dark once rather than flashing light first.
+
+         Light is the default and the OS is deliberately not consulted — dark is
+         opt-in via the toggle only. So the only question here is what
+         localStorage says; there is no matchMedia call and no `.light` class.
+
          `is:inline` is required: a bundled or module script runs after paint,
-         which would show the content and then hide it again. -->
+         which would show the light page and then repaint it dark.
+
+         The try/catch is not optional. localStorage throws outright in some
+         privacy modes, and an uncaught throw here would take the `js` class
+         above down with it — leaving every reveal animation stuck hidden. -->
     <script is:inline>
       document.documentElement.classList.add("js");
+      try {
+        if (localStorage.getItem("theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document
+            .getElementById("theme-color")
+            ?.setAttribute("content", "#0d0d0f");
+        }
+      } catch (e) {}
     </script>
   </head>
 
   <body>
-    <a href="#main" class="sr-only focus:not-sr-only">Skip to content</a>
+    <a href="#main" class="sr-only skip-link">Skip to content</a>
 
     <Header />
 
@@ -96,6 +119,9 @@ const ogImageUrl = new URL(ogImage, Astro.site);
       // Clipboard buttons in the footer. Event-delegated, so one listener
       // covers every button on the page.
       import "../scripts/copy";
+      // Theme toggle. The initial theme is already applied by the inline
+      // script in <head>; this only handles the click.
+      import "../scripts/theme";
     </script>
   </body>
 </html>

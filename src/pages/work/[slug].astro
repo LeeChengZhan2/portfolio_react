@@ -83,7 +83,7 @@ const { Content } = await render(entry);
   }
 
   .back {
-    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-kleinblue;
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta transition-colors hover:text-accent;
   }
 
   .page__title {
@@ -91,11 +91,11 @@ const { Content } = await render(entry);
   }
 
   .page__summary {
-    @apply text-lg leading-relaxed text-gray-600;
+    @apply text-lg leading-relaxed text-fg-muted;
   }
 
   .facts {
-    @apply mt-4 grid grid-cols-2 gap-4 border-y border-gray-200 py-4 sm:grid-cols-3;
+    @apply mt-4 grid grid-cols-2 gap-4 border-y border-line py-4 sm:grid-cols-3;
   }
 
   .facts__stack {
@@ -103,15 +103,15 @@ const { Content } = await render(entry);
   }
 
   .facts dt {
-    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-gray-500;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta;
   }
 
   .facts dd {
-    @apply mt-0.5 text-sm text-gray-800;
+    @apply mt-0.5 text-sm text-fg;
   }
 
   .page__body :global(p) {
-    @apply mb-4 leading-relaxed text-gray-700;
+    @apply mb-4 leading-relaxed text-fg-body;
   }
 
   .page__body :global(h2) {
@@ -119,22 +119,22 @@ const { Content } = await render(entry);
   }
 
   .page__body :global(ul) {
-    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-gray-700;
+    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-fg-body;
   }
 
   .page__body :global(a) {
-    @apply text-kleinblue underline decoration-kleinblue/30 underline-offset-2 hover:decoration-kleinblue;
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
   }
 
   .actions {
-    @apply mt-12 flex flex-wrap gap-3 border-t border-gray-200 pt-8;
+    @apply mt-12 flex flex-wrap gap-3 border-t border-line pt-8;
   }
 
   .action {
-    @apply inline-block rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-kleinblue;
+    @apply inline-block rounded-lg bg-invert px-5 py-2.5 text-sm font-semibold text-on-invert transition-colors hover:bg-accent;
   }
 
   .action--ghost {
-    @apply border border-gray-300 bg-transparent text-gray-800 hover:border-kleinblue hover:bg-transparent hover:text-kleinblue;
+    @apply border border-line-strong bg-transparent text-fg hover:border-accent hover:bg-transparent hover:text-accent;
   }
 </style>

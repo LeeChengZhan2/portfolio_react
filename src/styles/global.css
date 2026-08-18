@@ -21,6 +21,125 @@
   --font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
+
+}
+
+/* `static` so every token below is emitted into :root even if nothing happens to
+   reference it. Without it Tailwind prunes unused theme variables — that is real,
+   not theoretical: `--color-fg-faint` is only reached through `@apply` in a scoped
+   block, and it silently vanished from :root, surviving only on the literal
+   fallback Tailwind bakes into reference-mode output. One `@apply` refactor away
+   from an unset colour. The palette block above stays prunable on purpose: five of
+   its six entries are still unused. */
+@theme static {
+  /* -------------------------------------------------------------------------
+     Semantic tokens — the theming layer. See CLAUDE.md § Theming contract.
+
+     Markup uses THESE, never a literal shade. `text-gray-700` in a component
+     is a bug: it will not respond to the theme. The values below are the light
+     theme; the dark set is in the two override blocks further down.
+
+     This works because Tailwind v4 emits colour utilities as var() references
+     rather than literal values — `.bg-surface { background-color:
+     var(--color-surface) }` — so redefining the variable downstream re-themes
+     every utility that reads it. Opacity modifiers survive too:
+     `border-accent/40` compiles to
+     `color-mix(in oklab, var(--color-accent) 40%, transparent)`.
+
+     Do NOT convert this to `@theme inline`. That substitutes the literal value
+     into the utility, which is exactly what would break the override.
+  ------------------------------------------------------------------------- */
+
+  /* Surfaces, in elevation order: a page, a full-width band that steps away from
+     it, a panel raised above either, and a recessed tone for chips and hovers.
+     `band` and `surface-2` were one token until the carousel showed why they
+     cannot be: on a light page you recede by going darker, on a dark page by
+     going lighter, so a single token put cards ABOVE the band in light and
+     BELOW it in dark. Cards must read as raised in both. */
+  --color-bg: #ffffff;
+  --color-band: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f4f6;
+
+  /* Text, strongest to faintest. Names describe the role, not the shade. */
+  --color-fg: #111827;
+  --color-fg-body: #374151;
+  --color-fg-muted: #4b5563;
+  --color-fg-meta: #6b7280;
+  --color-fg-faint: #9ca3af;
+
+  /* Hairlines. `line-strong` is for borders that carry weight on their own,
+     like a ghost button's outline. */
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  /* Links, hovers, focus ring. Kleinblue is 10.8:1 on white but only 1.8:1 on
+     the dark background — hence a separate token rather than using the palette
+     entry directly. */
+  --color-accent: var(--color-kleinblue);
+
+  /* Solid buttons. Flips to a light-on-dark button in the dark theme, where a
+     near-black button would vanish into a near-black page. */
+  --color-invert: #111827;
+  --color-on-invert: #ffffff;
+
+  /* The footer is a dark island in the light theme. In the dark theme it has
+     to RECEDE rather than stay gray-800, or it ends up lighter than the page
+     and reads as a mistake. Its own pair is what lets it do both. */
+  --color-footer: #1f2937;
+  --color-footer-fg: #e5e7eb;
+}
+
+/* ---------------------------------------------------------------------------
+   Theme resolution
+
+   Two states, and light is the default. The site does NOT follow the OS: a
+   visitor who has never used the toggle gets light even on a dark-themed
+   machine. Dark is opt-in, and only the toggle opts in.
+
+   There is deliberately no `@media (prefers-color-scheme: dark)` block here.
+   Adding one back would reinstate OS-following and would also reintroduce a
+   duplicated token block, since CSS cannot share one declaration block between
+   a media query and a class selector.
+
+   `.dark` is the only theme class on <html>; BaseLayout's inline head script
+   sets it before first paint when localStorage says to. There is no `.light`
+   class — nothing needs one now that no media query has to be overridden.
+
+   Written OUTSIDE `@theme` deliberately. Theme variables land inside a
+   `@layer`, and unlayered rules beat layered ones regardless of specificity,
+   so this wins without needing `!important`.
+--------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+}
+
+/* Dark, applied only when the toggle has stored that choice. */
+:root.dark {
+  color-scheme: dark;
+
+  --color-bg: #0d0d0f;
+  --color-band: #131316;
+  --color-surface: #17171a;
+  --color-surface-2: #232327;
+
+  --color-fg: #f2f2f3;
+  --color-fg-body: #c3c3c9;
+  --color-fg-muted: #a6a6ae;
+  --color-fg-meta: #8b8b94;
+  --color-fg-faint: #6f6f78;
+
+  --color-line: #2b2b31;
+  --color-line-strong: #3a3a42;
+
+  --color-accent: #7aa2ff;
+
+  --color-invert: #f2f2f3;
+  --color-on-invert: #0d0d0f;
+
+  --color-footer: #17171a;
+  --color-footer-fg: #c3c3c9;
 }
 
 /* ---------------------------------------------------------------------------
@@ -41,8 +160,8 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-white);
-  color: #111827;
+  background: var(--color-bg);
+  color: var(--color-fg);
 }
 
 /* Lenis requires this to take over the scroll container. */
@@ -55,9 +174,10 @@ html.lenis body {
   scroll-behavior: auto !important;
 }
 
-/* Visible focus for keyboard users — the legacy site had none. */
+/* Visible focus for keyboard users — the legacy site had none. Uses the accent
+   token, not kleinblue directly: kleinblue is near-invisible on the dark bg. */
 :focus-visible {
-  outline: 2px solid var(--color-kleinblue);
+  outline: 2px solid var(--color-accent);
   outline-offset: 3px;
   border-radius: 2px;
 }
@@ -73,6 +193,30 @@ html.lenis body {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* The skip link is `.sr-only` until focused. Tailwind's `focus:not-sr-only`
+   restores its layout but gives it no colour, so it used to render as bare
+   text over whatever happened to be beneath it — invisible against a dark
+   header, and worse once the page itself can be dark. This reverses `.sr-only`
+   and paints a real surface. Higher specificity, so it wins without !important. */
+.skip-link:focus {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  overflow: visible;
+  clip-path: none;
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------------------

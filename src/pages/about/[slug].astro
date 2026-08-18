@@ -70,7 +70,7 @@ const next = sections[index + 1];
   }
 
   .back {
-    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-kleinblue;
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta transition-colors hover:text-accent;
   }
 
   .page__title {
@@ -78,12 +78,12 @@ const next = sections[index + 1];
   }
 
   .page__summary {
-    @apply text-lg leading-relaxed text-gray-600;
+    @apply text-lg leading-relaxed text-fg-muted;
   }
 
   /* Markdown output lands here, so descendant selectors are the right tool. */
   .page__body :global(p) {
-    @apply mb-4 leading-relaxed text-gray-700;
+    @apply mb-4 leading-relaxed text-fg-body;
   }
 
   .page__body :global(h2) {
@@ -95,19 +95,19 @@ const next = sections[index + 1];
   }
 
   .page__body :global(ul) {
-    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-gray-700;
+    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-fg-body;
   }
 
   .page__body :global(a) {
-    @apply text-kleinblue underline decoration-kleinblue/30 underline-offset-2 hover:decoration-kleinblue;
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
   }
 
   .pager {
-    @apply mt-20 grid grid-cols-2 gap-4 border-t border-gray-200 pt-8;
+    @apply mt-20 grid grid-cols-2 gap-4 border-t border-line pt-8;
   }
 
   .pager__link {
-    @apply flex flex-col gap-1 rounded-xl border border-gray-200 p-4 transition-colors hover:border-kleinblue/40;
+    @apply flex flex-col gap-1 rounded-xl border border-line p-4 transition-colors hover:border-accent/40;
   }
 
   .pager__link--next {
@@ -115,10 +115,10 @@ const next = sections[index + 1];
   }
 
   .pager__dir {
-    @apply font-mono text-xs uppercase tracking-[0.12em] text-gray-500;
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta;
   }
 
   .pager__title {
-    @apply font-semibold text-gray-900;
+    @apply font-semibold text-fg;
   }
 </style>

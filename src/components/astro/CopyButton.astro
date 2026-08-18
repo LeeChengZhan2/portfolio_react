@@ -19,7 +19,9 @@ const { value, label } = Astro.props;
     </svg>
   </button>
 
-  <!-- aria-live so the result is announced, not only shown. -->
+  <!-- aria-live so the result is announced, not only shown. Absolutely
+       positioned: in flow it reserved an empty box beside every button, which
+       pushed the footer's centred rows off-centre. -->
   <span class="copy__status" data-copy-status role="status" aria-live="polite"></span>
 </span>
 
@@ -27,12 +29,15 @@ const { value, label } = Astro.props;
   @reference "#styles";
 
   .copy {
-    @apply inline-flex items-center gap-1.5;
+    @apply relative inline-flex items-center;
   }
 
+  /* These buttons only ever appear inside the footer, which is a dark surface in
+     BOTH themes. So they are styled relative to the footer's own tokens rather
+     than the page tokens — `text-fg-*` here would be unreadable. */
   .copy__btn {
-    @apply inline-flex h-6 w-6 flex-none items-center justify-center rounded text-gray-400 transition-colors;
-    @apply hover:bg-white/10 hover:text-white;
+    @apply inline-flex h-6 w-6 flex-none items-center justify-center rounded text-footer-fg/60 transition-colors;
+    @apply hover:bg-white/10 hover:text-footer-fg;
   }
 
   .copy__btn svg {
@@ -40,9 +45,15 @@ const { value, label } = Astro.props;
   }
 
   .copy__status {
-    @apply text-xs font-normal;
-    min-width: 4.5rem;
-    text-align: left;
+    @apply pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 rounded bg-black/70 px-2 py-0.5 text-xs font-normal whitespace-nowrap;
+    transform: translateX(-50%);
+  }
+
+  /* Empty is the resting state: hide the pill's padding and background, but
+     with opacity rather than `display: none` — a live region removed from the
+     a11y tree and re-added in the same frame does not reliably announce. */
+  .copy__status:empty {
+    @apply opacity-0;
   }
 
   .copy__status[data-tone='ok'] {

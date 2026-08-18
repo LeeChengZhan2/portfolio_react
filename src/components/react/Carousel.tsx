@@ -67,9 +67,12 @@ const MIN_CARDS = 12;
 const EDGE_FADE =
   "[mask-image:linear-gradient(to_right,transparent_0,black_min(4rem,8vw),black_calc(100%_-_min(4rem,8vw)),transparent_100%)]";
 
+/* Matches .card in index.astro and .subnav__card in about/index.astro — a
+   raised panel on the page background. Was `bg-gray-50`, which made it the odd
+   one out among the four card variants for no stated reason. */
 const CARD =
-  "flex h-full flex-col gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-6 " +
-  "transition-all duration-300 hover:-translate-y-1 hover:border-kleinblue/40 hover:shadow-lg";
+  "flex h-full flex-col gap-2 rounded-2xl border border-line bg-surface p-6 " +
+  "transition-all duration-300 hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg";
 
 export default function Carousel({ items, label }: Props) {
   const root = useRef<HTMLDivElement>(null);
@@ -189,16 +192,16 @@ export default function Carousel({ items, label }: Props) {
                 aria-hidden={isCopy || undefined}
               >
                 <a href={`/work/${item.slug}`} className={CARD} tabIndex={isCopy ? -1 : undefined}>
-                  <p className="font-mono text-xs text-gray-500">{item.year}</p>
-                  <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
-                  <p className="text-sm leading-relaxed text-gray-600">{item.summary}</p>
+                  <p className="font-mono text-xs text-fg-meta">{item.year}</p>
+                  <h3 className="text-lg font-semibold text-fg">{item.title}</h3>
+                  <p className="text-sm leading-relaxed text-fg-muted">{item.summary}</p>
 
                   {item.stack.length > 0 && (
                     <ul className="mt-auto flex list-none flex-wrap gap-1.5 p-0 pt-3">
                       {item.stack.map((tech) => (
                         <li
                           key={tech}
-                          className="rounded bg-gray-100 px-2 py-0.5 font-mono text-[0.7rem] text-gray-600"
+                          className="rounded bg-surface-2 px-2 py-0.5 font-mono text-[0.7rem] text-fg-muted"
                         >
                           {tech}
                         </li>

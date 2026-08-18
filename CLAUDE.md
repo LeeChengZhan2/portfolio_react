@@ -8,11 +8,16 @@ Guidance for Claude Code when working in this repository.
 
 ## Build state
 
-> **Checkpoint — 13 Aug 2026.** Phases 1–4 complete. Stopping point chosen deliberately:
-> **responsive/mobile work happens next, before phase 5 content.** That inverts the order in
-> docs/REBUILD.md §10, and it is the right call — layout changes reflow prose, so writing the
-> case studies first would mean rewriting them to fit whatever the mobile layout turns out to
-> be. Content is the long pole but it is not the blocker; the phone experience is.
+> **Checkpoint — 18 Aug 2026.** Phases 1–4 complete, plus a dark theme on top. Stopping point
+> chosen deliberately: **responsive/mobile work happens next, before phase 5 content.** That
+> inverts the order in docs/REBUILD.md §10, and it is the right call — layout changes reflow
+> prose, so writing the case studies first would mean rewriting them to fit whatever the mobile
+> layout turns out to be. Content is the long pole but it is not the blocker; the phone
+> experience is.
+>
+> The dark theme (18 Aug) was not in the plan for this slot. It landed early because it needed
+> a semantic-token layer that did not exist, and every day of new markup written against
+> literal `gray-*` shades made that refactor bigger. See "Theming contract".
 
 Phases 1–4 are done on branch `rebuild/astro`. The Astro site builds, type-checks clean, and
 all 284 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
@@ -25,14 +30,19 @@ npm run links    # post-build internal link checker (run after build)
 npm run preview  # serve dist/ locally
 ```
 
-Measured, gzipped, after the carousel island landed:
+Measured, gzipped, after the dark theme landed:
 
 | | every page | `/` only |
 |---|---|---|
-| Eager (blocks nothing, `type="module"`) | **49.7 KB** | 49.7 KB |
+| Eager JS (blocks nothing, `type="module"`) | **49.8 KB** | 49.8 KB |
+| CSS | **7.6 KB** | 9.7 KB |
 | Astro island bootstrap (inline) | 0.1 KB | 1.9 KB |
-| Island, fetched on scroll into view | — | **60.9 KB** |
+| Island, fetched on scroll into view | — | **58.1 KB** |
 | Lazy SplitText, on pages with split reveals | 3.2 KB | 3.2 KB |
+
+Eager JS rose 49.7 → 49.8 KB: `theme.ts` joined the bundled module script, and 0.1 KB is the
+whole cost of the theme toggle. It is a delegated listener, not an island — see below. CSS is
+newly tracked here; the theme layer is ~0.4 KB of it.
 
 The eager figure rose 49.2 → 49.7 KB on *all ten pages* because GSAP now has two importers
 (the BaseLayout script and the island), so Rolldown hoists it into a shared
@@ -62,7 +72,11 @@ they have no content yet.
    `aria-expanded`/`aria-controls`, Escape to close, and focus handling.
    **Must not become a React island** — the header is on all ten pages, and one island there
    pulls the 55.9 KB React runtime onto every one of them. Use a delegated script in
-   `src/scripts/`, the way `copy.ts` does for the footer.
+   `src/scripts/`, the way `copy.ts` and `theme.ts` do.
+   `ThemeToggle.astro` now sits in `.nav-container` alongside the links, so the mobile layout
+   has to place it deliberately — it should stay reachable when the nav is collapsed, not get
+   swept inside the drawer. `theme.ts` is delegated on `document`, so it keeps working wherever
+   the button ends up.
 2. **Verify the hero parallax on a real phone.** Rewritten, type-checked, never watched
    scrolling. The carousel *has* been driven in a browser (see "Carousel" below); this has not.
    Decide the optional `scale: 1.08 → 1` (docs/REBUILD.md §12) at the same time — it may be
@@ -84,6 +98,14 @@ still the letter of WCAG 2.2.2; it adds visible UI, so it waits on design direct
 
 **Always run `npm run build && npm run links` before committing.** The link checker is what
 stops the dead-anchor bug from coming back.
+
+**Theme changes need a real browser, not just a build.** `astro check` does not validate CSS at
+all — a broken `@theme` or an unknown utility in `@apply` passes `check` and only fails in
+`astro build`, and neither says anything about whether the page *looks* right. The dark theme
+was verified by driving Chrome through Playwright: every route under both OS settings with and
+without a stored choice, plus toggle, persistence, live-OS-change-is-ignored, no-JS, and a
+frame-by-frame no-flash probe. Two real bugs surfaced there that the build was perfectly happy
+with: an invisible footer boundary, and cards reading as recessed instead of raised.
 
 ## Legacy app (`legacy/`, reference only)
 
@@ -204,6 +226,71 @@ the build fails with *"Cannot apply unknown utility class"*. `#styles` is a `pac
 subpath import pointing at `src/styles/global.css`, so the path never breaks when files move.
 Every component style block that uses `@apply` already has it — copy an existing one.
 
+## Theming contract
+
+Light and dark, driven by **semantic tokens**. Three things must stay in step.
+
+**1. Markup uses semantic tokens, never literal shades.** `text-gray-700` in a component is a
+bug — it will not respond to the theme. The full set lives in the `@theme static` block in
+`src/styles/global.css`:
+
+| Role | Token | Light | Dark |
+|---|---|---|---|
+| Page | `bg` | `#ffffff` | `#0d0d0f` |
+| Full-width band stepping off the page | `band` | `#f3f4f6` | `#131316` |
+| Panel raised above page or band | `surface` | `#ffffff` | `#17171a` |
+| Recessed detail — chips, hovers | `surface-2` | `#f3f4f6` | `#232327` |
+| Headings, strong text | `fg` | `#111827` | `#f2f2f3` |
+| Body prose | `fg-body` | `#374151` | `#c3c3c9` |
+| Summaries | `fg-muted` | `#4b5563` | `#a6a6ae` |
+| Eyebrows, years, labels | `fg-meta` | `#6b7280` | `#8b8b94` |
+| Icons | `fg-faint` | `#9ca3af` | `#6f6f78` |
+| Hairlines | `line` / `line-strong` | `#e5e7eb` / `#d1d5db` | `#2b2b31` / `#3a3a42` |
+| Links, hovers, focus ring | `accent` | `#002fa7` | `#7aa2ff` |
+| Solid buttons | `invert` / `on-invert` | `#111827` / `#ffffff` | `#f2f2f3` / `#0d0d0f` |
+| Footer, a dark island in both themes | `footer` / `footer-fg` | `#1f2937` / `#e5e7eb` | `#17171a` / `#c3c3c9` |
+
+Things that look wrong but are deliberate:
+
+- **`band` and `surface-2` share a light value and diverge in dark.** They were one token until
+  the carousel showed why they cannot be: on a light page you recede by going *darker*, on a
+  dark page by going *lighter*. One token put cards above the band in light and below it in
+  dark. Cards must read as raised in both.
+- **`invert`/`on-invert` swap, so `hover:bg-accent` needs no hover text colour.** `on-invert` is
+  white in light and near-black in dark, exactly co-varying with `accent`. Both directions clear
+  WCAG AA (10.8:1 and 7.8:1).
+- **`kleinblue` is still in the palette but is no longer referenced by markup.** It is 10.8:1 on
+  white and 1.8:1 on the dark page, so `accent` aliases it in light and replaces it in dark.
+- **The footer keeps its own pair.** As `gray-800` it would be *lighter* than a near-black page,
+  which reads as a mistake.
+
+**2. Light is the default, and the OS is deliberately not consulted.** There is exactly one dark
+block, `:root.dark`, and the only thing that sets that class is the toggle. A visitor on a
+dark-themed machine gets the light site until they press the button.
+
+There is intentionally **no `@media (prefers-color-scheme: dark)` block**. Adding one back would
+reinstate OS-following, and would also reintroduce a duplicated token block — CSS cannot share
+one declaration block between a media query and a class selector, so the dark values would have
+to be written twice and kept in sync by hand. An earlier revision did exactly that and needed a
+`scripts/check-theme.mjs` build gate to police it; both are gone with the media query.
+
+**3. Do NOT use `@theme inline`, and keep `@theme static`.** `inline` substitutes literal values
+into utilities, which defeats the whole override mechanism. `static` stops Tailwind pruning
+tokens nothing happens to reference — that is real, not theoretical: `--color-fg-faint` is only
+reached through `@apply`, and it silently vanished from `:root`, surviving on the literal
+fallback Tailwind bakes into reference-mode output.
+
+**How a theme is chosen.** `.dark` is the only theme class — there is no `.light`, because
+nothing needs one once no media query has to be overridden. The `is:inline` head script in
+`BaseLayout.astro` adds it before first paint when `localStorage.theme === "dark"`, verified
+with a 242-frame probe that never sampled a light frame. `src/scripts/theme.ts` handles the
+click and nothing else. The toggle is `src/components/astro/ThemeToggle.astro` — a delegated
+listener, **not an island**, because the header is on all ten pages.
+
+Failure modes, both of which land on light: JS disabled (no class is ever added, and the toggle
+hides itself behind the `html.js` gate), and `localStorage` throwing in private mode (the
+try/catch swallows it; the toggle still works for that page view but is not remembered).
+
 ## Reveal animation contract
 
 Two halves that must stay in sync:
@@ -235,10 +322,18 @@ for. Supported: `fade`, `fade-up`, `slide-left`, `slide-right`, `split-chars`, `
 
 ## Styling
 
-Tailwind for layout and spacing; scoped styles for component detail. The custom palette
+Tailwind for layout and spacing; scoped styles for component detail.
+
+`src/styles/global.css` holds two `@theme` blocks. The first is the raw palette
 (`kleinblue #002FA7`, `schenbrunnyellow #F7E14D`, `tiffanyblue`, `prusianblue`, `bluenova`,
-`lavendarblue`) moves from `tailwind.config.js` into a CSS `@theme` block under v4. Check it
-before adding raw hex values.
+`lavendarblue`), carried over from `tailwind.config.js`; five of its six entries are still
+unreferenced, pending the design direction docs/REBUILD.md §12 leaves open. The second is
+`@theme static` and holds the semantic tokens everything actually uses.
+
+**Colour in markup goes through a semantic token, never a raw hex and never a literal shade
+like `gray-700`.** See "Theming contract" above for the full set and why. Reaching for a raw
+palette entry is usually also wrong — `kleinblue` is unreadable on the dark background, which
+is exactly what `accent` exists to solve.
 
 ## Content
 

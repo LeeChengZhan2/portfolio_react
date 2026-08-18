@@ -25,7 +25,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .code {
-    @apply font-mono text-sm tracking-[0.2em] text-gray-500;
+    @apply font-mono text-sm tracking-[0.2em] text-fg-meta;
   }
 
   .title {
@@ -33,7 +33,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .body {
-    @apply leading-relaxed text-gray-600;
+    @apply leading-relaxed text-fg-muted;
   }
 
   .actions {
@@ -41,10 +41,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .action {
-    @apply inline-block rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-kleinblue;
+    @apply inline-block rounded-lg bg-invert px-5 py-2.5 text-sm font-semibold text-on-invert transition-colors hover:bg-accent;
   }
 
   .action--ghost {
-    @apply border border-gray-300 bg-transparent text-gray-800 hover:border-kleinblue hover:bg-transparent hover:text-kleinblue;
+    @apply border border-line-strong bg-transparent text-fg hover:border-accent hover:bg-transparent hover:text-accent;
   }
 </style>

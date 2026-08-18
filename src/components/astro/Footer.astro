@@ -33,7 +33,7 @@ const year = new Date().getFullYear();
     <p class="footer__row">
       <span>SG: {PHONE_SG}</span>
       <CopyButton value={PHONE_SG} label="Singapore number" />
-      <span class="mx-2 text-gray-500" aria-hidden="true">|</span>
+      <span class="mx-2 text-footer-fg/50" aria-hidden="true">|</span>
       <span>MY: {PHONE_MY}</span>
       <CopyButton value={PHONE_MY} label="Malaysia number" />
     </p>
@@ -88,8 +88,12 @@ const year = new Date().getFullYear();
 <style>
   @reference "#styles";
 
+  /* The footer is a dark island in the light theme. Under the dark theme it has
+     to recede instead — left as gray-800 it would be LIGHTER than the page,
+     which reads as a mistake. Hence its own token pair rather than the shared
+     surface tokens. */
   .footer {
-    @apply bg-gray-800 px-6 py-10 text-gray-200;
+    @apply bg-footer px-6 py-10 text-footer-fg;
   }
 
   .footer__contact {
@@ -108,6 +112,15 @@ const year = new Date().getFullYear();
     @apply h-6 w-6 transition-transform duration-300 ease-in-out hover:-translate-y-1 hover:scale-125;
   }
 
+  /* github-black.png is a black glyph, and this footer is a dark surface in BOTH
+     themes — so it was already nearly invisible on gray-800, and the darker dark
+     theme finished the job. Inverting is a stopgap: the real fix is a light asset
+     or an inline SVG that can use currentColor like every other icon on the site.
+     Targeted by filename so it cannot silently start inverting a different icon. */
+  .footer__icon[src$='github-black.png'] {
+    filter: invert(1);
+  }
+
   .footer__brokers {
     @apply mb-6 flex flex-col items-center gap-3;
   }
@@ -120,13 +133,15 @@ const year = new Date().getFullYear();
     @apply mb-8 text-center;
   }
 
+  /* Inverts against the footer on hover, so the hover text colour has to be the
+     footer's own background — not a page-level token. */
   .footer__download {
     @apply inline-block rounded-full border border-white bg-transparent px-6 py-2 font-semibold text-white transition-colors duration-300;
-    @apply hover:bg-white hover:text-gray-800;
+    @apply hover:bg-white hover:text-footer;
   }
 
   .footer__copyright {
-    @apply border-t border-gray-700 pt-6 text-center text-xs text-gray-400;
+    @apply border-t border-white/15 pt-6 text-center text-xs text-footer-fg/70;
   }
 
 </style>

@@ -1,5 +1,6 @@
 ---
 import { getSections, getWork } from '../../lib/content';
+import ThemeToggle from './ThemeToggle.astro';
 
 const sections = await getSections();
 const work = await getWork();
@@ -36,7 +37,7 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
         aria-haspopup="true"
       >
         About Me
-        <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="h-4 w-4 text-fg-meta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d={chevron} stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </a>
@@ -64,7 +65,7 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
         aria-haspopup="true"
       >
         Work
-        <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="h-4 w-4 text-fg-meta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d={chevron} stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </a>
@@ -86,6 +87,8 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
     </div>
 
     <a href="/#contact" class="nav-link">Contact</a>
+
+    <ThemeToggle />
   </nav>
 </header>
 
@@ -95,19 +98,19 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
   /* Scoped to this component automatically — no naming collisions, and it
      ships only on pages that use the header. */
   .navbar {
-    @apply sticky top-0 z-50 border-b border-gray-200 bg-white/90 p-4 backdrop-blur-md;
+    @apply sticky top-0 z-50 border-b border-line bg-surface/90 p-4 backdrop-blur-md;
   }
 
   .nav-container {
-    @apply flex flex-wrap justify-center gap-x-6 gap-y-2 sm:gap-x-8;
+    @apply flex flex-wrap items-center justify-center gap-x-6 gap-y-2 sm:gap-x-8;
   }
 
   .nav-link {
-    @apply relative text-sm font-semibold text-gray-700 transition-colors duration-300 hover:text-kleinblue sm:text-base;
+    @apply relative text-sm font-semibold text-fg-body transition-colors duration-300 hover:text-accent sm:text-base;
   }
 
   .nav-link::after {
-    @apply absolute -bottom-1 left-0 h-0.5 w-full origin-left scale-x-0 bg-kleinblue transition-transform duration-300;
+    @apply absolute -bottom-1 left-0 h-0.5 w-full origin-left scale-x-0 bg-accent transition-transform duration-300;
     content: '';
   }
 
@@ -117,22 +120,22 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
   }
 
   .dropdown {
-    @apply invisible absolute left-1/2 z-50 mt-2 w-60 -translate-x-1/2 translate-y-1 rounded-xl bg-white/95 p-2 opacity-0 shadow-xl ring-1 ring-black/5 backdrop-blur-md transition-all duration-150;
+    @apply invisible absolute left-1/2 z-50 mt-2 w-60 -translate-x-1/2 translate-y-1 rounded-xl bg-surface/95 p-2 opacity-0 shadow-xl ring-1 ring-line backdrop-blur-md transition-all duration-150;
     @apply group-hover:visible group-hover:translate-y-0 group-hover:opacity-100;
     @apply group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100;
   }
 
   .dropdown-item {
-    @apply flex items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 transition-colors;
-    @apply hover:bg-gray-50 hover:text-kleinblue focus:bg-gray-50 focus:text-kleinblue;
+    @apply flex items-center gap-2 rounded-md px-3 py-2 text-sm text-fg-body transition-colors;
+    @apply hover:bg-surface-2 hover:text-accent focus:bg-surface-2 focus:text-accent;
   }
 
   .dropdown-icon {
-    @apply h-5 w-5 flex-none text-gray-400;
+    @apply h-5 w-5 flex-none text-fg-faint;
   }
 
   .dropdown-item:hover .dropdown-icon,
   .dropdown-item:focus .dropdown-icon {
-    @apply text-kleinblue;
+    @apply text-accent;
   }
 </style>
