@@ -88,6 +88,7 @@
      and reads as a mistake. Its own pair is what lets it do both. */
   --color-footer: #1f2937;
   --color-footer-fg: #e5e7eb;
+
 }
 
 /* ---------------------------------------------------------------------------
@@ -119,26 +120,59 @@
 :root.dark {
   color-scheme: dark;
 
+  /* The elevation ramp, and the thing most worth getting right in dark.
+     Perceptual steps (OKLab L*, x100) rather than hex distance, because equal
+     hex steps are NOT equal steps down here — sRGB gamma compresses the whole
+     bottom of the range:
+
+                     was          now
+       bg  → band    Δ 2.8   →    Δ 4.7
+       band → surface Δ 1.8  →    Δ 4.4
+       bg  → surface  Δ 4.6  →    Δ 9.1
+
+     The band→surface step of 1.8 was the real bug: a card sat 1.04:1 above the
+     band it was drawn on, so the "raised panel" the light theme gets read as a
+     flat rectangle here, and the alternating sections read as one wall. Roughly
+     doubling each step is enough to separate them and still leaves fg at 14.3:1
+     on a card. Hue drifts very slightly cooler as it lightens (0f → 1c → 28 →
+     37 in blue) — a neutral gray ramp goes muddy as it rises. */
   --color-bg: #0d0d0f;
-  --color-band: #131316;
-  --color-surface: #17171a;
-  --color-surface-2: #232327;
+  --color-band: #17171c;
+  --color-surface: #212128;
+  --color-surface-2: #2e2e37;
 
   --color-fg: #f2f2f3;
   --color-fg-body: #c3c3c9;
   --color-fg-muted: #a6a6ae;
-  --color-fg-meta: #8b8b94;
-  --color-fg-faint: #6f6f78;
+  /* The two faintest roles move up with the surfaces under them. Left alone,
+     fg-faint would have fallen to 3.1:1 on surface-2 — under the 3:1 floor for
+     icons and UI glyphs, which is most of what uses it. Now 3.3:1. */
+  --color-fg-meta: #94949e;
+  --color-fg-faint: #7d7d88;
 
-  --color-line: #2b2b31;
-  --color-line-strong: #3a3a42;
+  /* Hairlines lighten with the surfaces they are drawn on, or they get absorbed:
+     `line` on a card was 1.27:1 and is now 1.43:1, and `line-strong` — the ghost
+     button outline — goes 1.72:1 → 2.52:1 on the page. */
+  --color-line: #3a3a46;
+  --color-line-strong: #52525f;
 
   --color-accent: #7aa2ff;
 
   --color-invert: #f2f2f3;
   --color-on-invert: #0d0d0f;
 
-  --color-footer: #17171a;
+  /* The footer IS a band — deliberately the same tone as `.section--alt`, so it
+     reads as the last alternating band rather than as its own kind of thing.
+     Aliased rather than copied so the two cannot drift apart.
+
+     That gives it exactly the bg→band step (1.09:1, ΔEok 4.7) against the plain
+     `bg` section that ends every page — the same step that separates the bands
+     mid-page, so the boundary needs no hairline to be legible.
+
+     Earlier attempts, for the record: #17171a matched the old `surface` and read
+     as a stray card; #08080a sat 1.03:1 under the page and was invisible; a blue
+     slate separated cleanly but looked out of place against a neutral site. */
+  --color-footer: var(--color-band);
   --color-footer-fg: #c3c3c9;
 }
 

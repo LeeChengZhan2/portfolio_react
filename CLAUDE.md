@@ -20,7 +20,7 @@ Guidance for Claude Code when working in this repository.
 > literal `gray-*` shades made that refactor bigger. See "Theming contract".
 
 Phases 1–4 are done on branch `rebuild/astro`. The Astro site builds, type-checks clean, and
-all 284 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
+all 371 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
 the port — delete it once phase 5 content is written.
 
 ```bash
@@ -57,10 +57,12 @@ behaviour would cost ~2 KB. The island is a deliberate learning-goal decision
 
 Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 
-Routes live: `/`, `/about`, `/about/personal`, `/about/photography`, `/work`,
-`/work/{bms-drivers,java-finance,school-fyp,open-source}`, `/404`.
-`/about/travel` and `/about/investing` exist as `draft: true` and so build in dev only —
-they have no content yet.
+Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`, `/work`,
+`/work/{bms-drivers,java-finance,school-fyp,open-source}`, `/404` — 12 pages.
+`/about/travel` and `/about/investing` flipped to `draft: false` on 18 Aug 2026 and now
+build in production. Their bodies are **placeholder drafts written by Claude**, marked with a
+`DRAFT` comment at the foot of each file; they carry the right shape and are not yet the
+author's own material. Rewriting them is part of phase 5.
 
 ### Next up (resume here) — responsive, then content
 
@@ -86,9 +88,9 @@ they have no content yet.
    width; confirm that did not get ported.
 
 **After responsive, phase 5 — content.** Every markdown body is currently a 106–212 word stub.
-BMS drivers and FYP carry the most weight; write those first. Flip `draft: false` on
-travel/investing once they have substance. New PDF CV — `public/assets/documents/` still holds
-only the Mar 2023 `.docx`.
+BMS drivers and FYP carry the most weight; write those first. Travel and investing are live
+but placeholder — replace the drafted prose with real material. New PDF CV —
+`public/assets/documents/` still holds only the Mar 2023 `.docx`.
 
 **Open decisions, not code.** Site-wide `noindex` until launch (`BaseLayout` supports it per
 page, defaults false, and canonicals point at the unregistered `leechengzhan.com`). Carousel
@@ -237,18 +239,18 @@ bug — it will not respond to the theme. The full set lives in the `@theme stat
 | Role | Token | Light | Dark |
 |---|---|---|---|
 | Page | `bg` | `#ffffff` | `#0d0d0f` |
-| Full-width band stepping off the page | `band` | `#f3f4f6` | `#131316` |
-| Panel raised above page or band | `surface` | `#ffffff` | `#17171a` |
-| Recessed detail — chips, hovers | `surface-2` | `#f3f4f6` | `#232327` |
+| Full-width band stepping off the page | `band` | `#f3f4f6` | `#17171c` |
+| Panel raised above page or band | `surface` | `#ffffff` | `#212128` |
+| Recessed detail — chips, hovers | `surface-2` | `#f3f4f6` | `#2e2e37` |
 | Headings, strong text | `fg` | `#111827` | `#f2f2f3` |
 | Body prose | `fg-body` | `#374151` | `#c3c3c9` |
 | Summaries | `fg-muted` | `#4b5563` | `#a6a6ae` |
-| Eyebrows, years, labels | `fg-meta` | `#6b7280` | `#8b8b94` |
-| Icons | `fg-faint` | `#9ca3af` | `#6f6f78` |
-| Hairlines | `line` / `line-strong` | `#e5e7eb` / `#d1d5db` | `#2b2b31` / `#3a3a42` |
+| Eyebrows, years, labels | `fg-meta` | `#6b7280` | `#94949e` |
+| Icons | `fg-faint` | `#9ca3af` | `#7d7d88` |
+| Hairlines | `line` / `line-strong` | `#e5e7eb` / `#d1d5db` | `#3a3a46` / `#52525f` |
 | Links, hovers, focus ring | `accent` | `#002fa7` | `#7aa2ff` |
 | Solid buttons | `invert` / `on-invert` | `#111827` / `#ffffff` | `#f2f2f3` / `#0d0d0f` |
-| Footer, a dark island in both themes | `footer` / `footer-fg` | `#1f2937` / `#e5e7eb` | `#17171a` / `#c3c3c9` |
+| Footer | `footer` / `footer-fg` | `#1f2937` / `#e5e7eb` | = `band` / `#c3c3c9` |
 
 Things that look wrong but are deliberate:
 
@@ -261,8 +263,23 @@ Things that look wrong but are deliberate:
   WCAG AA (10.8:1 and 7.8:1).
 - **`kleinblue` is still in the palette but is no longer referenced by markup.** It is 10.8:1 on
   white and 1.8:1 on the dark page, so `accent` aliases it in light and replaces it in dark.
-- **The footer keeps its own pair.** As `gray-800` it would be *lighter* than a near-black page,
-  which reads as a mistake.
+- **In dark the footer IS a band** — `--color-footer: var(--color-band)`, aliased rather than
+  copied so the two cannot drift apart. It reads as the last alternating band instead of its
+  own kind of thing, and it inherits the bg→band step (1.09:1, ΔEok 4.7) against the plain
+  `bg` section that ends every page — the same step that separates bands mid-page, so the
+  boundary needs no hairline. Light keeps its own `#1f2937`, where the footer is a dark island
+  against a white page.
+  Three earlier attempts, so they are not retried: `#17171a` matched the old `surface` and read
+  as a stray card; `#08080a` sat 1.03:1 under the page and was simply invisible; a blue slate
+  `#0f1c36` separated cleanly by hue but looked out of place on an otherwise neutral site.
+- **The dark ramp is spaced by perceptual steps, not equal hex steps.** sRGB gamma compresses
+  the bottom of the range, so equal hex distances are not equal visual distances down there.
+  Measured in OKLab L* (×100): `bg`→`band` is Δ4.7 and `band`→`surface` Δ4.4, roughly double
+  the Δ2.8 / Δ1.8 they were. The old `band`→`surface` gap of Δ1.8 (1.04:1) was the bug — cards
+  read as flat rectangles rather than raised panels, and alternating sections read as one wall.
+  Do not compress these again to make the theme look "sleeker"; that is the failure this fixed.
+  `fg-meta` and `fg-faint` moved up with the surfaces beneath them — left alone, `fg-faint`
+  would have fallen to 3.1:1 on `surface-2`, under the 3:1 floor for the icons that use it.
 
 **2. Light is the default, and the OS is deliberately not consulted.** There is exactly one dark
 block, `:root.dark`, and the only thing that sets that class is the toggle. A visitor on a
