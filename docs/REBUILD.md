@@ -1,6 +1,20 @@
 # Portfolio Rebuild — Architecture & Plan
 
-**Status:** Phases 1–3 built on `rebuild/astro` · **Written:** 12 Aug 2026 · **Target ship:** ~22 Sep 2026
+**Status:** Phases 1–4 built on `rebuild/astro` · **Written:** 12 Aug 2026 · **Target ship:** ~22 Sep 2026
+
+> **Build log — 13 Aug 2026.** Phase 4 finished: the carousel island is built and driven in a
+> real browser (17 behavioural checks — speed, hover easing, seam, focus, reduced motion,
+> no-JS). Three deltas from §8.2 as written, corrected below rather than papered over:
+>
+> 1. **`horizontalLoop` was ported trimmed, not copied whole.** `center`, snap-to-index
+>    navigation, `onChange`, `reversed` and the `draggable` branch are omitted; the looping
+>    algorithm is unchanged. Dropping `draggable` keeps Draggable + InertiaPlugin (~15 KB gz)
+>    out of the island — but it does mean the carousel no longer drags, which Embla did.
+> 2. **The island renders one set of cards on the server and 12 after hydration**, so the
+>    no-JS and reduced-motion experience is three real cards in a scrollable row rather than
+>    twelve duplicates. Not in the original sketch.
+> 3. **Speed constants are matched to legacy**, not to the `speed: 1` placeholder in §8.2:
+>    `speed: 1.2` reproduces Embla's 120 px/s exactly.
 
 > **Build log — 12 Aug 2026.** Scaffold, static port, and content model are done. Three things
 > came out differently from this plan and the plan has been corrected below, not papered over:
@@ -395,6 +409,13 @@ the [GreenSock CodePen](https://codepen.io/GreenSock/pen/PojYwPp). It supports `
 via GSAP Draggable, which is also free now.
 
 Net: 115 lines → ~20, two dependencies dropped, no private APIs, identical feel.
+
+**As built (13 Aug 2026)** the sketch above changed in three ways. `speed: 1.2` rather than
+`1`, because Embla ran at 120 px/s and `speed` is hundreds-of-px/s. The selector is not the
+global `'.card'` shown here — that string also matches the cards in the "Elsewhere" section
+of the same page, and `horizontalLoop` resolves targets outside `useGSAP`'s scope; the island
+passes the track's children directly instead. And `draggable` is *not* enabled, so the
+carousel does not drag the way Embla did — see the build log at the top of this file.
 
 ### 8.3 Scroll reveals — one file, data attributes
 

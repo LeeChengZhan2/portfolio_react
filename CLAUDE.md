@@ -8,7 +8,13 @@ Guidance for Claude Code when working in this repository.
 
 ## Build state
 
-Phases 1–3 are done on branch `rebuild/astro`. The Astro site builds, type-checks clean, and
+> **Checkpoint — 13 Aug 2026.** Phases 1–4 complete. Stopping point chosen deliberately:
+> **responsive/mobile work happens next, before phase 5 content.** That inverts the order in
+> docs/REBUILD.md §10, and it is the right call — layout changes reflow prose, so writing the
+> case studies first would mean rewriting them to fit whatever the mobile layout turns out to
+> be. Content is the long pole but it is not the blocker; the phone experience is.
+
+Phases 1–4 are done on branch `rebuild/astro`. The Astro site builds, type-checks clean, and
 all 284 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
 the port — delete it once phase 5 content is written.
 
@@ -19,29 +25,62 @@ npm run links    # post-build internal link checker (run after build)
 npm run preview  # serve dist/ locally
 ```
 
-Measured: **49.2 KB gzipped JS per page** (GSAP + ScrollTrigger + Lenis in one deferred
-chunk), plus a 3.2 KB lazy SplitText chunk on pages with split reveals. Legacy CRA shipped
-101.8 KB gz and it blocked first paint. `_astro/client.*.js` is emitted but referenced by no
-page — that is the React runtime waiting for the phase-4 carousel island; it is never
-downloaded until an island exists.
+Measured, gzipped, after the carousel island landed:
+
+| | every page | `/` only |
+|---|---|---|
+| Eager (blocks nothing, `type="module"`) | **49.7 KB** | 49.7 KB |
+| Astro island bootstrap (inline) | 0.1 KB | 1.9 KB |
+| Island, fetched on scroll into view | — | **60.9 KB** |
+| Lazy SplitText, on pages with split reveals | 3.2 KB | 3.2 KB |
+
+The eager figure rose 49.2 → 49.7 KB on *all ten pages* because GSAP now has two importers
+(the BaseLayout script and the island), so Rolldown hoists it into a shared
+`_astro/gsap.*.js`. Two chunks compress slightly worse than one — that 0.5 KB is the entire
+site-wide cost, and in exchange the island does not re-download GSAP.
+
+The 60.9 KB island figure is React itself (55.9 KB runtime + 2.8 KB renderer shim) plus
+2.2 KB of carousel. **It is only requested when the carousel scrolls into view, only on `/`,
+and never blocks paint.** Worth being straight about the trade: as a plain script the same
+behaviour would cost ~2 KB. The island is a deliberate learning-goal decision
+(docs/REBUILD.md §2), not the cheap option — see "Islands" below.
+
+Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 
 Routes live: `/`, `/about`, `/about/personal`, `/about/photography`, `/work`,
 `/work/{bms-drivers,java-finance,school-fyp,open-source}`, `/404`.
 `/about/travel` and `/about/investing` exist as `draft: true` and so build in dev only —
 they have no content yet.
 
-### Next up (resume here)
+### Next up (resume here) — responsive, then content
 
-1. **Phase 4 — carousel island.** `src/components/react/Carousel.tsx`, GSAP `horizontalLoop()`
-   with a tweened `timeScale()` for slow-on-hover, mounted `client:visible` on one page only.
-   This is the first `.tsx` in the project and what finally uses the orphaned React chunk.
-   Copy `horizontalLoop` from the GreenSock helper into `src/scripts/horizontal-loop.ts`.
-2. **Verify the hero parallax on a real phone** before building on it. It is rewritten but has
-   only been type-checked, never watched scrolling.
-3. **Phase 5 — content.** The long pole. BMS drivers and FYP carry the most weight; write those
-   first. Flip `draft: false` on travel/investing once they have substance.
-4. **Decide: site-wide noindex until launch.** `BaseLayout` supports `noindex` per page but
-   defaults false, and canonicals point at the unregistered `leechengzhan.com`.
+**Now: make the site work on a phone.** In priority order.
+
+1. **Mobile nav.** The only genuine breakage. `Header.astro` dropdowns are `group-hover` +
+   `group-focus-within`, so keyboard works and touch does not — tapping "About Me" on a phone
+   follows the link instead of opening the menu. Needs a real toggle below `sm`, with
+   `aria-expanded`/`aria-controls`, Escape to close, and focus handling.
+   **Must not become a React island** — the header is on all ten pages, and one island there
+   pulls the 55.9 KB React runtime onto every one of them. Use a delegated script in
+   `src/scripts/`, the way `copy.ts` does for the footer.
+2. **Verify the hero parallax on a real phone.** Rewritten, type-checked, never watched
+   scrolling. The carousel *has* been driven in a browser (see "Carousel" below); this has not.
+   Decide the optional `scale: 1.08 → 1` (docs/REBUILD.md §12) at the same time — it may be
+   one effect too many.
+3. **Audit every page at 390px.** `/about/[slug]` and `/work/[slug]` have never been looked at
+   on a narrow viewport. Legacy's `about-flex-container` was a hard two-column flex at every
+   width; confirm that did not get ported.
+
+**After responsive, phase 5 — content.** Every markdown body is currently a 106–212 word stub.
+BMS drivers and FYP carry the most weight; write those first. Flip `draft: false` on
+travel/investing once they have substance. New PDF CV — `public/assets/documents/` still holds
+only the Mar 2023 `.docx`.
+
+**Open decisions, not code.** Site-wide `noindex` until launch (`BaseLayout` supports it per
+page, defaults false, and canonicals point at the unregistered `leechengzhan.com`). Carousel
+pause control — reduced motion and keyboard focus are handled, but a visible pause button is
+still the letter of WCAG 2.2.2; it adds visible UI, so it waits on design direction
+(docs/REBUILD.md §12).
 
 **Always run `npm run build && npm run links` before committing.** The link checker is what
 stops the dead-anchor bug from coming back.
@@ -109,6 +148,44 @@ only — so the island model still gets exercised.
 
 Rule of thumb this established: an island in a site-wide component (header, footer, layout)
 costs the framework runtime on every page. Islands belong on leaf pages.
+
+## Carousel (`src/components/react/Carousel.tsx`) — built, verified in a browser
+
+The site's only React island, mounted `client:visible` on `/` alone. `horizontalLoop()` is
+ported into `src/scripts/horizontal-loop.ts`; hover tweens the timeline's `timeScale()`.
+
+Numbers matched to the legacy Embla implementation rather than invented:
+
+| | Legacy | Now |
+|---|---|---|
+| Base speed | 2.0 px/frame @60fps = 120 px/s | `speed: 1.2` → 120 px/s |
+| Hover speed | 0.6 px/frame = 36 px/s | `timeScale` 0.3 → 36 px/s |
+| Ease to new speed | 0.08/frame lerp, ~0.6s to settle | `power2.out`, `duration: 0.6` |
+
+Measured in Chrome: 120.0 px/s base, 36.2 px/s hovered (0.30×), easing through ~81 px/s
+mid-transition — a ramp, not a step, which is the whole point of choosing GSAP over
+`embla-carousel-auto-scroll`.
+
+Things that will look like bugs but are deliberate:
+
+- **The card count changes after hydration.** Server-rendered HTML holds one set of 3 cards;
+  the island re-renders to 12 once it knows the loop will run. Duplicates are meaningless
+  without motion, and 12 repeated cards is the wrong no-JS/reduced-motion experience. Copies
+  carry `aria-hidden` + `tabIndex={-1}` so assistive tech still reads three projects.
+- **`overflow-x: auto` until the loop starts**, then `overflow: hidden`. That is what keeps
+  every card reachable with no JS, before hydration, and under reduced motion.
+- **Hover is gated on `pointerType === "mouse"`.** Touch fires `pointerenter` on tap and never
+  a matching `pointerleave`, which would strand the carousel at the slow speed forever.
+- **Focus stops the loop outright** (`timeScale` 0), not merely slowing it — a keyboard user
+  cannot click a link that is sliding away.
+- **No drag.** The upstream `horizontalLoop` supports `draggable: true`, but that pulls
+  Draggable + InertiaPlugin (~15 KB gz) into the island. Legacy had drag via Embla; this
+  does not. Restore it from the CodePen linked in `horizontal-loop.ts` if it is wanted —
+  it is a deliberate omission, not an oversight.
+
+When changing any of this, re-verify in a real browser. `astro check` type-checks the file
+but proves nothing about whether it moves — that is exactly how the hero parallax ended up
+shipped-but-unwatched.
 
 ### Directory convention
 

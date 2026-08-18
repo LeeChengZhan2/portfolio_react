@@ -1,73 +1,113 @@
-# Hosting URL
-https://leechengzhan2.github.io/portfolio_react/
+# Portfolio — Lee Cheng Zhan
 
-# Getting Started with Create React App
+Personal portfolio site. Astro 7 static site with React islands, TypeScript, Tailwind v4,
+GSAP + Lenis for motion.
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+> **Status: mid-rebuild on branch `rebuild/astro`.** Phases 1–4 of the rebuild are complete —
+> the site builds, type-checks clean, and all 284 internal links resolve. It is **not ready to
+> publish**: the content is still placeholder-length and the mobile navigation does not work on
+> touch. See [What to do next](#what-to-do-next).
+>
+> Plan and rationale: [docs/REBUILD.md](docs/REBUILD.md) · Agent guidance:
+> [CLAUDE.md](CLAUDE.md)
 
-## Available Scripts
+## Running it
 
-In the project directory, you can run:
+```bash
+npm install
+npm run dev      # astro dev server
+npm run build    # astro check && astro build  → dist/
+npm run links    # internal link checker — run AFTER build
+npm run preview  # serve dist/ locally
+```
 
-### `npm start`
+**Always run `npm run build && npm run links` before committing.** The link checker exists
+because this project shipped seven dead nav anchors and two 404ing download links; it verifies
+every internal href and fragment against `dist/`.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Where things are
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```
+src/
+├── pages/              file path IS the route
+├── layouts/            BaseLayout — meta, OG tags, script entry
+├── components/
+│   ├── astro/          zero JS — the default
+│   └── react/          islands ONLY — every file here has a JS cost
+├── content/            markdown + zod schema (content.config.ts)
+├── scripts/            plain TS: smooth-scroll, reveal, copy, horizontal-loop
+└── styles/global.css   Tailwind v4 @theme — no tailwind.config.js
+```
 
-### `npm test`
+`legacy/` is the old Create React App version, kept only so prose and markup can be ported out
+of it. It has no build script and nothing imports it. Delete it once the content is written.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Current cost: **49.7 KB gzipped JS per page**, plus 60.9 KB on `/` only, fetched when the
+carousel scrolls into view. The CRA original shipped 101.8 KB and it blocked first paint.
 
-### `npm run build`
+---
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## What to do next
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Ordered. Responsive work comes before content — deliberately, because layout changes reflow
+prose, so writing the case studies first would mean rewriting them to fit whatever the mobile
+layout turns out to be.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### 1. Mobile navigation — the one real breakage
 
-### `npm run eject`
+The header dropdowns are CSS `group-hover` + `group-focus-within`. Mouse and keyboard both
+work. **Touch does not**: tapping "About Me" on a phone follows the link instead of opening
+the menu, so the sub-pages are unreachable on mobile.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Needs a toggle below the `sm` breakpoint with `aria-expanded` / `aria-controls`, Escape to
+close, and focus handling.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+> **Constraint:** this must not become a React island. The header renders on all ten pages, so
+> one island there would pull the 55.9 KB React runtime onto every page — the same mistake
+> already made and reverted with the footer copy buttons. Use a delegated script in
+> `src/scripts/`, the way `copy.ts` does.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### 2. Verify the hero parallax on a real phone
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+It was rewritten in phase 3 and has been type-checked but **never watched scrolling**. The
+carousel has since been driven in a real browser and verified; the parallax has not.
 
-## Learn More
+While you are there, decide the optional hero `scale: 1.08 → 1` settle
+([docs/REBUILD.md §12](docs/REBUILD.md)) — it may be one effect too many.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### 3. Audit every page at 390px
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+`/about/[slug]` and `/work/[slug]` have never been looked at on a narrow viewport. The legacy
+About page used a hard two-column flex at every width with a `70vh` sticky image — on a phone
+that was two ~160px columns. Confirm that did not get ported.
 
-### Code Splitting
+### 4. Then: write the content
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Every markdown body is currently a 106–212 word stub.
 
-### Analyzing the Bundle Size
+- **BMS drivers and the FYP first** — they carry the most weight. The BMS work (HVAC, lighting,
+  hardware protocol integration) is genuinely uncommon material that most developer portfolios
+  cannot show.
+- Flip `draft: false` on `travel.md` and `investing.md` once they have substance, or fold them
+  into `personal.md` and delete them. Nothing in the code hardcodes four sections.
+- Replace the CV: `public/assets/documents/` still holds only a March 2023 `.docx`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### 5. Before publishing
 
-### Making a Progressive Web App
+- **Register the domain.** `astro.config.mjs` sets `site: 'https://leechengzhan.com'`, which is
+  not registered. Every canonical URL, OG tag, and the sitemap are built from it, so search
+  engines would follow canonicals into a dead host.
+- **Decide site-wide `noindex` until launch.** `BaseLayout` supports it per page and defaults
+  to false.
+- Favicon set and `manifest.json` — only `cz.png` exists today.
+- Per-project OG images — one shared PNG today.
+- Carousel pause control. Reduced motion and keyboard focus are handled, but a visible pause
+  button is the letter of WCAG 2.2.2. It adds visible UI, so it waits on design direction.
+- Lighthouse ≥95 on mobile.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### Known documentation drift
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+[AGENTS.md](AGENTS.md) still prescribes Jest and React Testing Library "via `react-scripts`"
+in its testing section. That stack was removed in the rebuild and there are no tests — the
+decision was TypeScript plus zod content schemas plus the link checker, rather than a
+component test suite. Update it when convenient.

@@ -1,10 +1,21 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Hero from '../components/astro/Hero.astro';
+import Carousel from '../components/react/Carousel';
+import type { CarouselItem } from '../components/react/Carousel';
 import { getSections, getFeaturedWork } from '../lib/content';
 
 const sections = await getSections();
-const featured = await getFeaturedWork();
+
+// Island props are serialised into the HTML, so send the four fields the
+// carousel renders rather than the whole collection entry.
+const featured: CarouselItem[] = (await getFeaturedWork()).map((entry) => ({
+  slug: entry.id,
+  title: entry.data.title,
+  summary: entry.data.summary,
+  year: entry.data.year,
+  stack: entry.data.stack,
+}));
 ---
 
 <BaseLayout
@@ -48,24 +59,12 @@ const featured = await getFeaturedWork();
           <p class="eyebrow" data-reveal="fade">Selected work</p>
           <h2 class="section-title" data-reveal="fade-up">What I've been building</h2>
 
-          <ul class="card-grid">
-            {featured.map((entry, i) => (
-              <li data-reveal="fade-up" data-reveal-delay={String(i * 0.08)}>
-                <a href={`/work/${entry.id}`} class="card">
-                  <p class="card__year">{entry.data.year}</p>
-                  <h3 class="card__title">{entry.data.title}</h3>
-                  <p class="card__summary">{entry.data.summary}</p>
-                  {entry.data.stack.length > 0 && (
-                    <ul class="chips">
-                      {entry.data.stack.map((tech) => (
-                        <li class="chip">{tech}</li>
-                      ))}
-                    </ul>
-                  )}
-                </a>
-              </li>
-            ))}
-          </ul>
+          {/* The site's only React island. `client:visible` holds its JS back
+              until the section is scrolled to, and it lives on this leaf page
+              alone so the React runtime is never paid for on the other nine. */}
+          <div class="w-full" data-reveal="fade-up">
+            <Carousel client:visible items={featured} label="Featured work" />
+          </div>
 
           <a href="/work" class="link-button" data-reveal="fade-up">See all work</a>
         </div>
@@ -139,27 +138,11 @@ const featured = await getFeaturedWork();
     @apply hover:-translate-y-1 hover:border-kleinblue/40 hover:shadow-lg;
   }
 
-  .section--alt .card {
-    @apply bg-gray-50;
-  }
-
-  .card__year {
-    @apply font-mono text-xs text-gray-500;
-  }
-
   .card__title {
     @apply text-lg font-semibold text-gray-900;
   }
 
   .card__summary {
     @apply text-sm leading-relaxed text-gray-600;
-  }
-
-  .chips {
-    @apply mt-auto flex flex-wrap gap-1.5 pt-3;
-  }
-
-  .chip {
-    @apply rounded bg-gray-100 px-2 py-0.5 font-mono text-[0.7rem] text-gray-600;
   }
 </style>
