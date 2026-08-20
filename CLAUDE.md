@@ -20,7 +20,7 @@ Guidance for Claude Code when working in this repository.
 > literal `gray-*` shades made that refactor bigger. See "Theming contract".
 
 Phases 1–4 are done on branch `rebuild/astro`. The Astro site builds, type-checks clean, and
-all 371 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
+all 518 internal links resolve. Legacy CRA source is parked in `legacy/` for reference during
 the port — delete it once phase 5 content is written.
 
 ```bash
@@ -44,7 +44,7 @@ Eager JS rose 49.7 → 49.8 KB: `theme.ts` joined the bundled module script, and
 whole cost of the theme toggle. It is a delegated listener, not an island — see below. CSS is
 newly tracked here; the theme layer is ~0.4 KB of it.
 
-The eager figure rose 49.2 → 49.7 KB on *all ten pages* because GSAP now has two importers
+The eager figure rose 49.2 → 49.7 KB on *all fifteen pages* because GSAP now has two importers
 (the BaseLayout script and the island), so Rolldown hoists it into a shared
 `_astro/gsap.*.js`. Two chunks compress slightly worse than one — that 0.5 KB is the entire
 site-wide cost, and in exchange the island does not re-download GSAP.
@@ -58,11 +58,27 @@ behaviour would cost ~2 KB. The island is a deliberate learning-goal decision
 Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 
 Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`, `/work`,
-`/work/{bms-drivers,java-finance,school-fyp,open-source}`, `/404` — 12 pages.
-`/about/travel` and `/about/investing` flipped to `draft: false` on 18 Aug 2026 and now
-build in production. Their bodies are **placeholder drafts written by Claude**, marked with a
-`DRAFT` comment at the foot of each file; they carry the right shape and are not yet the
-author's own material. Rewriting them is part of phase 5.
+`/work/{ai-agent-bms,cloud-data-platform,bms-platform,alliance-bank,bank-negara,school-fyp,open-source}`,
+`/404` — 15 pages.
+
+**Content was rewritten against the author's CV on 19 Aug 2026**, which moved the site's
+whole story. It used to say "BMS driver development"; the CV says the current work is
+production AI agents and the cloud data platform under them, so `/work` gained
+`ai-agent-bms` and `cloud-data-platform`, and `bms-drivers` became `bms-platform` (renamed,
+because the entry is no longer about drivers). `school-fyp` is now the real project,
+*Game Theory in Baseball*, pulled from the report PDF in `public/assets/documents/`.
+
+**One entry per project, not per employer.** The AceAtt work was briefly a single
+`java-finance` entry holding both client projects, which was inconsistent with splitting
+Primustech's three items into three entries — the CV structures both employers the same way.
+It is now `alliance-bank` and `bank-negara`. The old entry also claimed Spring Boot and
+Kafka; per the CV, Spring Boot belongs to the Singapore BMS work and Kafka appears nowhere,
+so do not reintroduce either.
+
+Every rewritten body carries a comment at the foot naming what came from the CV and what
+still needs the author's own material. They are drafts with the right shape and true facts,
+not finished prose. `/about/travel` and `/about/investing` additionally carry the older
+`DRAFT` markers from 18 Aug 2026.
 
 ### Next up (resume here) — responsive, then content
 
@@ -72,7 +88,7 @@ author's own material. Rewriting them is part of phase 5.
    `group-focus-within`, so keyboard works and touch does not — tapping "About Me" on a phone
    follows the link instead of opening the menu. Needs a real toggle below `sm`, with
    `aria-expanded`/`aria-controls`, Escape to close, and focus handling.
-   **Must not become a React island** — the header is on all ten pages, and one island there
+   **Must not become a React island** — the header is on all fifteen pages, and one island there
    pulls the 55.9 KB React runtime onto every one of them. Use a delegated script in
    `src/scripts/`, the way `copy.ts` and `theme.ts` do.
    `ThemeToggle.astro` now sits in `.nav-container` alongside the links, so the mobile layout
@@ -87,10 +103,14 @@ author's own material. Rewriting them is part of phase 5.
    on a narrow viewport. Legacy's `about-flex-container` was a hard two-column flex at every
    width; confirm that did not get ported.
 
-**After responsive, phase 5 — content.** Every markdown body is currently a 106–212 word stub.
-BMS drivers and FYP carry the most weight; write those first. Travel and investing are live
-but placeholder — replace the drafted prose with real material. New PDF CV —
-`public/assets/documents/` still holds only the Mar 2023 `.docx`.
+**After responsive, phase 5 — content.** No longer stubs: the 19 Aug 2026 CV pass took every
+work entry to 300–500 words of true, specific material. What is left is the author's own
+voice and the details a CV cannot carry — each file's closing comment lists them per page.
+The two highest-value ones are a real debugging story on `bms-platform`, and naming the
+building-data standard on `cloud-data-platform`.
+
+New PDF CV — `public/assets/documents/` still holds only the Mar 2023 `.docx`, which now
+describes a role two jobs out of date, and `Footer.astro` still links it as "Download CV".
 
 **Open decisions, not code.** Site-wide `noindex` until launch (`BaseLayout` supports it per
 page, defaults false, and canonicals point at the unregistered `leechengzhan.com`). Carousel
@@ -302,7 +322,7 @@ nothing needs one once no media query has to be overridden. The `is:inline` head
 `BaseLayout.astro` adds it before first paint when `localStorage.theme === "dark"`, verified
 with a 242-frame probe that never sampled a light frame. `src/scripts/theme.ts` handles the
 click and nothing else. The toggle is `src/components/astro/ThemeToggle.astro` — a delegated
-listener, **not an island**, because the header is on all ten pages.
+listener, **not an island**, because the header is on all fifteen pages.
 
 Failure modes, both of which land on light: JS disabled (no class is ever added, and the toggle
 hides itself behind the `html.js` gate), and `localStorage` throwing in private mode (the
@@ -357,6 +377,66 @@ is exactly what `accent` exists to solve.
 Projects are a content collection (`src/content/work/*.md`) with a zod schema. Adding a project
 means adding a markdown file. **Do not hardcode project cards in markup** — that is what the
 rebuild is replacing, and it is why two cards currently say "Coming soon."
+
+`getWork()` sorts on **`order` first, `year` only as a tiebreaker** (changed 19 Aug 2026).
+Year-first put "Personal Projects" second on `/work`: it is ongoing, so its year is always the
+current one, and it outranked the professional work it should sit under. The list is curated,
+not chronological — `order` is the field to change to reorder it, and it drives the home-page
+carousel too, since `getFeaturedWork()` filters `getWork()`.
+
+**Years and company** (19 Aug 2026). `year` is the first year; add `endYear` for work that
+spanned several and it renders as an en-dash range, `2023–2025`. Formatting lives in one
+place, `formatYears()` in `src/lib/content.ts`, because the year appears on `/work`, on the
+detail page and on the carousel card, and three copies of the logic would eventually disagree.
+A zod `.refine()` fails the build if `endYear` is not later than `year`.
+
+`/work` shows **`company` where the job title used to be** — the title repeated down the page
+and said less than who the work was for. `company` is optional and falls back to `role`, which
+is what `open-source` relies on: self-directed work has no employer. `role` still shows on the
+detail page, which now also carries a Company fact.
+
+Note the years are the author's own, supplied 19 Aug 2026, and they reordered the story: the
+cloud data platform (2026) does **not** predate the AI agent (2025–2026), and `bank-negara`
+(2022) came *before* `alliance-bank` (2023). Three sentences claiming otherwise were corrected
+at the same time. Check the prose again if these dates change.
+
+`current: true` marks work that is still in flight (added 19 Aug 2026). A bare year reads as
+a completion date, which quietly retired work that is still running. Set on the two Primustech
+projects, `ai-agent-bms` and `cloud-data-platform`. It drives two different treatments:
+
+- **`/work` groups by it** — "Currently building" then "Previously". This replaced a per-row
+  badge, which the author found too easy to skim past; a heading you have to read past is the
+  whole point. Empty groups drop out, so clearing the last `current: true` leaves a plain list
+  rather than a heading over nothing. `order` still sets the sequence inside each group.
+- **The detail page and carousel card keep the badge**, plus an accent border on the card.
+  Neither has sections to group by, so the pill is the only handle available there.
+
+Rows live in `src/components/astro/WorkRow.astro` rather than inline, so both groups render
+identical markup. Its heading is an `h3`: the page `h1` is the title and each group heading is
+an `h2`. Note the last-row border sits on the `<li>` in `work/index.astro`, not on `.row` —
+the row is a separate component with its own style scope, so a descendant selector from the
+page would not reach it.
+
+The field is named for the word on the badge on purpose. An earlier revision called it
+`ongoing` while rendering "Current", which invites the next reader to wonder whether they are
+two different states. Rename both together or neither. "Ongoing" was dropped as the label
+because it hints at unfinished work, and both of these run in production for real customers;
+"Live" and "In production" were rejected for the opposite reason — `bms-platform` is also in
+production but is *not* current work, so those words blur the exact line the badge draws.
+
+Two placement constraints, both deliberate:
+
+- On the **detail page** the badge sits in `.page__kicker` beside the back link, *outside*
+  the `<h1>`. The h1 carries `data-reveal="split-lines"`, and SplitText would treat a nested
+  badge as text to slice into lines.
+- In the **carousel** the two card variants are written as two complete literal strings
+  (`CARD` / `CARD_ONGOING`) rather than one string plus a conditional fragment. Tailwind
+  scans source text for class names; a class assembled at runtime is one it never sees and
+  never generates.
+
+Keep `summary` well under the zod cap of 180 characters. It is rendered on a carousel card
+roughly 22rem wide, and every `stack` entry becomes a chip on that same card — past about
+seven chips the cards visibly grow, and they all stretch to match the tallest.
 
 ## Additional guidelines
 

@@ -42,9 +42,24 @@ const work = defineCollection({
     role: z.string(),
     /** Technologies, rendered as chips. */
     stack: z.array(z.string()).default([]),
+    /** First year of work. Renders alone unless `endYear` is set. */
     year: z.number().int().min(2015).max(2100),
+    /** Last year, when the work spanned several. Renders as "2023–2025". */
+    endYear: z.number().int().min(2015).max(2100).optional(),
+    /**
+     * Employer or institution. Shown on `/work` in place of the job title, which
+     * repeats down the page and says less than who the work was for. Optional:
+     * self-directed work has no company and falls back to `role`.
+     */
+    company: z.string().optional(),
     /** Featured entries appear in the home-page carousel. */
     featured: z.boolean().default(false),
+    /**
+     * Work in flight right now, as opposed to something finished and dated.
+     * Renders a "Current" badge everywhere the entry appears, because a bare year
+     * reads as a completion date and quietly retires work that is still running.
+     */
+    current: z.boolean().default(false),
     order: z.number().default(0),
     repo: z.url().optional(),
     /** External write-up, e.g. the TARUMT eprints record. */
@@ -52,6 +67,9 @@ const work = defineCollection({
     /** Downloadable asset under public/, e.g. "/assets/documents/fyp.pdf". */
     doc: z.string().startsWith('/').optional(),
     draft: z.boolean().default(false),
+  }).refine((entry) => entry.endYear === undefined || entry.endYear > entry.year, {
+    message: 'endYear must be later than year — drop it for single-year work',
+    path: ['endYear'],
   }),
 });
 

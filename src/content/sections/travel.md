@@ -7,10 +7,10 @@ icon: globe
 draft: false
 ---
 
-The first trip that counted wasn't a holiday. It was moving from Malaysia to
-Singapore for work — a border I'd crossed plenty of times as a visitor, and then
-one day crossed as someone who had to make a life on the other side of it. Two
-countries that look similar from a distance stop looking similar once you're
+The trip that counted wasn't a holiday. It was moving from Malaysia to Singapore
+for work in June 2023 — a border I'd crossed plenty of times as a visitor, and
+then one day crossed as someone who had to make a life on the other side of it.
+Two countries that look similar from a distance stop looking similar once you're
 buying groceries in one of them.
 
 That's roughly what I look for when I travel now. Not a list of landmarks, but
@@ -19,6 +19,18 @@ looks like, which things are cheap that shouldn't be and expensive that
 shouldn't be. It's the same instinct that makes me good at integration work —
 I'd rather understand how a system actually behaves than how the brochure says
 it does.
+
+## Touring first, travelling later
+
+I'd been moving before that, though not as a tourist. Seven years of performing
+with a [24 Festival drum troupe](/about/personal) took me across Malaysia,
+Singapore and China — seventy-plus performances, most of them in places I'd never
+have chosen off a map, arriving with a job to do and leaving the same night.
+
+That's a particular way to see somewhere: no itinerary, no landmarks, just a
+venue, the people running it, and whatever is open afterwards. It set the
+expectation early that the interesting part of a place is rarely the part it
+advertises.
 
 ## How I travel
 
@@ -42,8 +54,9 @@ looking for a frame. More on that under [Photography](/about/photography).
 - **Everywhere is somebody's ordinary.** Which is the part I actually enjoy.
 
 <!-- DRAFT — Claude wrote this as a placeholder on 18 Aug 2026 so the page can
-go live with real shape instead of a stub. The framing is real (Malaysia →
-Singapore, camera-led travel); the rest is scaffolding for your material.
+go live with real shape instead of a stub, and added the JB Drum touring section
+from the CV on 19 Aug 2026. The framing is real (Malaysia → Singapore, the drum
+tours, camera-led travel); the rest is scaffolding for your material.
 
 Replace with specifics — that's the whole job here:
 

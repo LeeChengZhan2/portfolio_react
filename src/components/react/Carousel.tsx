@@ -22,8 +22,11 @@ export interface CarouselItem {
   slug: string;
   title: string;
   summary: string;
-  year: number;
+  /** Pre-formatted by `formatYears()` — "2023" or "2023–2025". */
+  year: string;
   stack: string[];
+  /** Work in flight — draws an accent border and a "Current" badge. */
+  current: boolean;
 }
 
 interface Props {
@@ -70,9 +73,15 @@ const EDGE_FADE =
 /* Matches .card in index.astro and .subnav__card in about/index.astro — a
    raised panel on the page background. Was `bg-gray-50`, which made it the odd
    one out among the four card variants for no stated reason. */
-const CARD =
-  "flex h-full flex-col gap-2 rounded-2xl border border-line bg-surface p-6 " +
+const CARD_BASE =
+  "flex h-full flex-col gap-2 rounded-2xl border bg-surface p-6 " +
   "transition-all duration-300 hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg";
+
+/* Written as two complete literals rather than a conditional fragment: Tailwind
+   scans source text for class names, and a class assembled at runtime is a class
+   it never sees and never generates. */
+const CARD = `${CARD_BASE} border-line`;
+const CARD_CURRENT = `${CARD_BASE} border-accent/40`;
 
 export default function Carousel({ items, label }: Props) {
   const root = useRef<HTMLDivElement>(null);
@@ -191,8 +200,19 @@ export default function Carousel({ items, label }: Props) {
                 className="w-[clamp(16rem,80vw,22rem)] flex-none"
                 aria-hidden={isCopy || undefined}
               >
-                <a href={`/work/${item.slug}`} className={CARD} tabIndex={isCopy ? -1 : undefined}>
-                  <p className="font-mono text-xs text-fg-meta">{item.year}</p>
+                <a
+                  href={`/work/${item.slug}`}
+                  className={item.current ? CARD_CURRENT : CARD}
+                  tabIndex={isCopy ? -1 : undefined}
+                >
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs text-fg-meta">{item.year}</p>
+                    {item.current && (
+                      <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-accent">
+                        Current
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-lg font-semibold text-fg">{item.title}</h3>
                   <p className="text-sm leading-relaxed text-fg-muted">{item.summary}</p>
 

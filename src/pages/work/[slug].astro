@@ -2,7 +2,7 @@
 import type { GetStaticPaths } from 'astro';
 import { render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getWork } from '../../lib/content';
+import { getWork, formatYears } from '../../lib/content';
 
 export const getStaticPaths = (async () => {
   const work = await getWork();
@@ -19,7 +19,10 @@ const { Content } = await render(entry);
 <BaseLayout title={entry.data.title} description={entry.data.summary}>
   <article class="page">
     <header class="page__header">
-      <a href="/work" class="back">&larr; Work</a>
+      <div class="page__kicker">
+        <a href="/work" class="back">&larr; Work</a>
+        {entry.data.current && <span class="badge">Current</span>}
+      </div>
       <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
       <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
 
@@ -28,9 +31,17 @@ const { Content } = await render(entry);
           <dt>Role</dt>
           <dd>{entry.data.role}</dd>
         </div>
+        {
+          entry.data.company && (
+            <div>
+              <dt>Company</dt>
+              <dd>{entry.data.company}</dd>
+            </div>
+          )
+        }
         <div>
           <dt>Year</dt>
-          <dd>{entry.data.year}</dd>
+          <dd>{formatYears(entry.data)}</dd>
         </div>
         {
           entry.data.stack.length > 0 && (
@@ -82,8 +93,19 @@ const { Content } = await render(entry);
     @apply mb-10 flex flex-col gap-3;
   }
 
+  .page__kicker {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
   .back {
     @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta transition-colors hover:text-accent;
+  }
+
+  /* Kept out of the <h1> on purpose: the title carries data-reveal="split-lines",
+     and SplitText would treat a nested badge as text to slice into lines. */
+  .badge {
+    @apply rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5;
+    @apply font-mono text-[0.65rem] uppercase tracking-[0.12em] text-accent;
   }
 
   .page__title {

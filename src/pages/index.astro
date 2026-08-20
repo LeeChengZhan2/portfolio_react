@@ -3,7 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Hero from '../components/astro/Hero.astro';
 import Carousel from '../components/react/Carousel';
 import type { CarouselItem } from '../components/react/Carousel';
-import { getSections, getFeaturedWork } from '../lib/content';
+import { getSections, getFeaturedWork, formatYears } from '../lib/content';
 
 const sections = await getSections();
 
@@ -13,15 +13,16 @@ const featured: CarouselItem[] = (await getFeaturedWork()).map((entry) => ({
   slug: entry.id,
   title: entry.data.title,
   summary: entry.data.summary,
-  year: entry.data.year,
+  year: formatYears(entry.data),
   stack: entry.data.stack,
+  current: entry.data.current,
 }));
 ---
 
 <BaseLayout
   isHome
   title="Lee Cheng Zhan"
-  description="Software engineer in Singapore working on Building Management Systems. Mathematics with Computing graduate, ex-Java developer in finance."
+  description="Software engineer in Singapore building production AI agents and the data platforms behind them. Mathematics with Computing graduate, ex-Java developer in banking."
 >
   <Hero />
 
@@ -29,20 +30,23 @@ const featured: CarouselItem[] = (await getFeaturedWork()).map((entry) => ({
     <div class="wrap">
       <p class="eyebrow" data-reveal="fade">About</p>
       <h2 class="section-title" data-reveal="split-lines">
-        Software engineer, currently building the layer between software and buildings.
+        Software engineer building production AI agents and the data platforms behind them.
       </h2>
 
       <div class="prose" data-reveal="fade-up">
         <p>
-          I'm a software engineer in Singapore working in the Building Management
-          System industry, where I develop and debug the drivers that let a BMS
-          platform communicate with HVAC, lighting, and fan systems.
+          I'm a software engineer in Singapore, working on building automation. I
+          design and ship the multi-agent AI systems that let an operator ask a
+          building a question in plain English, and the cloud data platform
+          underneath them that makes an answer possible at all.
         </p>
         <p>
-          Before that I spent over a year writing Java in the financial industry.
-          I hold a degree in Mathematics with Computing from Tunku Abdul Rahman
-          University of Management and Technology, an unusual pairing of a
-          mathematics major with a computer science minor.
+          I started out in fintech in Kuala Lumpur, writing Java for bank clients.
+          Three years on I tend to own what I build end to end — development,
+          deployment, CI/CD — solo or in a small team. Behind it is a degree in
+          Mathematics with Computing from Tunku Abdul Rahman University of
+          Management and Technology, an unusual pairing of a mathematics major
+          with a computer science minor.
         </p>
       </div>
 

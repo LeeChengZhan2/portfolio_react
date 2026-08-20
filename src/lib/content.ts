@@ -15,9 +15,23 @@ export async function getSections(): Promise<CollectionEntry<'sections'>[]> {
   return entries.sort((a, b) => a.data.order - b.data.order);
 }
 
+/**
+ * `order` leads, `year` only breaks ties. The list is curated rather than
+ * chronological: sorting by year first pushed "Personal Projects" (never
+ * finished, so its year is always this one) above the professional work it
+ * should sit under.
+ */
 export async function getWork(): Promise<CollectionEntry<'work'>[]> {
   const entries = publishable(await getCollection('work'));
-  return entries.sort((a, b) => b.data.year - a.data.year || a.data.order - b.data.order);
+  return entries.sort((a, b) => a.data.order - b.data.order || b.data.year - a.data.year);
+}
+
+/**
+ * "2023" or "2023–2025". En dash, not a hyphen: it is the range dash, and it
+ * reads cleanly against the tabular-nums mono the year is set in.
+ */
+export function formatYears(data: { year: number; endYear?: number }): string {
+  return data.endYear ? `${data.year}–${data.endYear}` : String(data.year);
 }
 
 export async function getFeaturedWork(): Promise<CollectionEntry<'work'>[]> {

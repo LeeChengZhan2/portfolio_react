@@ -7,7 +7,7 @@ const sections = await getSections();
 
 <BaseLayout
   title="About"
-  description="Software engineer in Singapore. Mathematics with Computing graduate from TARUMT, previously a Java developer in finance, now working on Building Management Systems."
+  description="Software engineer in Singapore. Mathematics with Computing graduate from TARUMT, previously Java in banking, now building AI agents and data platforms for building automation."
 >
   <article class="page">
     <header class="page__header">
@@ -19,41 +19,110 @@ const sections = await getSections();
       <section data-reveal="fade-up">
         <p class="lead">Software Engineer</p>
         <p>
-          My name is Lee Cheng Zhan. I was born in 2000 and I work as a software
-          engineer in Singapore, in the Building Management System (BMS) industry.
+          My name is Lee Cheng Zhan. I was born in 2000, I'm Malaysian, and I live
+          and work in Singapore on an Employment Pass. I build production AI agents
+          and the data platforms behind them, for building automation.
         </p>
         <p>
           I hold a degree in Mathematics with Computing from Tunku Abdul Rahman
-          University of Management and Technology (TARUMT), graduating with a CGPA
-          of 3.63. The programme paired mathematics as the major with computer
-          science as the minor — an unusual combination, and the reason I tend to
-          reach for the analytical framing of a problem before the code.
+          University of Management and Technology (TARUMT), graduating in 2022 with
+          a CGPA of 3.63. The programme paired mathematics as the major with
+          computer science as the minor — an unusual combination, and the reason I
+          reach for the analytical framing of a problem before the code. My final
+          year project modelled <a href="/work/school-fyp">baseball as a two-player
+          zero-sum game</a>.
         </p>
       </section>
 
       <section data-reveal="fade-up">
         <h2>Career journey</h2>
         <p>
-          I started as a software developer in the financial industry, where I spent
-          over a year developing, debugging, and maintaining Java applications.
-          Working with cross-functional teams there is where I picked up Spring
-          Boot, Hibernate, and Kafka.
+          I started in January 2022 at AceAtt Sdn. Bhd. in Kuala Lumpur, a software
+          house whose customers are banks. Two client projects in that time:
+          <a href="/work/alliance-bank">Java web applications for Alliance Bank</a>,
+          and a <a href="/work/bank-negara">regulatory reporting module</a> for Bank
+          Negara Malaysia, the central bank. Client-facing from the start, and the
+          first place I learned what a production issue costs when the production in
+          question is a bank's.
         </p>
         <p>
-          I then moved into the Building Management System industry, where I now
-          develop and debug the software and drivers that let a BMS platform
-          communicate with building equipment — HVAC, lighting, fans. The work is
-          mostly integration: making two systems that were designed separately
-          agree on what a message means, and keeping that reliable.
+          Since June 2023 I've been at Primustech in Singapore, in building
+          automation. I arrived on the Java side of a
+          <a href="/work/bms-platform">Building Management System</a>, then built
+          the <a href="/work/cloud-data-platform">cloud data platform</a> that
+          unified equipment and sensor data across buildings and vendors, and now
+          design and ship the <a href="/work/ai-agent-bms">AI agents</a> that reason
+          over it.
+        </p>
+        <p>
+          Three years in, the through-line is that I own what I build end to end —
+          development, deployment and CI/CD — solo or in a small team. That is the
+          part I want to keep doing, in AI agent and backend engineering.
+        </p>
+      </section>
+
+      <section data-reveal="fade-up">
+        <h2>What I work with</h2>
+        <dl class="skills">
+          <div>
+            <dt>Languages</dt>
+            <dd>Python · JavaScript · TypeScript · Java</dd>
+          </div>
+          <div>
+            <dt>AI / agent</dt>
+            <dd>
+              Multi-agent orchestration · agentic RAG · prompt engineering ·
+              function calling · LLM observability and tracing (Langfuse,
+              OpenTelemetry)
+            </dd>
+          </div>
+          <div>
+            <dt>Frameworks</dt>
+            <dd>Agno · FastAPI · Spring Boot · MyBatis · Hibernate · Vert.x · Express · React</dd>
+          </div>
+          <div>
+            <dt>Cloud / DevOps</dt>
+            <dd>
+              GCP (Cloud Run, Cloud Build, VM instances, Cloud Storage, Secret
+              Manager) · Docker · Terraform · CI/CD · Git
+            </dd>
+          </div>
+          <div>
+            <dt>Databases</dt>
+            <dd>PostgreSQL · MySQL · MongoDB · Redis · Milvus · ClickHouse · FalkorDB</dd>
+          </div>
+        </dl>
+        <p>
+          I also speak Mandarin, English and Malay, and worked through the Complete
+          2024 Web Development Bootcamp on Udemy to fill in the parts of the stack
+          that backend work never forces you to learn properly.
         </p>
       </section>
 
       <section data-reveal="fade-up">
         <h2>Beyond work</h2>
         <p>
-          Outside work I'm usually moving — basketball, football, running, the gym.
-          I also shoot photographs and make the occasional vlog, which has done
-          more for my confidence on camera than anything else I've tried.
+          I play football competitively and run marathons. The running is mostly an
+          exercise in doing something boring for a long time without negotiating
+          with yourself about it, which turns out to be a transferable skill.
+        </p>
+        <p>
+          I travel with a camera and make the occasional vlog. Filming, editing and
+          narrating footage has done more for how I explain things than any course
+          I've taken.
+        </p>
+        <p>
+          Before any of the software, I spent seven years as a 24 Festival drummer
+          with JB Drum — 70-plus performances across Malaysia, Singapore and China
+          between 2013 and 2020, and teaching workshops to new players. Twenty-four
+          drums in formation is an unusual first lesson in distributed systems:
+          nobody can hear the whole thing from where they're standing, and it still
+          has to stay in time.
+        </p>
+        <p>
+          I also worked part-time as a promoter and salesman from 2018 to 2021, with
+          Synmax Event and Jasler Enterprise, which is where I learned to change how
+          I explain something depending on who is listening.
         </p>
       </section>
     </div>
@@ -113,6 +182,29 @@ const sections = await getSections();
 
   .page__body p {
     @apply leading-relaxed text-fg-body;
+  }
+
+  .page__body a {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+
+  /* Stacks below sm so the label never squeezes the value into a column of one
+     word per line — the narrow-viewport audit in CLAUDE.md has not happened yet,
+     so this starts single-column and earns its second one at 640px. */
+  .skills {
+    @apply flex flex-col gap-4;
+  }
+
+  .skills > div {
+    @apply flex flex-col gap-1 border-t border-line pt-4 sm:grid sm:grid-cols-[8rem_1fr] sm:gap-4;
+  }
+
+  .skills dt {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta;
+  }
+
+  .skills dd {
+    @apply m-0 leading-relaxed text-fg-body;
   }
 
   .subnav {
