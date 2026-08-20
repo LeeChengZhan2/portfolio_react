@@ -5,13 +5,22 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getSections } from '../../lib/content';
 
 // getStaticPaths runs at BUILD time and tells Astro every URL this template
-// should produce. One file generates /about/personal, /about/travel, and so on.
+// should produce. One file generates /about/personal, /about/photography, and
+// so on.
+//
+// `travel` is the exception: it indexes the `trips` collection under its prose,
+// so it has its own template at about/travel/index.astro. Both would emit
+// `about/travel.html`, and Astro's static-beats-dynamic rule would quietly pick
+// the winner — excluding it here makes the split visible instead. It stays in
+// the pager below, which is a different list for a reason.
 export const getStaticPaths = (async () => {
   const sections = await getSections();
-  return sections.map((entry) => ({
-    params: { slug: entry.id },
-    props: { entry },
-  }));
+  return sections
+    .filter((entry) => entry.id !== 'travel')
+    .map((entry) => ({
+      params: { slug: entry.id },
+      props: { entry },
+    }));
 }) satisfies GetStaticPaths;
 
 const { entry } = Astro.props;

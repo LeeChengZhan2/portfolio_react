@@ -67,3 +67,8 @@ document.addEventListener("click", (event) => {
     // view; it just will not be remembered on the next one.
   }
 });
+
+// A file with no import or export is a global script to TypeScript, and its
+// top-level names collide with every other such file in the project. This
+// marks it a module. It already is one at runtime — Astro imports it.
+export {};

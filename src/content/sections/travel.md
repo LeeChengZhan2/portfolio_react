@@ -1,17 +1,27 @@
 ---
 title: Travel
 navLabel: travel
-summary: Places I've been, and what I took away from them.
+summary: Eight trips since 2023, most of them long weekends, and what I take away from them.
 order: 2
 icon: globe
 draft: false
 ---
+
+## Why the list looks like this
 
 The trip that counted wasn't a holiday. It was moving from Malaysia to Singapore
 for work in June 2023 — a border I'd crossed plenty of times as a visitor, and
 then one day crossed as someone who had to make a life on the other side of it.
 Two countries that look similar from a distance stop looking similar once you're
 buying groceries in one of them.
+
+Every trip above whose exact days I've actually dug up starts on a Friday —
+five out of five so far. That isn't a coincidence and it isn't a preference:
+it's what travel looks like when you have a job you like and a fixed number of
+days off. Four to seven days each, built around a weekend and stretched at one
+end. It's a constraint,
+and like most constraints it turned out to be a good one: a short trip forces
+you to pick one thing and do it properly.
 
 That's roughly what I look for when I travel now. Not a list of landmarks, but
 the small operational details of somewhere: how people queue, what breakfast
@@ -53,22 +63,26 @@ looking for a frame. More on that under [Photography](/about/photography).
   That calibration is useful at work too.
 - **Everywhere is somebody's ordinary.** Which is the part I actually enjoy.
 
-<!-- DRAFT — Claude wrote this as a placeholder on 18 Aug 2026 so the page can
-go live with real shape instead of a stub, and added the JB Drum touring section
-from the CV on 19 Aug 2026. The framing is real (Malaysia → Singapore, the drum
-tours, camera-led travel); the rest is scaffolding for your material.
+<!-- This file is now the essay UNDER the trip grid, not the whole page. The
+grid comes from src/content/trips/*.md; this is what someone reads if the
+places held them. Written 18 Aug 2026, drum-touring section added from the CV
+19 Aug 2026, restructured for the grid 20 Aug 2026.
 
-Replace with specifics — that's the whole job here:
+The framing is real (Malaysia → Singapore, the drum tours, camera-led travel)
+and the Friday paragraph is arithmetic off the trip dates — all five trips with
+exact days start on a Friday. Three others (Shanghai, Guangzhou/Shenzhen and
+the Taiwan trip) are
+month-precision for now, so re-check the claim when their days are filled in.
+The voice is still Claude's.
 
-  - Name two or three trips and say something true about each. One trip told
-    properly beats eight listed.
-  - The earlier decision in this file was log vs. essay. This draft is written
-    as an essay, on the reasoning that a log needs constant upkeep to not look
-    abandoned. If you'd rather keep a dated log, the structure to change is the
-    "What I take away" list — make it entries.
-  - Photos will carry this page. Same technical note as photography.md: use
-    astro:assets and put originals in src/assets/, not public/.
+Two things worth deciding when you edit it:
 
-If it stays this thin after a real editing pass, merge it into personal.md —
-that's what the collection structure is for.
+  - The old note here said "name two or three trips and say something true
+    about each". That is now the job of the trip pages themselves, so this
+    file should stop trying to do it and stay about *how* you travel.
+  - "Why the list looks like this" only makes sense while the grid is above
+    it. If the grid ever moves, that heading has to change.
+
+Photos: use astro:assets with originals in src/assets/travel/, not public/.
+See src/assets/travel/README.md.
 -->

@@ -1,0 +1,255 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { Image } from 'astro:assets';
+import { render } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { getTrips, formatTripDates, tripDays } from '../../../lib/content';
+
+export const getStaticPaths = (async () => {
+  const trips = await getTrips();
+  return trips.map((entry, index) => ({
+    params: { trip: entry.id },
+    props: {
+      entry,
+      // Neighbours resolved here rather than in the template: getStaticPaths
+      // already holds the ordered list, so the page does not have to load the
+      // whole collection again just to find the two entries either side.
+      prev: trips[index - 1],
+      next: trips[index + 1],
+    },
+  }));
+}) satisfies GetStaticPaths;
+
+const { entry, prev, next } = Astro.props;
+const { data } = entry;
+const { Content } = await render(entry);
+
+const dates = formatTripDates(data);
+const days = tripDays(data);
+
+const where = [data.title, data.country].filter(Boolean).join(', ');
+// Falls back to the facts when the summary has not been written — a page with
+// no meta description is worse than one describing only where and when.
+const description = data.summary ?? [where, dates].filter(Boolean).join(' · ');
+---
+
+<BaseLayout title={`${data.title} — Travel`} description={description}>
+  <article class="page">
+    <header class="page__header">
+      <a href="/about/travel" class="back">&larr; Travel</a>
+      <h1 class="page__title" data-reveal="split-lines">{data.title}</h1>
+      {data.summary && <p class="page__summary" data-reveal="fade-up">{data.summary}</p>}
+
+      <dl class="facts" data-reveal="fade-up">
+        <div>
+          <dt>Dates</dt>
+          <dd>{dates ?? 'To confirm'}</dd>
+        </div>
+        <div>
+          <dt>Length</dt>
+          <dd>{days ? `${days} days` : '—'}</dd>
+        </div>
+        {
+          data.country && (
+            <div>
+              <dt>Country</dt>
+              <dd>{data.country}</dd>
+            </div>
+          )
+        }
+        {
+          data.highlights.length > 0 && (
+            <div class="facts__wide">
+              <dt>Highlights</dt>
+              <dd>{data.highlights.join(' · ')}</dd>
+            </div>
+          )
+        }
+      </dl>
+    </header>
+
+    {
+      data.cover && (
+        <figure class="cover" data-reveal="fade-up">
+          <Image
+            src={data.cover}
+            alt={data.coverAlt ?? ''}
+            widths={[640, 1024, 1536]}
+            sizes="(min-width: 1024px) 56rem, 100vw"
+            class="cover__image"
+          />
+        </figure>
+      )
+    }
+
+    <div class="page__body" data-reveal="fade-up">
+      <Content />
+    </div>
+
+    {
+      data.gallery.length > 0 && (
+        <section class="gallery" aria-labelledby="gallery-heading">
+          <h2 id="gallery-heading" class="gallery__title" data-reveal="fade">
+            Photos
+          </h2>
+          <ul class="gallery__grid">
+            {data.gallery.map((photo, i) => (
+              <li data-reveal="fade-up" data-reveal-delay={String((i % 3) * 0.06)}>
+                <figure class="shot">
+                  <Image
+                    src={photo.src}
+                    alt={photo.alt}
+                    widths={[400, 800]}
+                    sizes="(min-width: 640px) 18rem, 100vw"
+                    class="shot__image"
+                  />
+                  {/* The alt text doubles as the caption. One description per
+                      photo, written once, and the sighted reader gets the same
+                      sentence the screen reader does. */}
+                  <figcaption class="shot__caption">{photo.alt}</figcaption>
+                </figure>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    <nav class="pager" aria-label="Other trips">
+      {
+        prev ? (
+          <a href={`/about/travel/${prev.id}`} class="pager__link">
+            <span class="pager__dir">Newer</span>
+            <span class="pager__title">{prev.data.title}</span>
+          </a>
+        ) : (
+          <span />
+        )
+      }
+      {
+        next && (
+          <a href={`/about/travel/${next.id}`} class="pager__link pager__link--next">
+            <span class="pager__dir">Older</span>
+            <span class="pager__title">{next.data.title}</span>
+          </a>
+        )
+      }
+    </nav>
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-3xl px-6 py-20 lg:py-28;
+  }
+
+  .page__header {
+    @apply mb-10 flex flex-col gap-3;
+  }
+
+  .back {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta transition-colors hover:text-accent;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .page__summary {
+    @apply text-lg leading-relaxed text-fg-muted;
+  }
+
+  .facts {
+    @apply mt-4 grid grid-cols-2 gap-4 border-y border-line py-4 sm:grid-cols-3;
+  }
+
+  .facts__wide {
+    @apply col-span-2 sm:col-span-3;
+  }
+
+  .facts dt {
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta;
+  }
+
+  .facts dd {
+    @apply mt-0.5 text-sm text-fg;
+  }
+
+  .cover {
+    @apply mb-10 overflow-hidden rounded-2xl bg-surface-2;
+  }
+
+  .cover__image {
+    @apply aspect-[3/2] w-full object-cover;
+  }
+
+  .page__body :global(p) {
+    @apply mb-4 leading-relaxed text-fg-body;
+  }
+
+  .page__body :global(h2) {
+    @apply mt-12 mb-4 text-2xl font-semibold tracking-tight;
+  }
+
+  /* Day headings carry the date, so they are set in mono and coloured like the
+     other metadata on the page rather than like a prose subheading. The rule
+     under them is what makes a run of six read as a list of days. */
+  .page__body :global(h3) {
+    @apply mt-8 mb-2 border-t border-line pt-4;
+    @apply font-mono text-xs uppercase tracking-[0.14em] text-fg-meta;
+  }
+
+  .page__body :global(ul) {
+    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-fg-body;
+  }
+
+  .page__body :global(a) {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+
+  .gallery {
+    @apply mt-16 border-t border-line pt-10;
+  }
+
+  .gallery__title {
+    @apply mb-4 font-mono text-xs uppercase tracking-[0.16em] text-fg-meta;
+  }
+
+  .gallery__grid {
+    @apply grid gap-5 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .shot {
+    @apply flex flex-col gap-2;
+  }
+
+  .shot__image {
+    @apply aspect-[4/3] w-full rounded-xl bg-surface-2 object-cover;
+  }
+
+  .shot__caption {
+    @apply text-xs leading-relaxed text-fg-meta;
+  }
+
+  .pager {
+    @apply mt-20 grid grid-cols-2 gap-4 border-t border-line pt-8;
+  }
+
+  .pager__link {
+    @apply flex flex-col gap-1 rounded-xl border border-line p-4 transition-colors hover:border-accent/40;
+  }
+
+  .pager__link--next {
+    @apply text-right;
+  }
+
+  .pager__dir {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta;
+  }
+
+  .pager__title {
+    @apply font-semibold text-fg;
+  }
+</style>

@@ -1,0 +1,222 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+import { formatTripDates } from '../../lib/content';
+
+interface Props {
+  entry: CollectionEntry<'trips'>;
+  /**
+   * Rendered in the left gutter for the first trip of each year, and omitted
+   * for the rest. Passed in rather than worked out here, because "is this the
+   * first of its year" is a fact about the list, not about the trip.
+   */
+  yearLabel?: string;
+}
+
+const { entry, yearLabel } = Astro.props;
+const { data } = entry;
+
+const dates = formatTripDates(data);
+---
+
+{/* One stop on the timeline. The rail itself is drawn by the parent, so this
+    only owns its dot and its content — that is what keeps the line continuous
+    across year boundaries instead of breaking at every group.
+
+    The dot marks the year, not the trip: it is drawn only alongside a year
+    label, so the rail reads as an axis with four marks on it rather than eight
+    identical beads. Decorative, hence aria-hidden — the year beside it is the
+    real content.
+
+    ONE markup tree serves both layouts. Gallery and compact differ only in CSS,
+    keyed off `html.trips-compact`; nothing here knows which view is showing.
+    The single ordering constraint that costs anything: the title precedes the
+    date in the DOM because that is the reading order that makes sense to a
+    screen reader, and compact wants the date *above* the title visually — so
+    `.cap` flips to `flex-col-reverse` there rather than the markup changing. */}
+<li class="entry" data-reveal="fade-up">
+  {
+    yearLabel && (
+      <>
+        <span class="entry__year">{yearLabel}</span>
+        <span class="dot" aria-hidden="true"></span>
+      </>
+    )
+  }
+
+  <a href={`/about/travel/${entry.id}`} class="row">
+    <div class="frame">
+      {
+        data.cover ? (
+          <Image
+            src={data.cover}
+            alt={data.coverAlt ?? ''}
+            widths={[400, 800, 1200]}
+            sizes="(min-width: 640px) 38rem, 100vw"
+            class="frame__image"
+          />
+        ) : (
+          /* Deliberate, not a broken image. In gallery view this is the biggest
+             thing on the page until real photos land, so it is hatched rather
+             than flat — a plain grey rectangle reads as a failed load, and a
+             ruled one reads as a space being held. */
+          <div class="frame__placeholder">
+            <span>Photo to come</span>
+          </div>
+        )
+      }
+    </div>
+
+    <div class="body">
+      <div class="cap">
+        <h3 class="title">
+          {data.title}{data.country && <span class="title__country">, {data.country}</span>}
+        </h3>
+        <p class="dates">{dates ?? 'Dates to confirm'}</p>
+      </div>
+
+      {data.summary && <p class="summary">{data.summary}</p>}
+
+      {
+        data.highlights.length > 0 && (
+          <ul class="chips">
+            {data.highlights.map((item) => (
+              <li class="chip">{item}</li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+  </a>
+</li>
+
+<style>
+  @reference "#styles";
+
+  /* ----------------------------------------------------------------- rail  */
+
+  /* Every offset here comes from a variable set on .timeline in the parent.
+     The spine is drawn there and has to start exactly at the centre of this
+     dot, so the two cannot be allowed to drift apart in separate files.
+
+     --dot-top is one value at every breakpoint because the dot tracks the year
+     label, and the label sits on the same baseline whether it is in the flow
+     (mobile) or in the gutter (sm and up). */
+  .dot {
+    @apply absolute size-2.5 rounded-full bg-accent;
+    top: var(--dot-top);
+    left: calc(var(--rail) - var(--dot-radius));
+  }
+
+  .entry__year {
+    @apply mb-2 block font-mono text-sm font-semibold tracking-[0.08em] tabular-nums text-fg-meta;
+    @apply sm:absolute sm:top-0 sm:left-0 sm:mb-0 sm:w-14 sm:text-right;
+  }
+
+  /* ------------------------------------------------------- gallery (default) */
+
+  .entry {
+    @apply relative pb-12 pl-9 last:pb-0 sm:pb-16 sm:pl-28;
+  }
+
+  .row {
+    @apply flex flex-col gap-4;
+  }
+
+  .frame {
+    @apply aspect-[16/9] w-full overflow-hidden rounded-2xl bg-surface-2;
+  }
+
+  .frame__image {
+    @apply h-full w-full object-cover transition-transform duration-500;
+  }
+
+  .row:hover .frame__image {
+    @apply scale-[1.02];
+  }
+
+  /* 8px diagonal rule. Low contrast on purpose — it should read as texture at a
+     glance and only resolve into stripes if you look. */
+  .frame__placeholder {
+    @apply flex h-full w-full items-center justify-center;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.14em] text-fg-faint;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent 0 7px,
+      var(--color-line) 7px 8px
+    );
+  }
+
+  .body {
+    @apply flex flex-col gap-2;
+  }
+
+  .cap {
+    @apply flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1;
+  }
+
+  .title {
+    @apply text-xl font-semibold tracking-tight text-fg;
+  }
+
+  .row:hover .title {
+    @apply text-accent;
+  }
+
+  /* Lighter than the place so the pair reads as one line, not two facts. */
+  .title__country {
+    @apply font-normal text-fg-meta;
+  }
+
+  .dates {
+    @apply font-mono text-xs tracking-[0.04em] tabular-nums text-fg-meta;
+  }
+
+  .summary {
+    @apply max-w-prose text-sm leading-relaxed text-fg-muted;
+  }
+
+  .chips {
+    @apply flex flex-wrap gap-1.5 pt-0.5;
+  }
+
+  .chip {
+    @apply rounded bg-surface-2 px-2 py-0.5 font-mono text-[0.7rem] text-fg-muted;
+  }
+
+  /* --------------------------------------------------------------- compact  */
+
+  /* Everything below is an override of the block above. Written as overrides
+     rather than as a second complete set so the two views cannot drift on the
+     properties they agree about — colour, type, hover, the rail. */
+
+  :global(html.trips-compact) .entry {
+    @apply pb-5 sm:pb-5;
+  }
+
+  :global(html.trips-compact) .entry:not(:last-child) .row {
+    @apply border-b border-line pb-5;
+  }
+
+  :global(html.trips-compact) .row {
+    @apply flex-row items-start gap-4 sm:gap-5;
+  }
+
+  :global(html.trips-compact) .frame {
+    @apply aspect-[4/3] w-24 shrink-0 rounded-xl sm:w-44;
+  }
+
+  :global(html.trips-compact) .body {
+    @apply min-w-0 flex-1;
+  }
+
+  /* Date above title. The DOM order is title-then-date for screen readers; this
+     flips it visually without touching the markup. */
+  :global(html.trips-compact) .cap {
+    @apply flex-col-reverse items-start justify-start gap-0;
+  }
+
+  :global(html.trips-compact) .title {
+    @apply text-lg;
+  }
+</style>

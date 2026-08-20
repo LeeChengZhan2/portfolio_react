@@ -44,6 +44,27 @@ Eager JS rose 49.7 → 49.8 KB: `theme.ts` joined the bundled module script, and
 whole cost of the theme toggle. It is a delegated listener, not an island — see below. CSS is
 newly tracked here; the theme layer is ~0.4 KB of it.
 
+The travel section (20 Aug 2026) costs **0.36 KB gz of JavaScript, on `/about/travel` alone** —
+the layout toggle, and nothing else. The trip pages and the timeline itself ship none.
+
+Measured by walking the emitted module graph, not by scraping `<script src>` out of the HTML:
+GSAP is reached through static imports between chunks, so an HTML-only count misses most of it
+and reports a number that moves when Rolldown re-chunks. Site-wide eager JS went 50.0 → 50.3 KB
+gz, and the 0.3 KB is re-chunking, not code: `trips-view.ts` is a third importer of
+ScrollTrigger, so Rolldown hoisted it out of the BaseLayout entry into its own chunk, and two
+chunks compress slightly worse than one. Exactly the effect already documented above for GSAP.
+
+| | before | after |
+|---|---|---|
+| `gsap.*.js` | 26.41 | 26.41 |
+| `ScrollTrigger.*.js` | — | 17.01 |
+| BaseLayout entry | 23.59 | 6.88 |
+| travel toggle (`/about/travel` only) | — | 0.36 |
+
+Shared CSS moved 7.73 → 8.01 KB gz. The travel timeline carries 2.7 KB of page-scoped CSS —
+high because it holds two complete layouts — and a trip page 1.7 KB, against 1.4 KB for a plain
+About section.
+
 The eager figure rose 49.2 → 49.7 KB on *all fifteen pages* because GSAP now has two importers
 (the BaseLayout script and the island), so Rolldown hoists it into a shared
 `_astro/gsap.*.js`. Two chunks compress slightly worse than one — that 0.5 KB is the entire
@@ -57,9 +78,10 @@ behaviour would cost ~2 KB. The island is a deliberate learning-goal decision
 
 Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 
-Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`, `/work`,
+Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`,
+`/about/travel/{chengdu,tokyo,phuket,taiwan,bali,guangzhou-shenzhen,shanghai,bangkok}`, `/work`,
 `/work/{ai-agent-bms,cloud-data-platform,bms-platform,alliance-bank,bank-negara,school-fyp,open-source}`,
-`/404` — 15 pages.
+`/404` — 23 pages.
 
 **Content was rewritten against the author's CV on 19 Aug 2026**, which moved the site's
 whole story. It used to say "BMS driver development"; the CV says the current work is
@@ -101,10 +123,15 @@ not finished prose. `/about/travel` and `/about/investing` additionally carry th
    one effect too many.
 3. **Audit every page at 390px.** `/about/[slug]` and `/work/[slug]` have never been looked at
    on a narrow viewport. Legacy's `about-flex-container` was a hard two-column flex at every
-   width; confirm that did not get ported.
+   width; confirm that did not get ported. `/about/travel` and `/about/travel/[trip]` (20 Aug
+   2026) have been driven in Chrome at 390px and 1280px in both themes, including a geometry
+   probe confirming the timeline dots centre on the rail at both breakpoints. The parts still
+   unwatched there are the ones needing real photos: the cover frame and the gallery grid.
 
-**After responsive, phase 5 — content.** No longer stubs: the 19 Aug 2026 CV pass took every
-work entry to 300–500 words of true, specific material. What is left is the author's own
+**After responsive, phase 5 — content.** The travel half is now scaffolded rather than written:
+eight trip files exist with real dates and empty day headings (20 Aug 2026), and filling them
+is the author's job, not Claude's — see "Travel" under Content. No longer stubs: the 19 Aug
+2026 CV pass took every work entry to 300–500 words of true, specific material. What is left is the author's own
 voice and the details a CV cannot carry — each file's closing comment lists them per page.
 The two highest-value ones are a real debugging story on `bms-platform`, and naming the
 building-data standard on `cloud-data-platform`.
@@ -437,6 +464,149 @@ Two placement constraints, both deliberate:
 Keep `summary` well under the zod cap of 180 characters. It is rendered on a carousel card
 roughly 22rem wide, and every `stack` entry becomes a chip on that same card — past about
 seven chips the cards visibly grow, and they all stretch to match the tallest.
+
+### Travel — a second collection under one section (20 Aug 2026)
+
+`/about/travel` is the only About section that indexes a collection of its own. Trips live in
+`src/content/trips/*.md`, one file per destination, and render twice: as an entry on the
+`/about/travel` timeline and as a page at `/about/travel/<id>`.
+
+**Why it is not one long page.** Eight trips, each with a day-by-day account and a gallery, is
+somewhere north of 5,000 words and a hundred photographs on a single route. Splitting gives
+every trip a URL worth sending someone, and keeps a phone from downloading Chengdu to read
+about Bangkok. It is the `/work` + `/work/[slug]` shape, which this repo already proves.
+
+**A timeline, not a grid.** Chosen by the author over a year-grouped grid, an index list and
+full-width feature bands, on the grounds that the sequence is the most important thing about
+the section. A 2-up grid reads left-right-left-right and buries chronology; a vertical spine
+draws it. The rail is one `::before` on the `<ol>` rather than a border per entry, which is
+what keeps it unbroken through the year labels — grouping the markup by year would cut the line
+at every boundary, so the year label is instead handed to the first entry of each run and
+positioned into the gutter.
+
+**Two views over one markup tree** (20 Aug 2026). `gallery` is the default — one 16:9 photo per
+trip with the caption underneath. `compact` collapses to a thumbnail on the left and text on the
+right, with a hairline between entries. The author picked the gallery as the default and asked
+for the collapse; both were mocked up first at `/layout-preview`, a throwaway page since deleted.
+
+Nothing is re-rendered. `TripEntry.astro` emits one DOM and the compact rules are overrides
+keyed off `html.trips-compact`, written as overrides rather than a second complete rule set so
+the two views cannot drift on the properties they agree about. The one thing that costs
+anything: the title precedes the date in the DOM because that is the sensible reading order,
+and compact wants the date *above* the title, so `.cap` flips to `flex-col-reverse` there rather
+than the markup forking.
+
+The class goes on `<html>`, not on the list, so the `is:inline` head script on the travel page
+can restore a stored choice before first paint — the same pattern and the same try/catch as the
+theme. That script rides a **`<slot name="head" />` added to BaseLayout** for the purpose;
+pages that pass nothing render nothing, and the cost stays off the other fourteen routes.
+`TripsViewToggle.astro` hides itself behind `html.js`, and its selected state is driven by the
+html class rather than `aria-pressed` so it is right on the first painted frame.
+
+**`trips-view.ts` must call `ScrollTrigger.refresh()` after switching.** This is not defensive
+tidying — without it the page is visibly broken. Toggling changes the page height by thousands
+of pixels (6657 → 3878, measured), every reveal trigger is still holding the start position it
+computed against the old layout, and entries below the fold are stranded at `opacity: 0`. The
+last one never appears *at all*, because its trigger now sits past the bottom of the shortened
+page; scrolling to the end does not rescue it. Verified before and after in Chrome, and across
+four toggles in a row. The refresh is wrapped in `requestAnimationFrame` so the browser has
+applied the new layout before ScrollTrigger measures it, and the triggers are `once: true`, so
+refreshing cannot re-hide anything already revealed.
+
+**The placeholder is hatched, not flat.** In gallery view an empty frame is the biggest thing on
+the page, and a plain grey rectangle reads as a failed image load. An 8px diagonal rule reads as
+a space being held. It disappears the moment a `cover` is set.
+
+**`highlights` are seeded and are guesses** (20 Aug 2026). Every trip carries 3–4 chips — Panda
+Base, Shibuya, Wat Arun — added at the author's request to judge the layout with something in
+them. They are the obvious landmarks per destination, **not a record of where the author went**,
+and every file says so at the field and again at the foot. They are the reason the entries stopped
+looking empty, so do not clear them without replacing them.
+
+**A dot marks a year, not a trip** (changed 20 Aug 2026, at the author's request). Eight
+identical beads down the line gave the rail no landmarks — every entry looked equally
+significant and the years did not stand out. There are now four marks, one per year, each
+sitting on its label's midline. `TripEntry.astro` draws the dot only when it is handed a
+`yearLabel`, which is the same condition that renders the label itself, so the two cannot
+appear apart.
+
+All the spine geometry (`--rail`, `--dot-radius`, `--dot-top`) is declared on `.timeline` in
+`about/travel/index.astro` and inherited by `TripEntry.astro`. **Keep it that way** — the dots
+and the line they sit on are drawn in two different files, and hard-coding the offsets in both
+is how they end up three pixels apart with nobody noticing. `--dot-top` needs no breakpoint
+variant now that the dot tracks the year label, whose midline does not move when the label
+leaves the flow for the gutter at `sm`. Verified in Chrome: dot centres land exactly on the
+rail at 390px and 1280px.
+
+**There is no `order` field, deliberately.** The timeline sorts on `start` alone, newest first.
+An earlier revision had a curated `order`, which was right while three trips were undated —
+but every trip now carries at least a month, and a hand-maintained sequence sitting next to
+printed dates is a second source of truth that can visibly contradict the first. Undated trips
+sort to the end.
+
+**Dates carry their own precision: `2024`, `2024-10` or `2024-10-15`.** Shanghai, the
+Guangzhou/Shenzhen trip and the Taiwan one are month-precision — the author knows the month and has not yet checked the days. The
+schema accepts all three shapes and `formatTripDates()` renders exactly what it was given
+(`"Oct 2024"`, never an invented day). `tripDays()` returns null below day precision rather
+than guessing, so the trip page shows no Length for one. The date itself is the only signal an
+entry is approximate — `Jul 2025` against `14–18 Nov 2025` — and that is enough. Two other
+signals have been tried and removed: a hollow rail dot (gone when dots became year marks, since
+a *year* is never approximate) and a day count on the timeline card (removed 20 Aug 2026 at the
+author's request; it doubled the meta line to restate what the range already showed).
+`tripDays()` is now used on the trip page alone, where a fact list is the right home for it.
+
+**A trip `summary` must not open with a duration.** Five of them started "Six days in Chengdu…"
+and were trimmed when the day count came off the card — a summary printed directly under the
+date range should not restate it. The essay below the timeline still talks about trips being
+"four to seven days each"; that is a claim about the shape of the whole list, not a duration
+printed against a single trip, and it stays.
+
+**Two cities in one trip go in one entry** (20 Aug 2026): `Taichung & Taipei, Taiwan` and
+`Guangzhou & Shenzhen, China`. The timeline plots trips, not stops — splitting them would put
+two marks on the rail for one flight out and back, and both halves would carry the same dates.
+
+The two slugs are asymmetric on purpose. `taiwan.md` keeps its name because the country is the
+natural handle for a trip that stayed inside one; `guangzhou-shenzhen.md` was renamed from
+`guangzhou` because `china` is not available as a handle — three separate trips went there.
+Renaming was free before launch and will not be after.
+
+**Quote the dates.** `start: '2023-11-03'`, not `start: 2023-11-03` — YAML reads a bare
+`yyyy-mm-dd` as a timestamp and hands zod a `Date`, which fails the schema. They are stored as
+strings on purpose: a `Date` is UTC midnight and formats a day early anywhere west of
+Greenwich, and it cannot represent "October 2024" at all.
+
+`formatTripDates()` and `tripDays()` in `src/lib/content.ts` are the single source for both,
+because the range appears on the timeline, on the detail page and in the meta description. The
+range dash is tight inside one month (`3–8 Nov 2023`) and spaced when whole dates sit either
+side (`26 Jun – 1 Jul 2026`), so "1 Jul" cannot read as part of "26 Jun". Day counts are
+inclusive — 3–8 Nov is six days, matching the "Day 6" heading in the body.
+
+**`src/pages/about/[slug].astro` explicitly skips `travel`.** Both it and
+`about/travel/index.astro` emit `about/travel.html`, and Astro's static-beats-dynamic rule
+would pick a winner without saying so. The filter is in `getStaticPaths` only — `travel` stays
+in the list the prev/next pager reads from, which is why those are two separate variables.
+
+**Day headings are generated, then pasted into the markdown.** `### Day 3 — Sun 5 Nov` is
+plain markdown so the prose under it stays easy to write, which means it can drift from the
+frontmatter. Each file says so at the point of use: correct the dates, correct the headings.
+They are set in mono with a rule above them on the detail page, so a run of six reads as a
+list of days rather than six prose subheadings.
+
+**Photos go in `src/assets/travel/<id>/`, never `public/`** — see the README there. The schema
+fails the build on a `cover` with no `coverAlt`, and every gallery entry needs an `alt`, which
+doubles as the visible caption: one description per photo, written once. Until a cover exists
+the frame renders a "Photo to come" placeholder, which is deliberate — the timeline has to look
+composed while eight trips wait for their photos.
+
+`src/content/sections/travel.md` is now the essay **under** the timeline, not the page. Its
+first heading ("Why the list looks like this") only makes sense in that position.
+
+**All eight trips are Claude-scaffolded drafts (20 Aug 2026) and say so at the foot of each
+file.** Everything in them is calendar arithmetic off the destination and the dates — nothing
+about the trips themselves has been invented, which is why the day headings have no text under
+them. The one real finding worth keeping: every trip whose exact days are known starts on a
+Friday, five out of five. The essay's second paragraph is built on that, so re-check it when
+the three month-precision trips get their days.
 
 ## Additional guidelines
 

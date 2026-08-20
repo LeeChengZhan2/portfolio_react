@@ -1,0 +1,55 @@
+---
+// Segmented control for the travel timeline's two layouts. Not an island — see
+// src/scripts/trips-view.ts for why.
+---
+
+{/*
+  aria-pressed below is the GALLERY default. It has to be something at build
+  time, and a static build cannot know what the visitor stored — trips-view.ts
+  corrects it on load, before any interaction. The *visual* selected state does
+  not rely on it: it is driven by the `html.trips-compact` class, which the
+  inline head script sets pre-paint, so the right option is highlighted even on
+  the frame before the module loads.
+*/}
+<div class="view" role="group" aria-label="Trip layout">
+  <button type="button" class="opt opt--gallery" data-trips-view="gallery" aria-pressed="true">
+    Gallery
+  </button>
+  <button type="button" class="opt opt--compact" data-trips-view="compact" aria-pressed="false">
+    Compact
+  </button>
+</div>
+
+<style>
+  @reference "#styles";
+
+  /* Hidden without JS — the buttons would be inert, and an inert control is
+     worse than no control. Reuses the `html.js` gate global.css establishes. */
+  .view {
+    @apply hidden;
+  }
+
+  :global(html.js) .view {
+    @apply inline-flex flex-none gap-0.5 rounded-full border border-line p-0.5;
+  }
+
+  .opt {
+    @apply rounded-full px-3 py-1 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta hover:text-accent;
+  }
+
+  /* Selected state, keyed off the <html> class rather than aria-pressed so it
+     is correct on the first painted frame. Gallery is the default, so it is the
+     one lit until the compact class appears. */
+  .opt--gallery {
+    @apply bg-surface-2 text-fg;
+  }
+
+  :global(html.trips-compact) .opt--gallery {
+    @apply bg-transparent text-fg-meta;
+  }
+
+  :global(html.trips-compact) .opt--compact {
+    @apply bg-surface-2 text-fg;
+  }
+</style>

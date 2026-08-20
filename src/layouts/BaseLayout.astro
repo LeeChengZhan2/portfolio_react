@@ -97,6 +97,12 @@ const ogImageUrl = new URL(ogImage, Astro.site);
         }
       } catch (e) {}
     </script>
+
+    <!-- For page-specific pre-paint work only. `/about/travel` uses it to
+         restore a stored layout choice before the timeline is parsed; putting
+         that script here rather than in the block above keeps its cost off the
+         other fourteen pages. Renders nothing when a page passes nothing. -->
+    <slot name="head" />
   </head>
 
   <body>
