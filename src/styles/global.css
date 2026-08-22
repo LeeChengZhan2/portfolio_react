@@ -116,6 +116,171 @@
   color-scheme: light;
 }
 
+/* ---------------------------------------------------------------------------
+   Light theme variants
+
+   Seven alternative light palettes, each a COMPLETE replacement for the
+   semantic set above rather than a diff — a partial set would inherit whatever
+   the default happens to be and drift the moment the default changes. The
+   default (no class) is Classic, the original white theme, so it needs no block
+   of its own and nothing here restates its values.
+
+   Written as a bare class, `.theme-sage`, not `:root.theme-sage`. That is
+   deliberate and load-bearing in two places:
+
+   1. On <html> it themes the page, beating the `@theme static` block because
+      unlayered rules beat layered ones whatever their specificity.
+   2. On any ELEMENT it themes that subtree, because custom properties inherit
+      from the nearest ancestor that declares them. That is what lets the theme
+      picker draw a live swatch of each palette — real `bg-bg`, `bg-surface` and
+      `bg-accent` utilities inside a tagged <span> — with no second copy of these
+      hexes in the markup to fall out of sync.
+
+   Dark still wins over all of them: `:root.dark` is (0,2,0) against (0,1,0)
+   here, so a stored light choice survives underneath the dark theme and comes
+   back when dark is switched off.
+
+   Every value below was measured, not eyeballed. Each variant clears WCAG AA on
+   body prose (7.8–8.7:1 against the 4.5:1 floor), keeps eyebrow text over 4.5:1
+   on both the page and the band, keeps `fg-faint` over the 3:1 UI floor on
+   `surface-2`, and keeps the band → surface step over ΔL* 3 so a card still
+   reads as raised. Classic is the only one that misses any of those — its
+   `fg-faint` is 2.31:1 on a chip — and it is left exactly as shipped.
+--------------------------------------------------------------------------- */
+
+.theme-warm-paper {
+  --color-bg: #faf7f2;
+  --color-band: #f2ece2;
+  --color-surface: #fffdf9;
+  --color-surface-2: #efe8dc;
+  --color-fg: #241f19;
+  --color-fg-body: #4c463d;
+  --color-fg-muted: #5d564b;
+  --color-fg-meta: #6f6759;
+  --color-fg-faint: #8d8372;
+  --color-line: #e7dfd1;
+  --color-line-strong: #d6cbb9;
+  --color-accent: #1d3f8f;
+  --color-invert: #2b251d;
+  --color-on-invert: #faf7f2;
+  --color-footer: #2b251d;
+  --color-footer-fg: #e7dfd1;
+}
+
+.theme-soft-gray {
+  --color-bg: #f4f5f7;
+  --color-band: #e9ebef;
+  --color-surface: #fdfdfe;
+  --color-surface-2: #e4e7ec;
+  --color-fg: #1f242b;
+  --color-fg-body: #414a55;
+  --color-fg-muted: #525c68;
+  --color-fg-meta: #5e6673;
+  --color-fg-faint: #7d8590;
+  --color-line: #dee2e8;
+  --color-line-strong: #c8ced6;
+  --color-accent: #002fa7;
+  --color-invert: #1f242b;
+  --color-on-invert: #ffffff;
+  --color-footer: #232a33;
+  --color-footer-fg: #dee2e8;
+}
+
+.theme-sage {
+  --color-bg: #eef1ec;
+  --color-band: #e3e9df;
+  --color-surface: #f7f9f5;
+  --color-surface-2: #dfe6da;
+  --color-fg: #232a24;
+  --color-fg-body: #434c43;
+  --color-fg-muted: #525c51;
+  --color-fg-meta: #5b655a;
+  --color-fg-faint: #78826f;
+  --color-line: #d6ddd2;
+  --color-line-strong: #c1cabb;
+  --color-accent: #2f6b4f;
+  --color-invert: #2a332b;
+  --color-on-invert: #f2f5f0;
+  --color-footer: #232a24;
+  --color-footer-fg: #d6ddd2;
+}
+
+.theme-sepia {
+  --color-bg: #f3ebdd;
+  --color-band: #eae0cf;
+  --color-surface: #faf4e9;
+  --color-surface-2: #e6dbc6;
+  --color-fg: #2b2318;
+  --color-fg-body: #4f4436;
+  --color-fg-muted: #5f5344;
+  --color-fg-meta: #6b5f4e;
+  --color-fg-faint: #847760;
+  --color-line: #e0d4bd;
+  --color-line-strong: #cdbfa4;
+  --color-accent: #8a4b1f;
+  --color-invert: #33291b;
+  --color-on-invert: #f7f1e6;
+  --color-footer: #33291b;
+  --color-footer-fg: #e0d4bd;
+}
+
+.theme-mist {
+  --color-bg: #eef2f6;
+  --color-band: #e3eaf1;
+  --color-surface: #f8fafc;
+  --color-surface-2: #dfe7ee;
+  --color-fg: #1d2731;
+  --color-fg-body: #3e4a56;
+  --color-fg-muted: #4d5966;
+  --color-fg-meta: #5a6672;
+  --color-fg-faint: #76828e;
+  --color-line: #d8e0e8;
+  --color-line-strong: #c2ccd6;
+  --color-accent: #0e5b74;
+  --color-invert: #1d2731;
+  --color-on-invert: #f8fafc;
+  --color-footer: #1d2731;
+  --color-footer-fg: #d8e0e8;
+}
+
+.theme-lavender {
+  --color-bg: #f1eff7;
+  --color-band: #e7e4f2;
+  --color-surface: #faf9fd;
+  --color-surface-2: #e3dff0;
+  --color-fg: #262234;
+  --color-fg-body: #474155;
+  --color-fg-muted: #565064;
+  --color-fg-meta: #635d72;
+  --color-fg-faint: #827c93;
+  --color-line: #ded9ec;
+  --color-line-strong: #c8c2de;
+  --color-accent: #4b3a9c;
+  --color-invert: #2b2740;
+  --color-on-invert: #f6f4fb;
+  --color-footer: #2b2740;
+  --color-footer-fg: #ded9ec;
+}
+
+.theme-clay {
+  --color-bg: #f6eeec;
+  --color-band: #eee3e0;
+  --color-surface: #fdf7f6;
+  --color-surface-2: #ebddda;
+  --color-fg: #2e2220;
+  --color-fg-body: #52423f;
+  --color-fg-muted: #61504c;
+  --color-fg-meta: #6d5b57;
+  --color-fg-faint: #8c7772;
+  --color-line: #e6d7d3;
+  --color-line-strong: #d3c0bb;
+  --color-accent: #9a3b34;
+  --color-invert: #382a27;
+  --color-on-invert: #f9f2f0;
+  --color-footer: #382a27;
+  --color-footer-fg: #e6d7d3;
+}
+
 /* Dark, applied only when the toggle has stored that choice. */
 :root.dark {
   color-scheme: dark;

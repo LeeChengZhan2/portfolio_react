@@ -1,6 +1,7 @@
 ---
 import { getSections, getWork } from '../../lib/content';
 import ThemeToggle from './ThemeToggle.astro';
+import ThemePicker from './ThemePicker.astro';
 
 const sections = await getSections();
 const work = await getWork();
@@ -28,6 +29,11 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
 
 <header class="navbar">
   <nav class="nav-container" aria-label="Main">
+    {/* Left of Home, and a pill rather than a `.nav-link`: it is a control, not
+        a section of the site, and the shape says so before the label is read.
+        It re-themes the page you are on — there is no preview route any more. */}
+    <ThemePicker />
+
     <a href="/" class:list={['nav-link', { 'is-active': isActive('/') }]}>Home</a>
 
     <div class="group relative inline-block">
@@ -119,8 +125,15 @@ const chevron = 'm19.5 8.25-7.5 7.5-7.5-7.5';
     @apply scale-x-100;
   }
 
+  /* Anchored to the trigger's right edge on narrow screens, centred under it
+     from `sm` up. Centring at every width is what made a 15rem panel hang past
+     the viewport: the dropdown still takes part in layout while invisible, so
+     that overhang is 48px of sideways scroll on a 390px phone, on every page,
+     with nothing visible to explain it. Right-anchoring cannot overhang —
+     the trigger's right edge is inside the viewport by definition. */
   .dropdown {
-    @apply invisible absolute left-1/2 z-50 mt-2 w-60 -translate-x-1/2 translate-y-1 rounded-xl bg-surface/95 p-2 opacity-0 shadow-xl ring-1 ring-line backdrop-blur-md transition-all duration-150;
+    @apply invisible absolute right-0 z-50 mt-2 w-60 translate-y-1 rounded-xl bg-surface/95 p-2 opacity-0 shadow-xl ring-1 ring-line backdrop-blur-md transition-all duration-150;
+    @apply sm:right-auto sm:left-1/2 sm:-translate-x-1/2;
     @apply group-hover:visible group-hover:translate-y-0 group-hover:opacity-100;
     @apply group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100;
   }

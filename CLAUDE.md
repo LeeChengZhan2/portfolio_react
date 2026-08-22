@@ -65,6 +65,12 @@ Shared CSS moved 7.73 → 8.01 KB gz. The travel timeline carries 2.7 KB of page
 high because it holds two complete layouts — and a trip page 1.7 KB, against 1.4 KB for a plain
 About section.
 
+**Seven light themes and the picker (22 Aug 2026)** moved shared CSS 8.01 → 9.66 KB gz and
+site-wide eager JS 50.3 → 50.9 KB gz. The CSS is seven complete sixteen-token blocks plus the
+picker's styles; the JS is the picker's open/close, selection and persistence joining the
+existing `theme.ts` in the BaseLayout entry chunk. **No island, on a component that is on every
+page** — that is what the 0.6 KB buys instead of 55.9 KB of React runtime everywhere.
+
 The eager figure rose 49.2 → 49.7 KB on *all fifteen pages* because GSAP now has two importers
 (the BaseLayout script and the island), so Rolldown hoists it into a shared
 `_astro/gsap.*.js`. Two chunks compress slightly worse than one — that 0.5 KB is the entire
@@ -81,7 +87,8 @@ Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`,
 `/about/travel/{chengdu,tokyo,phuket,taiwan,bali,guangzhou-shenzhen,shanghai,bangkok}`, `/work`,
 `/work/{ai-agent-bms,cloud-data-platform,bms-platform,alliance-bank,bank-negara,school-fyp,open-source}`,
-`/404` — 23 pages.
+`/404`, `/theme-preview` — 24 pages. `/theme-preview` is `noindex` and excluded from the
+sitemap: it is the eight light themes side by side, reachable from the picker in the header.
 
 **Content was rewritten against the author's CV on 19 Aug 2026**, which moved the site's
 whole story. It used to say "BMS driver development"; the CV says the current work is
@@ -117,6 +124,16 @@ not finished prose. `/about/travel` and `/about/investing` additionally carry th
    has to place it deliberately — it should stay reachable when the nav is collapsed, not get
    swept inside the drawer. `theme.ts` is delegated on `document`, so it keeps working wherever
    the button ends up.
+   **`ThemePicker.astro` is the model to copy** (22 Aug 2026): click-driven, delegated from
+   `theme.ts`, `aria-expanded`/`aria-controls`, Escape with focus returned, outside-click and
+   focus-out dismissal, and it hides itself behind `html.js`. Its menu is centred on the
+   `.navbar` rather than on its own button — the picker sets no `position`, so the sticky header
+   is the containing block — which is why a 30rem panel cannot overflow a 390px screen.
+   One piece is already done (22 Aug 2026): the dropdowns are anchored `right-0` below `sm` and
+   only centred from `sm` up. A centred `w-60` panel hung past the right edge of a 390px
+   viewport, and because it stays in layout while invisible that was 48px of sideways scroll on
+   every page with nothing on screen to explain it. Right-anchoring cannot overhang. Keep that
+   split when the drawer replaces this.
 2. **Verify the hero parallax on a real phone.** Rewritten, type-checked, never watched
    scrolling. The carousel *has* been driven in a browser (see "Carousel" below); this has not.
    Decide the optional `scale: 1.08 → 1` (docs/REBUILD.md §12) at the same time — it may be
@@ -258,6 +275,22 @@ When changing any of this, re-verify in a real browser. `astro check` type-check
 but proves nothing about whether it moves — that is exactly how the hero parallax ended up
 shipped-but-unwatched.
 
+**If the carousel renders but does not move in `npm run dev`, it is not the carousel.** Fixed
+22 Aug 2026 with `vite.optimizeDeps.include` in `astro.config.mjs`, and worth knowing because
+the symptom points at the wrong file. `gsap` and `@gsap/react` are reached only from this
+island, which is `client:visible`, so Vite never saw them until the carousel scrolled into
+view — mid-session. Discovering a dependency that late forces a re-optimize, the dep hash
+changes, and the island's in-flight import dies on
+`504 (Outdated Optimize Dep) /node_modules/.vite/deps/@gsap_react.js`. The island then never
+hydrates: three static cards, `overflow-x: auto`, no loop, and nothing in the page that looks
+broken. Pre-bundling those three specifiers at server start leaves nothing to discover.
+It survived clearing `node_modules/.vite` and restarting, so do not go looking for a stale
+cache — late discovery is structural, and it repeats on every load.
+
+**Production builds never had this**, which is the tell: the built site resolves the whole
+module graph up front. Measured at 121 px/s in both `npm run preview` and `npm run dev` after
+the fix, against the 120 px/s the constants intend.
+
 ### Directory convention
 
 Components are split by **rendering cost**, not feature:
@@ -344,17 +377,109 @@ tokens nothing happens to reference — that is real, not theoretical: `--color-
 reached through `@apply`, and it silently vanished from `:root`, surviving on the literal
 fallback Tailwind bakes into reference-mode output.
 
-**How a theme is chosen.** `.dark` is the only theme class — there is no `.light`, because
-nothing needs one once no media query has to be overridden. The `is:inline` head script in
-`BaseLayout.astro` adds it before first paint when `localStorage.theme === "dark"`, verified
-with a 242-frame probe that never sampled a light frame. `src/scripts/theme.ts` handles the
-click and nothing else. The toggle is `src/components/astro/ThemeToggle.astro` — a delegated
-listener, **not an island**, because the header is on all fifteen pages.
+**How a theme is chosen.** `.dark` is the only *dark* class — there is no `.light`, because
+nothing needs one once no media query has to be overridden. Light itself now has a second
+class, `.theme-<id>`, for the palette variants; the two are independent and `:root.dark`
+outranks all of them. The `is:inline` head script in `BaseLayout.astro` applies both before
+first paint — dark verified with a 242-frame probe that never sampled a light frame, the light
+variants with an eight-frame probe after reload that never sampled a Classic frame.
+`src/scripts/theme.ts` handles the clicks and nothing else. The controls are
+`src/components/astro/ThemeToggle.astro` and `ThemePicker.astro` — delegated listeners,
+**not islands**, because the header is on every page. See "Light theme variants" below.
 
-Failure modes, both of which land on light: JS disabled (no class is ever added, and the toggle
-hides itself behind the `html.js` gate), and `localStorage` throwing in private mode (the
-try/catch swallows it; the toggle still works for that page view but is not remembered).
+Failure modes, all landing on Classic light: JS disabled (no class is ever added, and both
+controls hide themselves behind the `html.js` gate), and `localStorage` throwing in private
+mode (the try/catch swallows it; the controls still work for that page view but are not
+remembered).
 
+### Light theme variants and the picker (22 Aug 2026)
+
+The author's complaint was glare: the light theme is too bright, worst in the second after
+leaving dark. The answer shipped is **eight light themes and a picker in the header**, not one
+replacement default — the brightness that is comfortable is a matter of screen, room and eyes,
+and the site can just let the reader say.
+
+**Classic is still the default.** Nothing about a first visit changed: no class on `<html>`,
+the base `@theme static` values, the white theme exactly as it shipped. The other seven are
+opt-in and remembered.
+
+| Theme | Page | Character |
+|---|---|---|
+| Classic | `#ffffff` · 100 L* | The original. Klein blue. |
+| Paper (`warm-paper`) | `#faf7f2` · 97.7 | Warm ivory, warm-gray ink, softer navy |
+| Soft gray | `#f4f5f7` · 97.0 | Neutral gray page, near-white cards, Klein blue |
+| Sage | `#eef1ec` · 95.4 | Green-tinted, deep green accent |
+| Sepia | `#f3ebdd` · 94.3 | Tan page, brown ink, rust accent |
+| Mist | `#eef2f6` · 95.9 | Cool blue-gray, deep teal accent |
+| Lavender | `#f1eff7` · 95.6 | Violet-tinted, indigo accent |
+| Clay | `#f6eeec` · 95.5 | Warm rose, brick accent |
+
+Every one of the seven was measured, not eyeballed: body prose 7.8–8.7:1 (AA needs 4.5),
+eyebrow text over 4.5:1 on both page and band, `fg-faint` over the 3:1 UI floor on `surface-2`,
+and the band → surface step over ΔL* 3 so a card still reads as raised. **Classic is the only
+theme that misses any of that** — its `fg-faint` is 2.31:1 on a chip, and its page and cards
+are both `#ffffff` so a card is raised by its hairline alone. Both are real faults in the
+original, left alone so Classic stays what shipped.
+
+**Two axes, two keys, and that is the whole design.** `theme` is `dark`/`light`; `light-theme`
+is which palette light means. Separate keys are what let a light choice survive a trip through
+dark and come back when dark is switched off — a single "current theme" key would have to
+forget one to remember the other. Picking a light theme *while dark* leaves dark and stores
+`light`, because otherwise the click would change nothing visible and the picker would look
+broken.
+
+**The palettes live in CSS and nowhere else.** `src/lib/themes.ts` holds ids, names and hints —
+**no hex values**. Each palette is one `.theme-<id>` block in `global.css`, written as a bare
+class rather than `:root.theme-<id>` so it works in two places: on `<html>` it themes the page,
+and on any element it themes that subtree, because custom properties inherit from the nearest
+ancestor that declares them. That second half is what draws the picker's swatches — real
+`bg-bg` / `bg-band` / `bg-accent` utilities inside a tagged `<span>` — with no second copy of
+the hexes to fall out of sync, and it is why the swatches stay correct even in dark mode.
+`/theme-preview` renders all eight side by side on the same mechanism.
+
+Adding a theme is exactly two edits: a `.theme-<id>` block in `global.css`, and an entry in
+`LIGHT_THEMES` whose `id` matches. Nothing else — not the picker, not the bootstrap script,
+not the selected-state CSS. **Insert it at its hue, not at the end** — see below.
+
+**The row is ordered by colour** (22 Aug 2026, author's request): two neutrals, then a
+warm-to-cool sweep — white, gray, rose, ivory, tan, green, blue, violet. Sorted on measured
+OKLCH hue of each theme's **page tint**, not its accent, because the page is almost all of what
+a swatch shows and it is what the complaint was about. That is why Clay (34°) comes before
+Paper (81°) and Sepia (82°) instead of sitting with the other warm neutrals, and it is why the
+accent dots do not run in order — they are the smallest thing in the swatch. Someone looking
+for "warmer" or "cooler" moves in one direction instead of hunting.
+
+**`ThemePicker.astro` is click-driven, not `group-hover`** like the nav dropdowns, because
+these are controls and a hover menu cannot be operated by touch. It has `aria-expanded`,
+`role="menuitemradio"` items, Escape-to-close with focus returned, outside-click and focus-out
+dismissal — and it is a delegated listener in `src/scripts/theme.ts`, **not an island**: it
+sits in the header, on every page. It is the working model for the mobile nav drawer.
+
+Two things that look like shortcuts and are not:
+
+- **`aria-checked` ships `false` on every item** and `theme.ts` corrects them on load. A static
+  build cannot know the stored choice. Safe here, unlike the theme class itself, because the
+  menu is closed on first paint and only the script that fixes those values can open it. That
+  is also why the selected state is styled off `[aria-checked='true']` rather than off eight
+  `html.theme-x` selectors — the picker never needs editing when a theme is added.
+- **The browser-chrome `theme-color` is read back off the resolved page** with
+  `getComputedStyle`, not from a lookup table of nine backgrounds. A table here would be a
+  second copy of values that live in global.css, wrong the first time one changed.
+
+Failure modes, all landing on Classic light: JS disabled (no class is added, and the picker
+hides itself behind the `html.js` gate), `localStorage` throwing in private mode (the try/catch
+swallows it; the choice works for that page view but is not remembered), and a hand-edited
+stored id, which is checked against `THEME_IDS` before it is ever pasted into a class name.
+
+Verified in Chrome, not just built: all seven applied and read back off `getComputedStyle`,
+persistence across navigation, the dark round-trip (dark → pick → light → dark → light returns
+the same palette), Escape and outside-click, an eight-frame probe after reload that never
+sampled a Classic frame, and 390px where the menu sits fully inside the viewport and scrolls
+its row.
+
+**Dim slate was cut** (22 Aug 2026, author's call) — a 94.9 L* cool slate that was the darkest
+of the original three candidates. Sepia now sits lowest at 94.3, so "too dark" was not the
+objection; do not reintroduce it under another name.
 ## Reveal animation contract
 
 Two halves that must stay in sync:

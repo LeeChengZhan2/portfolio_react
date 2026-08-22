@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import Header from "../components/astro/Header.astro";
 import Footer from "../components/astro/Footer.astro";
+import { DEFAULT_THEME_ID, THEME_IDS } from "../lib/themes";
 
 interface Props {
   /** Page title. Rendered as `<title> · Lee Cheng Zhan` unless isHome. */
@@ -35,6 +36,24 @@ const fullTitle = isHome ? `${SITE_NAME} · Software Engineer` : `${title} · ${
 // See docs/REBUILD.md §12.
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImageUrl = new URL(ogImage, Astro.site);
+
+// The pre-paint bootstrap, built here so the theme id list has exactly one
+// home. Kept deliberately small — it is inline on every page, and it runs
+// before the browser has painted anything. See the comment at its <script>.
+const bootstrap = `
+document.documentElement.classList.add("js");
+try {
+  var t = localStorage.getItem("theme");
+  if (t === "dark") {
+    document.documentElement.classList.add("dark");
+    document.getElementById("theme-color")?.setAttribute("content", "#0d0d0f");
+  }
+  var l = localStorage.getItem("light-theme");
+  if (l && l !== ${JSON.stringify(DEFAULT_THEME_ID)} && ${JSON.stringify(THEME_IDS)}.indexOf(l) !== -1) {
+    document.documentElement.classList.add("theme-" + l);
+  }
+} catch (e) {}
+`.trim();
 ---
 
 <!doctype html>
@@ -69,34 +88,37 @@ const ogImageUrl = new URL(ogImage, Astro.site);
     <meta id="theme-color" name="theme-color" content="#ffffff" />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
 
-    <!-- Runs before first paint, and does two jobs.
+    <!-- Runs before first paint, and does three jobs.
          1. Marks the document script-capable. global.css gates every
             `opacity: 0` reveal starting state behind `html.js`, so a JS failure
             degrades to "no animation" rather than "no visible content".
          2. Applies the dark theme if the visitor has chosen it, so the page
             paints dark once rather than flashing light first.
+         3. Applies the chosen light theme, for the same reason — a stored
+            `.theme-sage` added after paint is a visible repaint of the whole
+            page.
 
-         Light is the default and the OS is deliberately not consulted — dark is
-         opt-in via the toggle only. So the only question here is what
-         localStorage says; there is no matchMedia call and no `.light` class.
+         The two are separate keys because they are separate axes: a light
+         choice is remembered underneath dark and comes back when dark is
+         switched off. See src/scripts/theme.ts.
+
+         Light is the default, Classic is the default light theme, and the OS is
+         deliberately not consulted on either — there is no matchMedia call and
+         no `.light` class. The stored id is checked against the real list
+         rather than pasted into a class name, so a hand-edited localStorage
+         cannot inject one.
 
          `is:inline` is required: a bundled or module script runs after paint,
-         which would show the light page and then repaint it dark.
+         which would show the wrong theme and then repaint.
 
          The try/catch is not optional. localStorage throws outright in some
          privacy modes, and an uncaught throw here would take the `js` class
-         above down with it — leaving every reveal animation stuck hidden. -->
-    <script is:inline>
-      document.documentElement.classList.add("js");
-      try {
-        if (localStorage.getItem("theme") === "dark") {
-          document.documentElement.classList.add("dark");
-          document
-            .getElementById("theme-color")
-            ?.setAttribute("content", "#0d0d0f");
-        }
-      } catch (e) {}
-    </script>
+         above down with it — leaving every reveal animation stuck hidden.
+
+         Written with `set:html` so THEME_IDS comes from src/lib/themes.ts
+         rather than being restated here — one list, and the picker, the CSS and
+         this script all read it. -->
+    <script is:inline set:html={bootstrap} />
 
     <!-- For page-specific pre-paint work only. `/about/travel` uses it to
          restore a stored layout choice before the timeline is parsed; putting

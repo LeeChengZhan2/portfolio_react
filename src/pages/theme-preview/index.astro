@@ -1,0 +1,254 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { LIGHT_THEMES, themeClass } from '../../lib/themes';
+
+// A comparison sheet: all eight light themes on one page, at a glance.
+//
+// It does NOT apply anything — the picker in the header does that, and choosing
+// there re-themes every page you visit afterwards. This exists for the one
+// thing the picker cannot do, which is show eight palettes at once on real
+// components rather than one at a time.
+//
+// Each panel wears its theme's class. Custom properties inherit from the
+// nearest ancestor that declares them, so the utilities inside resolve against
+// that palette and not against the page's — the same mechanism the picker's
+// swatches use, and the reason no hex value appears in this file.
+---
+
+<BaseLayout
+  title="Light themes"
+  description="The eight light themes, side by side on the same markup."
+  noindex={true}
+>
+  <article class="page">
+    <header class="page__header">
+      <p class="eyebrow">Themes</p>
+      <h1 class="page__title">Eight light themes, one page</h1>
+      <p class="page__summary">
+        Pick one from <strong>Theme</strong> in the header — it applies to the
+        whole site immediately and is remembered on the next visit. This page is
+        only for looking at them together.
+      </p>
+      <p class="page__note">
+        Dark is a separate switch, the moon beside the nav. A light choice is
+        remembered underneath it and comes back when dark is switched off, so
+        the two never overwrite each other.
+      </p>
+    </header>
+
+    <ul class="panels">
+      {
+        LIGHT_THEMES.map((theme) => (
+          <li class="panel">
+            <div class="panel__head">
+              <h2 class="panel__name">{theme.name}</h2>
+              <p class="panel__hint">{theme.hint}</p>
+            </div>
+
+            <div class:list={['mock', themeClass(theme.id)]}>
+              <div class="mock__page">
+                <p class="mock__eyebrow">About</p>
+                <p class="mock__title">Who I am</p>
+                <p class="mock__body">
+                  I build production AI agents and the data platforms behind
+                  them. <span class="mock__link">This is a link</span> in the
+                  middle of a sentence.
+                </p>
+                <div class="mock__actions">
+                  <span class="mock__btn mock__btn--solid">Solid</span>
+                  <span class="mock__btn mock__btn--ghost">Ghost</span>
+                </div>
+              </div>
+
+              <div class="mock__band">
+                <div class="mock__card">
+                  <p class="mock__meta">2026 · Primustech</p>
+                  <p class="mock__cardtitle">A card on the band</p>
+                  <p class="mock__summary">
+                    A raised panel, drawn on the band behind it.
+                  </p>
+                  <div class="mock__chips">
+                    <span class="mock__chip">Python</span>
+                    <span class="mock__chip">GCP</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mock__footer">Footer</div>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+
+    <section class="notes">
+      <h2>What was held fixed</h2>
+      <ul>
+        <li>
+          <strong>Every theme clears WCAG AA.</strong> Body prose lands between
+          7.8:1 and 10.3:1 against the 4.5:1 the standard asks for, so the
+          comfort is bought out of headroom rather than out of legibility.
+        </li>
+        <li>
+          <strong>A card still reads as raised.</strong> The band → surface step
+          stays above ΔL* 3 in all of them. Classic is the one where it does
+          not show, because its page and its cards are both <code>#ffffff</code>
+          and only a hairline separates them.
+        </li>
+        <li>
+          <strong>Icons stay legible.</strong> <code>fg-faint</code> is over the
+          3:1 floor for UI glyphs everywhere except Classic, where it is 2.31:1
+          — a real fault in the original theme, left alone so Classic remains
+          exactly what shipped.
+        </li>
+        <li>
+          <strong>No theme touches markup.</strong> Each is sixteen custom
+          properties in <code>src/styles/global.css</code>; nothing on this site
+          names a literal shade, which is what makes swapping them free.
+        </li>
+      </ul>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  @reference "#styles";
+
+  .page {
+    @apply mx-auto max-w-6xl px-6 py-20;
+  }
+
+  .page__header {
+    @apply mx-auto mb-14 flex max-w-2xl flex-col gap-3;
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta;
+  }
+
+  .page__title {
+    @apply text-4xl font-bold tracking-tight lg:text-5xl;
+  }
+
+  .page__summary {
+    @apply text-lg leading-relaxed text-fg-muted;
+  }
+
+  .page__note {
+    @apply leading-relaxed text-fg-body;
+  }
+
+  .panels {
+    @apply grid gap-8 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  .panel {
+    @apply flex flex-col gap-3;
+  }
+
+  .panel__head {
+    @apply flex flex-col gap-1;
+  }
+
+  .panel__name {
+    @apply text-lg font-semibold tracking-tight text-fg;
+  }
+
+  .panel__hint {
+    @apply text-sm leading-relaxed text-fg-muted;
+  }
+
+  /* ---- the mockup -------------------------------------------------------
+     Colours here come from the theme class on `.mock`, so these utilities are
+     resolving against that palette rather than against the live page. */
+
+  .mock {
+    @apply overflow-hidden rounded-xl border border-line-strong;
+  }
+
+  .mock__page {
+    @apply bg-bg px-4 py-4;
+  }
+
+  .mock__eyebrow {
+    @apply font-mono text-[0.65rem] uppercase tracking-[0.12em] text-fg-meta;
+  }
+
+  .mock__title {
+    @apply mt-1 text-xl font-bold tracking-tight text-fg;
+  }
+
+  .mock__body {
+    @apply mt-2 text-xs leading-relaxed text-fg-body;
+  }
+
+  .mock__link {
+    @apply text-accent underline decoration-accent/30 underline-offset-2;
+  }
+
+  .mock__actions {
+    @apply mt-3 flex gap-2;
+  }
+
+  .mock__btn {
+    @apply rounded-full px-3 py-1 text-[0.7rem] font-semibold;
+  }
+
+  .mock__btn--solid {
+    @apply bg-invert text-on-invert;
+  }
+
+  .mock__btn--ghost {
+    @apply border border-line-strong text-fg;
+  }
+
+  .mock__band {
+    @apply bg-band px-4 py-4;
+  }
+
+  .mock__card {
+    @apply rounded-xl border border-line bg-surface p-3;
+  }
+
+  .mock__meta {
+    @apply font-mono text-[0.6rem] tabular-nums text-fg-meta;
+  }
+
+  .mock__cardtitle {
+    @apply mt-1 text-sm font-semibold text-fg;
+  }
+
+  .mock__summary {
+    @apply mt-1 text-xs leading-relaxed text-fg-muted;
+  }
+
+  .mock__chips {
+    @apply mt-3 flex gap-1.5;
+  }
+
+  .mock__chip {
+    @apply rounded bg-surface-2 px-2 py-0.5 font-mono text-[0.6rem] text-fg-muted;
+  }
+
+  .mock__footer {
+    @apply bg-footer px-4 py-3 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-footer-fg;
+  }
+
+  /* ---- prose ------------------------------------------------------------ */
+
+  .notes {
+    @apply mx-auto mt-16 max-w-2xl;
+  }
+
+  .notes h2 {
+    @apply mb-3 text-2xl font-semibold tracking-tight;
+  }
+
+  .notes ul {
+    @apply flex list-disc flex-col gap-2 pl-6 leading-relaxed text-fg-body;
+  }
+
+  code {
+    @apply rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.8em] text-fg-muted;
+  }
+</style>
