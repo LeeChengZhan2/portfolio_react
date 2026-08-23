@@ -1,8 +1,7 @@
 ---
 import { getEntry, render } from 'astro:content';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
-import TripEntry from '../../../components/astro/TripEntry.astro';
-import TripsViewToggle from '../../../components/astro/TripsViewToggle.astro';
+import TravelContent from '../../../components/astro/TravelContent.astro';
 import { getSections, getTrips, tripYear } from '../../../lib/content';
 
 /**
@@ -11,6 +10,9 @@ import { getSections, getTrips, tripYear } from '../../../lib/content';
  * for exactly this reason — both routes emit `about/travel.html`, and letting
  * Astro's static-beats-dynamic rule silently pick a winner is the kind of thing
  * that is invisible until it is wrong.
+ *
+ * The page's markup lives in TravelContent so /about/travel-preview can render
+ * the same thing rather than a copy of it.
  */
 const entry = await getEntry('sections', 'travel');
 if (!entry) throw new Error('src/content/sections/travel.md is missing — this page renders its prose.');
@@ -57,62 +59,25 @@ const next = sections[index + 1];
     </script>
   </Fragment>
 
-  <article class="page">
-    <header class="page__header">
-      <a href="/about" class="back">&larr; About</a>
-      <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
-      <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
-      <p class="page__count" data-reveal="fade">
-        {trips.length} trips · {places.size} countries
-      </p>
-    </header>
+  <TravelContent
+    title={entry.data.title}
+    summary={entry.data.summary}
+    rows={rows}
+    tripCount={trips.length}
+    placeCount={places.size}
+    prev={prev}
+    next={next}
+  >
+    {/* A way through to the globe experiment. Deliberately a small link rather
+        than a button: the timeline is the page, and this is a side door to an
+        unfinished thing. Remove it — and the preview route — once a globe look
+        is chosen and lands here properly. */}
+    <p class="preview-link" slot="header-extra">
+      <a href="/about/travel-preview">See these trips on a globe &rarr;</a>
+    </p>
 
-    <section class="trips" aria-labelledby="trips-heading">
-      <div class="trips__head" data-reveal="fade">
-        <h2 id="trips-heading" class="section__title">Where I've been</h2>
-        <TripsViewToggle />
-      </div>
-
-      {/* Ordered list, and it means it: the sequence is the content here. */}
-      <ol class="timeline">
-        {
-          rows.map(({ trip, yearLabel }) => (
-            <TripEntry entry={trip} yearLabel={yearLabel} />
-          ))
-        }
-      </ol>
-    </section>
-
-    {/* The essay sits under the timeline, not over it. Someone landing here
-        wants the places first; the reflection is what they read if the places
-        held them. */}
-    <section class="essay">
-      <div class="page__body" data-reveal="fade-up">
-        <Content />
-      </div>
-    </section>
-
-    <nav class="pager" aria-label="Other sections">
-      {
-        prev ? (
-          <a href={`/about/${prev.id}`} class="pager__link">
-            <span class="pager__dir">Previous</span>
-            <span class="pager__title">{prev.data.title}</span>
-          </a>
-        ) : (
-          <span />
-        )
-      }
-      {
-        next && (
-          <a href={`/about/${next.id}`} class="pager__link pager__link--next">
-            <span class="pager__dir">Next</span>
-            <span class="pager__title">{next.data.title}</span>
-          </a>
-        )
-      }
-    </nav>
-  </article>
+    <Content slot="essay" />
+  </TravelContent>
 </BaseLayout>
 
 <script>
@@ -125,122 +90,13 @@ const next = sections[index + 1];
 <style>
   @reference "#styles";
 
-  .page {
-    @apply mx-auto max-w-3xl px-6 py-20 lg:py-28;
+  .preview-link {
+    @apply mt-1;
   }
 
-  .page__header {
-    @apply mb-12 flex flex-col gap-3;
-  }
-
-  .back {
-    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta transition-colors hover:text-accent;
-  }
-
-  .page__title {
-    @apply text-4xl font-bold tracking-tight lg:text-5xl;
-  }
-
-  .page__summary {
-    @apply max-w-2xl text-lg leading-relaxed text-fg-muted;
-  }
-
-  .page__count {
-    @apply font-mono text-xs uppercase tracking-[0.14em] text-fg-meta;
-  }
-
-  .trips__head {
-    @apply mb-6 flex items-center justify-between gap-4;
-  }
-
-  .section__title {
-    @apply font-mono text-xs uppercase tracking-[0.16em] text-fg-meta;
-  }
-
-  /* All the spine geometry lives here, and TripEntry inherits it. One place to
-     retune per breakpoint, and — more to the point — the dots and the line they
-     sit on cannot drift apart across two files.
-       --rail        x-position of the line, and of every dot centre
-       --dot-radius  half the dot, so a dot can centre itself on the line
-       --dot-top     a dot's offset from the top of its entry, set to put it on
-                     the year label's midline */
-  .timeline {
-    --rail: 0.5rem;
-    --dot-radius: 0.3125rem;
-    --dot-top: 0.3125rem;
-    @apply relative;
-  }
-
-  /* The spine. One element on the list rather than a border per entry, which is
-     what keeps it unbroken between the year marks. It starts at the centre of
-     the first dot and fades out at the bottom rather than stopping dead under
-     the last card — the trips continue below the earliest one shown, the line
-     just runs out of page.
-
-     line-strong, not line: this carries the whole layout, and at 1px the
-     lighter hairline reads as a rendering artefact rather than a structure. */
-  .timeline::before {
-    content: '';
-    @apply absolute bottom-0 w-px;
-    left: var(--rail);
-    top: calc(var(--dot-top) + var(--dot-radius));
-    background: linear-gradient(
-      to bottom,
-      var(--color-line-strong) 0%,
-      var(--color-line-strong) 88%,
-      transparent 100%
-    );
-  }
-
-  /* Above sm the year label moves out of the flow and into the gutter. Its
-     midline does not move, so only the rail shifts right. */
-  @media (min-width: 640px) {
-    .timeline {
-      --rail: 4.5rem;
-    }
-  }
-
-  .essay {
-    @apply mt-20 border-t border-line pt-12;
-  }
-
-  .page__body {
-    @apply max-w-2xl;
-  }
-
-  .page__body :global(p) {
-    @apply mb-4 leading-relaxed text-fg-body;
-  }
-
-  .page__body :global(h2) {
-    @apply mt-10 mb-3 text-2xl font-semibold tracking-tight first:mt-0;
-  }
-
-  .page__body :global(ul) {
-    @apply mb-4 flex list-disc flex-col gap-1 pl-6 text-fg-body;
-  }
-
-  .page__body :global(a) {
-    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
-  }
-
-  .pager {
-    @apply mt-20 grid grid-cols-2 gap-4 border-t border-line pt-8;
-  }
-
-  .pager__link {
-    @apply flex flex-col gap-1 rounded-xl border border-line p-4 transition-colors hover:border-accent/40;
-  }
-
-  .pager__link--next {
-    @apply text-right;
-  }
-
-  .pager__dir {
-    @apply font-mono text-xs uppercase tracking-[0.12em] text-fg-meta;
-  }
-
-  .pager__title {
-    @apply font-semibold text-fg;
+  .preview-link a {
+    @apply font-mono text-xs tracking-[0.12em] text-fg-meta uppercase transition-colors;
+    @apply underline decoration-line-strong underline-offset-4;
+    @apply hover:text-accent hover:decoration-accent;
   }
 </style>

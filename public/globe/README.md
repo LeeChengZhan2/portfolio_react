@@ -1,0 +1,54 @@
+# Globe data
+
+Everything the 3D earth on `/about/travel-preview` needs. In `public/` rather than
+`src/assets/` deliberately: these are fetched at runtime by
+`src/scripts/globe/engine.ts`, not imported, so they never enter a JS bundle and no
+other page pays for them. `land.json` alone is 880 KB — inlined into a chunk, that
+would be 880 KB the bundler has to parse.
+
+| File | Size | What it is |
+|---|---|---|
+| `land.json` | 880 KB (257 KB gz) | Coastline rings, Natural Earth 50m via `world-atlas`. Drawn as line geometry, which is what stays sharp at any zoom. |
+| `borders.json` | 266 KB (82 KB gz) | Country borders, same source. The vector-fill look only. |
+| `cities.json` | 14 KB (6 KB gz) | 900 places by population, as `[lat, lon]`. Context dots when zoomed in. |
+| `visited.json` | 206 KB (24 KB gz) | The eight built-up footprints, keyed by trip id, each with its outer ring, a bounding-box centre and an angular span. |
+| `land-mask.webp` | 121 KB | 2048×1024, land black on white sea. Lossless. |
+| `earth-gray.webp` | 301 KB | NASA Blue Marble, grayscale. The duotone look only, loaded on demand. |
+| `earth-normal.webp` | 224 KB | Elevation-derived normal map. The relief look only, loaded on demand. |
+
+## Things worth knowing before regenerating any of this
+
+**The ids in `visited.json` are trip ids.** They match `src/content/trips/*.md`
+filenames exactly, which is how a marker finds its footprint. Rename a trip file and
+this must be renamed with it, or that city silently vanishes from the globe — the
+engine skips trips it has no footprint for rather than guessing a position.
+
+**The mask must stay lossless.** It is not a picture, it is a one-bit data channel:
+the shader reads its red channel to mix sea and land, and the dot and hex lattices
+decide "is this cell land?" by thresholding it at mid-grey. WebP at q0.9 is 89 KB
+instead of 121 KB and puts soft fringes along every coast, which moves that
+threshold around at random.
+
+**2048 is deliberate, not a compromise.** The mask only ever fills interiors; the
+coastline over it is line geometry. 4096 halves the softness of the fill at close
+zoom for another 178 KB and was judged not worth it.
+
+**`earth-normal.webp` is not decoded as sRGB.** It is a vector per pixel, not a colour; decode
+it and every slope is shaded from the wrong direction. Unlike the mask it does not need to be
+lossless — a little noise only tilts a shading vector, where the mask feeds a threshold.
+
+**`earth-gray.webp` is grayscale because the shader only reads luminance.** The
+original NASA plate is a 2.5 MB colour JPEG, and the two chrominance channels are
+data nothing looks at.
+
+## Provenance and licence
+
+- Coastline, borders: [Natural Earth](https://www.naturalearthdata.com/) via the
+  `world-atlas` package. Public domain.
+- Footprints: Natural Earth 10m urban areas, matched to each city by
+  point-in-polygon. Public domain. These are **built-up areas, not administrative
+  boundaries** — Tokyo's 18,720 km² is the whole conurbation.
+- `earth-gray.webp`: NASA Blue Marble. Public domain.
+
+No API key is needed by anything here, and nothing is fetched from a third party at
+runtime.

@@ -1,0 +1,120 @@
+---
+import { getEntry, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TravelContent from '../../components/astro/TravelContent.astro';
+import GlobeStage from '../../components/astro/GlobeStage.astro';
+import type { GlobeTrip } from '../../scripts/globe/engine';
+import { getSections, getTrips, tripYear } from '../../lib/content';
+
+/**
+ * /about/travel with a 3D earth under the timeline — five stylised looks behind
+ * a switcher, so they can be judged in the real page instead of from
+ * screenshots.
+ *
+ * Throwaway, like /theme-preview: noindex, out of the sitemap, and reachable
+ * only from a small link on /about/travel. When a look is chosen, move
+ * GlobeStage onto the real page and delete this file, the switcher, and the
+ * link.
+ *
+ * The body is the same TravelContent the real page renders, so "all the travel
+ * information" here cannot fall behind what /about/travel says.
+ */
+const entry = await getEntry('sections', 'travel');
+if (!entry) throw new Error('src/content/sections/travel.md is missing — this page renders its prose.');
+const { Content } = await render(entry);
+
+const trips = await getTrips();
+
+let previousYear: string | null | undefined;
+const rows = trips.map((trip) => {
+  const year = tripYear(trip.data);
+  const yearLabel = year === previousYear ? undefined : (year ?? 'Undated');
+  previousYear = year;
+  return { trip, yearLabel };
+});
+
+const places = new Set(trips.map((trip) => trip.data.country ?? trip.data.title));
+
+const sections = await getSections();
+const index = sections.findIndex((section) => section.id === entry.id);
+const prev = sections[index - 1];
+const next = sections[index + 1];
+
+/**
+ * What the globe needs about each trip: a label, a date and somewhere to go.
+ * Positions are not here — they come from the built-up footprint in
+ * public/globe/visited.json, keyed by the same id, so a marker can never sit
+ * somewhere the highlighted area is not.
+ *
+ * The date is deliberately just the year. On the timeline "14–18 Nov 2025" is
+ * the fact; on a label 90 pixels wide it is noise, and the year is what places
+ * a trip in the sequence. Undated trips say so rather than showing nothing —
+ * tripYear returns null below year precision.
+ */
+const globeTrips: GlobeTrip[] = trips.map((trip) => ({
+  id: trip.id,
+  label: trip.data.title.split(',')[0]!.trim(),
+  when: tripYear(trip.data) ?? 'Undated',
+  href: `/about/travel/${trip.id}`,
+}));
+---
+
+<BaseLayout
+  title="Travel — globe preview"
+  description="The travel timeline with a 3D earth under it, in five styles."
+  noindex
+>
+  <Fragment slot="head">
+    <script is:inline>
+      try {
+        if (localStorage.getItem("trips-view") === "compact") {
+          document.documentElement.classList.add("trips-compact");
+        }
+      } catch (e) {}
+    </script>
+  </Fragment>
+
+  <TravelContent
+    title={entry.data.title}
+    summary={entry.data.summary}
+    rows={rows}
+    tripCount={trips.length}
+    placeCount={places.size}
+    prev={prev}
+    next={next}
+  >
+    <p class="preview-flag" slot="header-extra">
+      <span class="preview-flag__tag">Preview</span>
+      <span>
+        Five globe styles, one at a time. Not linked from anywhere but
+        <a href="/about/travel">the real travel page</a>.
+      </span>
+    </p>
+
+    <GlobeStage slot="after-timeline" trips={globeTrips} />
+
+    <Content slot="essay" />
+  </TravelContent>
+</BaseLayout>
+
+<script>
+  import '../../scripts/trips-view';
+  import '../../scripts/globe';
+</script>
+
+<style>
+  @reference "#styles";
+
+  .preview-flag {
+    @apply mt-2 flex flex-wrap items-center gap-2 text-sm text-fg-meta;
+  }
+
+  .preview-flag__tag {
+    @apply rounded-full border border-accent/40 px-2 py-0.5;
+    @apply font-mono text-[0.65rem] tracking-[0.12em] text-accent uppercase;
+  }
+
+  .preview-flag a {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+</style>

@@ -1,0 +1,247 @@
+---
+/**
+ * The five stylised earths, one at a time, behind a switcher.
+ *
+ * Preview-only for now: it lives on /about/travel-preview so the five looks can
+ * be judged in the real page rather than from screenshots, which is the whole
+ * reason the page exists. Once one look is chosen, this component keeps working
+ * with the switcher removed.
+ *
+ * Not an island. See src/scripts/globe/index.ts — the engine is a dynamic
+ * import behind an IntersectionObserver, which defers exactly what
+ * `client:visible` would without pulling React onto the page.
+ */
+import type { GlobeTrip } from '../../scripts/globe/engine';
+
+interface Props {
+  trips: GlobeTrip[];
+}
+
+const { trips } = Astro.props;
+
+// Order is the switcher's order, and it runs from the quietest look to the
+// loudest rather than alphabetically — the row is a dial, not a list.
+const LOOKS = [
+  { id: 'dots', name: 'Dot matrix', hint: 'An earth made of ink. The quietest.' },
+  { id: 'line', name: 'Line drawing', hint: 'Coastline and graticule, nothing filled.' },
+  { id: 'relief', name: 'Relief', hint: 'Shaded topography. Mountain ranges and ridges.' },
+  { id: 'vector', name: 'Vector fill', hint: 'Flat land in the page greys. The clearest.' },
+  { id: 'duotone', name: 'Duotone', hint: 'Real terrain, page colours. Loads a photograph.' },
+  { id: 'hex', name: 'Hex tiles', hint: 'Tiled land. The boldest.' },
+] as const;
+---
+
+<section class="globe" data-globe aria-labelledby="globe-heading">
+  <div class="globe__head">
+    <h2 id="globe-heading" class="globe__title">Everywhere at once</h2>
+    <p class="globe__intro">
+      The same eight trips as the timeline above, on the earth they happened on. Each highlighted
+      area is the city's real built-up footprint, not a pin dropped on a coordinate &mdash; drag
+      to turn it, scroll to move closer. Scrolling past the closest or furthest point hands the
+      wheel back to the page.
+    </p>
+  </div>
+
+  {/*
+    aria-checked ships as the default on every item and the script corrects it
+    on load: a static build cannot know what the visitor stored. Safe here
+    because the buttons do nothing until that same script is running. Same
+    reasoning as ThemePicker.
+  */}
+  <div class="switch" role="radiogroup" aria-label="Globe style">
+    {LOOKS.map((look) => (
+      <button
+        type="button"
+        class="switch__opt"
+        role="radio"
+        aria-checked={look.id === 'dots'}
+        title={look.hint}
+        data-globe-look={look.id}
+      >
+        {look.name}
+      </button>
+    ))}
+  </div>
+
+  <div class="globe__frame">
+    <div class="globe__stage" data-globe-stage></div>
+    <div class="globe__labels" data-globe-labels></div>
+    <p class="globe__status" data-globe-status>Scroll down to load the earth</p>
+  </div>
+
+  <div class="globe__foot">
+    <p class="globe__note">
+      Every colour here is taken from the page you are reading &mdash; switch theme and the earth
+      follows. Nothing is a satellite image.
+    </p>
+    <button type="button" class="globe__spin" data-globe-spin aria-pressed="true">Rotation</button>
+  </div>
+
+  {/* The trips, handed to the script as data rather than fetched again. */}
+  <script id="globe-trips" type="application/json" set:html={JSON.stringify(trips)} is:inline />
+</section>
+
+<style>
+  @reference "#styles";
+
+  .globe {
+    @apply mt-20 border-t border-line pt-12;
+  }
+
+  .globe__head {
+    @apply mb-6 flex flex-col gap-3;
+  }
+
+  .globe__title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .globe__intro {
+    @apply max-w-2xl leading-relaxed text-fg-body;
+  }
+
+  /* The switcher is inert without JS, and an inert control is worse than no
+     control. Same `html.js` gate as TripsViewToggle and ThemePicker. */
+  .switch {
+    @apply hidden;
+  }
+
+  :global(html.js) .switch {
+    @apply mb-4 flex flex-wrap gap-0.5 rounded-full border border-line p-0.5;
+  }
+
+  .switch__opt {
+    @apply rounded-full px-3 py-1.5 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta;
+    @apply hover:text-accent;
+  }
+
+  .switch__opt[aria-checked='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .switch__opt:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* The frame is a band-coloured panel, so the globe steps off the band rather
+     than off the page — palette.ts reads whatever is actually painted here. */
+  /* The one thing on this page that leaves the reading column. The globe is
+     the section, and at 48rem it was a postcard of the earth — the whole point
+     is to look at it. Text stays in the column; only the frame breaks out.
+
+     left/transform rather than `margin-inline: calc(50% - 50vw)`: 100vw
+     includes the scrollbar, so the usual full-bleed trick overflows by its
+     width and puts a horizontal scrollbar on the page. 96vw keeps a margin
+     wider than any scrollbar and never overflows. */
+  .globe__frame {
+    @apply relative overflow-hidden rounded-xl border border-line bg-band;
+    height: min(64vh, 26rem);
+  }
+
+  @media (min-width: 640px) {
+    .globe__frame {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 74rem);
+      transform: translateX(-50%);
+      height: min(88vh, 56rem);
+    }
+  }
+
+  .globe__stage {
+    @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+  }
+
+  [data-state='ready'] .globe__stage {
+    @apply opacity-100;
+  }
+
+  .globe__stage :global(canvas) {
+    @apply block h-full w-full cursor-grab;
+    touch-action: none;
+  }
+
+  .globe__stage :global(canvas:active) {
+    @apply cursor-grabbing;
+  }
+
+  .globe__labels {
+    @apply pointer-events-none absolute inset-0;
+  }
+
+  /* Built by engine.ts rather than rendered here, so the selectors have to be
+     global — Astro's scoping only reaches markup in this file. */
+  .globe__labels :global(.globe__label) {
+    @apply pointer-events-auto absolute top-0 left-0 flex flex-col rounded border border-line-strong px-2 py-1 leading-tight whitespace-nowrap no-underline;
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    backdrop-filter: blur(4px);
+    will-change: transform;
+  }
+
+  .globe__labels :global(.globe__label:hover) {
+    @apply border-accent;
+  }
+
+  .globe__labels :global(.globe__label-name) {
+    @apply text-xs font-semibold text-fg;
+  }
+
+  .globe__labels :global(.globe__label:hover .globe__label-name) {
+    @apply text-accent;
+  }
+
+  .globe__labels :global(.globe__label-when) {
+    @apply font-mono text-[0.6rem] uppercase tracking-[0.1em] text-fg-meta;
+  }
+
+  .globe__status {
+    @apply absolute inset-0 flex items-center justify-center px-6 text-center;
+    @apply font-mono text-xs tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .globe__status[data-state='ready'] {
+    @apply hidden;
+  }
+
+  /* A failure message is a sentence, not a label. */
+  .globe__status[data-state='failed'] {
+    @apply tracking-normal normal-case;
+  }
+
+  .globe__foot {
+    @apply mt-3 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  /* Matches the frame's breakout so the note and the rotation button sit at its
+     edges rather than floating in the middle of it. */
+  @media (min-width: 640px) {
+    .globe__foot {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 74rem);
+      transform: translateX(-50%);
+    }
+  }
+
+  .globe__note {
+    @apply max-w-xl text-sm text-fg-meta;
+  }
+
+  .globe__spin {
+    @apply hidden;
+  }
+
+  :global(html.js) .globe__spin {
+    @apply inline-block rounded-full border border-line px-3 py-1 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta hover:text-accent;
+  }
+
+  .globe__spin[aria-pressed='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .globe__spin:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+</style>

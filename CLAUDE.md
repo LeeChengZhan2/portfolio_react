@@ -87,8 +87,10 @@ Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`,
 `/about/travel/{chengdu,tokyo,phuket,taiwan,bali,guangzhou-shenzhen,shanghai,bangkok}`, `/work`,
 `/work/{ai-agent-bms,cloud-data-platform,bms-platform,alliance-bank,bank-negara,school-fyp,open-source}`,
-`/404`, `/theme-preview` — 24 pages. `/theme-preview` is `noindex` and excluded from the
-sitemap: it is the eight light themes side by side, reachable from the picker in the header.
+`/404`, `/theme-preview`, `/about/travel-preview` — 25 pages. The last two are `noindex` and
+excluded from the sitemap. `/theme-preview` is the eight light themes side by side, reachable
+from the picker in the header; `/about/travel-preview` is the travel page with a 3D earth under
+the timeline, reachable from a small link on `/about/travel`. Both are throwaway.
 
 **Content was rewritten against the author's CV on 19 Aug 2026**, which moved the site's
 whole story. It used to say "BMS driver development"; the CV says the current work is
@@ -480,6 +482,131 @@ its row.
 **Dim slate was cut** (22 Aug 2026, author's call) — a 94.9 L* cool slate that was the darkest
 of the original three candidates. Sepia now sits lowest at 94.3, so "too dark" was not the
 objection; do not reintroduce it under another name.
+## The 3D earth (`/about/travel-preview`, 23 Aug 2026)
+
+Six stylised globes on one three.js engine, one at a time behind a switcher. It exists to
+settle a choice: the author rejected five earlier library studies **on appearance** —
+a satellite globe reads as an embedded widget in a typographic page, whatever library draws
+it — so round 2 compares looks rather than libraries.
+
+**`/about/travel-preview` is throwaway.** `noindex`, out of the sitemap, reachable only from
+a small link in the `/about/travel` header. When a look is chosen: move `GlobeStage` onto the
+real page, delete the switcher, this route, and the link.
+
+**The body of both pages is `TravelContent.astro`.** Extracted from `about/travel/index.astro`
+so the preview renders the real page rather than a copy of it — two pages claiming to show "all
+the travel information" from two sets of markup is a second source of truth that agrees at first
+and stops later. The globe goes in its `after-timeline` slot; a page that passes nothing renders
+nothing there, so `/about/travel` is untouched by the preview's existence.
+
+**Not an island, and it is not close.** The engine is a dynamic `import()` behind an
+`IntersectionObserver` with `rootMargin: 600px`. That is the same deferral `client:visible`
+gives, without 55.9 KB of React runtime to drive a canvas React never touches. Nothing loads
+until the globe is a screen away, so a visitor who reads the timeline and leaves pays nothing.
+
+**`three` is in `vite.optimizeDeps.include`, and it has to be.** Same failure as the carousel,
+same cause: a dep first reached from a lazy import is discovered mid-session, Vite re-optimizes,
+the hash changes, and the in-flight import dies on `504 (Outdated Optimize Dep)`. Observed on
+this page in `npm run dev`, not guessed. Production builds never had it.
+
+### The colour contract
+
+**Nothing about the globe's colour is chosen.** `src/scripts/globe/palette.ts` steps a fixed
+*perceptual* distance in OKLab from whatever is painted behind the canvas toward
+`--color-fg`: sea 0.10, land 0.20, coastline 0.50, dots 0.34. One table, nine themes, no
+per-theme values anywhere — and in dark the ramp inverts on its own, because the colour it walks
+toward is now the light one. Verified in Chrome: mean canvas colour `rgb(226,227,231)` in
+Classic, `rgb(36,36,41)` in dark, on the same globe.
+
+The one colour not derived is the highlight: visited cities are `--color-accent` at full
+strength, because they are the only thing on the globe meant to be looked at first.
+
+**It steps off the *ground*, not the page.** `groundColour()` walks up from the canvas until it
+finds something painted. The stage sits in a `bg-band` panel, so the sea steps off the band; drop
+the globe onto a plain section and it steps off the page instead. Get this wrong and the sea
+matches its own frame and the globe reads as a hole.
+
+**A theme change is two uniform writes.** `index.ts` watches `<html>` for class changes with a
+`MutationObserver` — the site's theme controls only add and remove classes, so neither side needs
+to know about the other. Nothing is redrawn, because the land mask carries no colour.
+
+### Things that look like bugs and are not
+
+- **The land mask is black and white, never themed.** Where the land is is a fact about the
+  planet; what colour it is drawn in is a fact about the page. An earlier revision rasterised it
+  in the theme's own colours and asked "is this pixel land?" by colour distance — on first paint
+  the engine had the dark tokens while the page had not yet applied its variables, land and sea
+  came out one unit apart, **every dot and hex lattice was silently empty in dark**, and the
+  cached result survived every later theme change.
+- **Every custom shader ends with `#include <colorspace_fragment>`.** three.js appends its
+  output transform to its own materials only. A `ShaderMaterial` that assigns `gl_FragColor`
+  gets none, the linear value lands in an sRGB buffer, and the whole globe renders far too dark —
+  in dark theme it collapsed to under 1 L* of separation. Measured off the canvas, invisible in
+  a screenshot.
+- **`resize()` widens the vertical field of view for portrait frames.** `fov` is the vertical
+  angle, so as the frame narrows the horizontal view narrows with it and a globe that fits the
+  height spills out of the width. At 390px that clipped Asia off both sides.
+- **A `ResizeObserver`, not a window resize listener.** The stage is sized by CSS that can change
+  after the script runs; measuring once at boot is how the camera ends up with a 1280:1 aspect and
+  the earth renders as a vertical line. It did.
+- **Every city carries a marker as well as its footprint.** Phuket's built-up area is 76 km²,
+  which is under half a pixel across when the whole earth is in frame. The marker never falls
+  below eleven pixels and dissolves once the real footprint grows past it, so the two never both
+  claim to be the city.
+- **The globe owns the wheel while it can still zoom, and hands it back when it cannot.**
+  OrbitControls calls `preventDefault` on the wheel, which stops the *browser* scrolling — but
+  this site scrolls with Lenis, which has its own window listener that `preventDefault` does
+  nothing about, so the page moved while the globe zoomed. Lenis honours `data-lenis-prevent` on
+  an ancestor of the event target; the engine sets it per event, and **removes it at either zoom
+  limit** so the page is never trapped under the cursor. Verified: scrollY pinned across eight
+  wheel events in both directions, then released at distance 6.
+- **The relief look shades from an elevation-derived normal map, lit from the north-west.**
+  That is the cartographic convention and not a preference: lit from below, the eye reads ridges
+  as valleys. The ocean is deliberately left flat — the normal map carries bathymetry, and
+  shading the sea floor is noise here.
+- **The frame breaks out of the reading column, and uses `left/transform`, not
+  `margin-inline: calc(50% - 50vw)`.** 100vw includes the scrollbar, so the usual full-bleed
+  trick overflows by its width and puts a horizontal scrollbar on the page. `min(96vw, 74rem)`
+  keeps a gutter wider than any scrollbar. Measured 0 overflow at 1920, 1440, 1280, 834 and 390.
+- **Labels are decluttered greedily, and hidden rather than faded.** Six of the eight cities sit
+  inside one 2,000 km square. The one most squarely facing the camera keeps its space; a link
+  that cannot be read must not be clickable either. Eight labels at 1280px, four at 390px.
+
+### The highlights are built-up areas, and that is why they do not match Google
+
+Measured, so the gap is not a matter of opinion: the Tokyo polygon is **2,821 points and
+18,816 km²**, with roughly **600 m between vertices**. Tokyo Metropolis — the dotted boundary
+Google draws — is 2,194 km². The highlight is therefore about **8.6× the size** of the
+administrative city, because Natural Earth's "urban areas" are the continuous built-up
+conurbation: Tokyo plus Yokohama, Kawasaki, Saitama and Chiba, which do not stop at any line.
+
+Two separate causes, both in the source rather than the renderer:
+
+1. **A different kind of area.** Built-up extent, not a legal boundary. Nothing about the
+   rendering can make one into the other.
+2. **A generalised outline.** Natural Earth 10m is drawn for world maps; ~600 m between vertices
+   is invisible at globe scale and coarse at city zoom.
+
+Three ways to close it, and they mean different things — pick before swapping the data:
+administrative boundaries from OpenStreetMap admin relations (matches Google's dotted line, and
+excludes the neighbouring cities you probably did visit); a higher-resolution built-up layer
+(same meaning, sharper edge); or the actual places visited as a track or a set of points, which
+is the only one that is true to "where I went" rather than "which city".
+
+### Terrain, and what the relief look does not do
+
+The relief look shows real topography at **global** scale — the Himalaya, the Tibetan plateau and
+the Japanese ranges all read clearly. It is a 2048×1024 normal map, which is about **20 km per
+pixel**.
+
+Planning a hike needs something like **10 m per pixel**, three orders of magnitude finer, and
+absolute heights rather than a shading vector. That is not a bigger texture on this globe; it is
+a different component — a per-trip terrain view over a real DEM for one mountain, with a GPX
+track and an elevation profile beside it. Do not try to grow the globe into it.
+
+Data, provenance and the regeneration traps live in `public/globe/README.md`. The ids in
+`visited.json` are trip ids and must track `src/content/trips/*.md` filenames.
+
 ## Reveal animation contract
 
 Two halves that must stay in sync:

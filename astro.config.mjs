@@ -11,10 +11,15 @@ export default defineConfig({
   trailingSlash: 'never',
   integrations: [
     react(),
-    // The theme-preview pages are noindex, and a noindex page in the sitemap is
-    // a contradiction a crawler reports back at you. Delete this filter when
-    // src/pages/theme-preview/ goes — it is throwaway.
-    sitemap({ filter: (page) => !new URL(page).pathname.startsWith('/theme-preview') }),
+    // Preview pages are noindex, and a noindex page in the sitemap is
+    // a contradiction a crawler reports back at you. Both entries are throwaway:
+    // drop each one when its page goes.
+    sitemap({
+      filter: (page) => {
+        const path = new URL(page).pathname;
+        return !path.startsWith('/theme-preview') && path !== '/about/travel-preview';
+      },
+    }),
   ],
   build: {
     // Emit /about.html rather than /about/index.html so the site works on
@@ -35,8 +40,19 @@ export default defineConfig({
     // carousel renders its three static cards and does not move. Pre-bundling
     // them at server start means there is nothing left to discover.
     // Production builds never had this — they resolve the whole graph up front.
+    // `three` is here for the same reason and it is not hypothetical: the globe
+    // engine on /about/travel-preview is a dynamic import behind an
+    // IntersectionObserver, so Vite first sees three.js when the visitor
+    // scrolls — and the in-flight import dies on `504 (Outdated Optimize Dep)`.
+    // Observed, not guessed.
     optimizeDeps: {
-      include: ['gsap', 'gsap/ScrollTrigger', '@gsap/react'],
+      include: [
+        'gsap',
+        'gsap/ScrollTrigger',
+        '@gsap/react',
+        'three',
+        'three/addons/controls/OrbitControls.js',
+      ],
     },
   },
 });
