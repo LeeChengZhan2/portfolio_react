@@ -18,5 +18,9 @@
  * `import type` from `engine.ts` is fine. Values are not. Keep it that way.
  */
 
-export const MAP_MODES = ['places', 'terrain'] as const;
+/* Order matters: this is the order the switcher renders in, and it runs from
+   the cheapest mode to the most expensive. `places` fetches nothing from a third
+   party, `atlas` adds boundaries, names and a global hillshade, `terrain` drops
+   to one ridge with a real elevation surface under it. */
+export const MAP_MODES = ['places', 'atlas', 'terrain'] as const;
 export type MapMode = (typeof MAP_MODES)[number];

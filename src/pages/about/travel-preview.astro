@@ -9,7 +9,7 @@ import type { MapTrip } from '../../scripts/mapglobe/engine';
 import { getSections, getTrips, tripYear } from '../../lib/content';
 
 /**
- * /about/travel with a 3D earth under the timeline — five stylised looks behind
+ * /about/travel with a 3D earth under the timeline — six stylised looks behind
  * a switcher, so they can be judged in the real page instead of from
  * screenshots.
  *
@@ -59,11 +59,22 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
   when: tripYear(trip.data) ?? 'Undated',
   href: `/about/travel/${trip.id}`,
 }));
+
+/**
+ * The same trips with one field more, rather than one array with a field the
+ * three.js engine has no use for. `country` is read only by the MapLibre atlas,
+ * where it picks the country labels to draw in the accent colour — see
+ * `visitedCountries` in src/scripts/mapglobe/engine.ts.
+ */
+const mapTrips: MapTrip[] = globeTrips.map((trip, index) => ({
+  ...trip,
+  country: trips[index]!.data.country,
+}));
 ---
 
 <BaseLayout
   title="Travel — globe preview"
-  description="The travel timeline with a 3D earth under it, in five styles."
+  description="The travel timeline with a 3D earth under it, in six styles."
   noindex
 >
   <Fragment slot="head">
@@ -88,13 +99,13 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
     <p class="preview-flag" slot="header-extra">
       <span class="preview-flag__tag">Preview</span>
       <span>
-        Five globe styles, one at a time. Not linked from anywhere but
+        Six globe styles, one at a time. Not linked from anywhere but
         <a href="/about/travel">the real travel page</a>.
       </span>
     </p>
 
     <GlobeStage slot="after-timeline" trips={globeTrips} />
-    <MapGlobeStage slot="after-timeline" trips={globeTrips satisfies MapTrip[]} />
+    <MapGlobeStage slot="after-timeline" trips={mapTrips} />
 
     <Content slot="essay" />
   </TravelContent>

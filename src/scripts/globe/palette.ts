@@ -19,6 +19,7 @@ export interface Palette {
   land: string;
   coast: string;
   border: string;
+  boundary: string;
   graticule: string;
   dot: string;
   city: string;
@@ -89,6 +90,13 @@ const STEPS = {
   land: 0.2,
   coast: 0.5,
   border: 0.15,
+  /* Country boundaries drawn OVER the land fill, which is why this is not
+     `border`. That one is 0.15 — lighter than land at 0.20 — and reads as a
+     hairline scored into the surface, which is right for the three.js vector
+     look where borders sit beside the coastline. The MapLibre atlas draws them
+     on top of a shaded land surface and needs them to read as a mark on it,
+     while still staying clearly weaker than the coast at 0.50. */
+  boundary: 0.36,
   graticule: 0.1,
   dot: 0.34,
   city: 0.3,
@@ -135,6 +143,7 @@ export function palette(host: HTMLElement): Palette {
     land: step(STEPS.land),
     coast: step(STEPS.coast),
     border: step(STEPS.border),
+    boundary: step(STEPS.boundary),
     graticule: step(STEPS.graticule),
     dot: step(STEPS.dot),
     city: step(STEPS.city),

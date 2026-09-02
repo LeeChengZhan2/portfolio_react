@@ -7,8 +7,16 @@
  * The comparison is deliberately narrow. Both earths read the same
  * public/globe/land.json and the same visited footprints, and both derive every
  * colour through src/scripts/globe/palette.ts. What differs is what each one
- * can DO: this one can also put a real elevation surface under a recorded GPS
- * track, which is the thing the three.js engine cannot grow into.
+ * can DO, which is what the three modes are:
+ *
+ *   places  — the stylised globe, matching the earth above. No third-party byte.
+ *   atlas   — the same globe, told what it is looking at: boundaries, country
+ *             and city names, and real relief. This is the one that answers
+ *             "which country is that" without leaving the page.
+ *   terrain — one ridge at 20 m per pixel with a recorded GPS track on it.
+ *
+ * The last two are the things the three.js engine cannot grow into: its normal
+ * map stores a shading vector rather than a height, and it has no names at all.
  *
  * Not an island. See src/scripts/mapglobe/index.ts — a dynamic import behind an
  * IntersectionObserver, the same deferral `client:visible` would give without
@@ -32,6 +40,13 @@ const MODES = [
     hint: 'The globe. Local data only — no third-party request is made in this mode.',
   },
   {
+    id: 'atlas',
+    name: 'World atlas',
+    hint:
+      'The same globe with borders, country and city names, and shaded relief. ' +
+      'Fetches elevation tiles when you switch to it.',
+  },
+  {
     id: 'terrain',
     name: 'Trail terrain',
     hint: 'Real elevation, pitched. Fetches DEM tiles when you switch to it.',
@@ -46,10 +61,13 @@ const MODES = [
     <p class="mapglobe__intro">
       The same eight footprints and the same coastline file as the earth above, drawn by a map
       engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
-      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the second
-      mode: a real elevation surface, which is what a recorded route needs to sit on.
-      <strong>Drop a <code>.gpx</code> file anywhere on the frame</strong> and it is drawn on the
-      terrain. The file is read in your browser and never leaves it.
+      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the other
+      two modes. <strong>World atlas</strong> keeps the globe and tells you what you are looking
+      at: country boundaries, country and city names, and shaded relief, with the countries you
+      have been to picked out in the page&rsquo;s own accent. <strong>Trail terrain</strong> drops
+      to a single ridge on a real elevation surface &mdash;
+      <strong>drop a <code>.gpx</code> file anywhere on the frame</strong> and it is drawn on it.
+      The file is read in your browser and never leaves it.
     </p>
   </div>
 
@@ -80,6 +98,16 @@ const MODES = [
     <p class="mapglobe__drop">Drop to draw the track</p>
   </div>
 
+  {/* Shown in atlas mode only, keyed off the same `data-mode` the script writes
+      on the section. Text rather than swatches on purpose: the globe's colours
+      are derived at runtime from the theme, so a swatch drawn in CSS would be a
+      second guess at them and would be wrong the first time a step changed. */}
+  <p class="mapglobe__legend">
+    Dashed lines are country borders and the dots are cities &mdash; capitals slightly larger.
+    Country names in the accent colour are the ones with a trip in them. The relief is real
+    elevation at about 20&nbsp;km per pixel, lit from the north-west.
+  </p>
+
   <div class="mapglobe__foot">
     <p class="mapglobe__readout" data-mapglobe-readout data-state="empty">No track loaded.</p>
 
@@ -97,8 +125,10 @@ const MODES = [
   <p class="mapglobe__note">
     Colours come from the same palette module the earth above uses, so both follow the theme
     picker. In <strong>Places visited</strong> nothing is fetched from a third party &mdash; the
-    coastline and footprints are the local files. <strong>Trail terrain</strong> requests elevation
-    tiles from Mapterhorn, which is the one property the terrain mode cannot preserve.
+    coastline and footprints are the local files, and so are the atlas&rsquo;s boundaries and
+    names. <strong>World atlas</strong> and <strong>Trail terrain</strong> both request elevation
+    tiles from Mapterhorn, which is the one property neither can preserve; nothing is requested
+    until you switch to them.
   </p>
 
   {/* The trips, handed to the script as data rather than fetched again. */}
@@ -215,6 +245,38 @@ const MODES = [
     @apply font-mono text-[0.6rem] uppercase tracking-[0.1em] text-fg-meta;
   }
 
+  /* Atlas labels, also built by engine.ts, so also global.
+
+     A halo rather than a chip. The eight trip labels are cards because they are
+     links and there are eight of them; sixty boxed cards is a pin board, and a
+     name with a halo behind it is what a map does instead. The halo is the band
+     the frame is painted in, so it inverts with the theme for free — a dark
+     halo around light text on a dark page.
+
+     `block` is load-bearing: MapLibre positions a marker with `transform`, and
+     transforms do not apply to a non-replaced inline element, so a bare span
+     would sit in the corner. `pointer-events: none` is too — a marker element
+     swallows the drag that started on it, and these are not links. */
+  .mapglobe__frame :global(.mapglobe__place) {
+    @apply pointer-events-none block whitespace-nowrap;
+    @apply font-mono text-[0.62rem] tracking-[0.1em] text-fg-body uppercase;
+    text-shadow:
+      0 0 3px var(--color-band),
+      0 0 3px var(--color-band),
+      0 0 7px var(--color-band);
+  }
+
+  .mapglobe__frame :global(.mapglobe__place.is-visited) {
+    @apply font-semibold text-accent;
+  }
+
+  /* Cities in mixed case and a sans face against the countries' letterspaced
+     mono caps. Telling two ranks of name apart by their setting rather than by
+     a legend is the oldest convention on any map. */
+  .mapglobe__frame :global(.mapglobe__place--city) {
+    @apply font-sans text-[0.6rem] tracking-normal text-fg-meta normal-case;
+  }
+
   /* MapLibre ships its own control chrome. The attribution is a licence
      requirement and stays, but it is toned to the page rather than left in the
      library's blue-on-white. */
@@ -268,6 +330,7 @@ const MODES = [
      edges rather than floating in the middle of it. */
   @media (min-width: 640px) {
     .mapglobe__foot,
+    .mapglobe__legend,
     .mapglobe__note {
       position: relative;
       left: 50%;
@@ -310,6 +373,17 @@ const MODES = [
      than display:none so it stays focusable from the keyboard. */
   .mapglobe__action input {
     @apply sr-only;
+  }
+
+  /* Hidden until the script writes `data-mode`, which means hidden without JS —
+     consistent with the switcher that would be the only way to reach the mode
+     it describes. */
+  .mapglobe__legend {
+    @apply hidden;
+  }
+
+  [data-mode='atlas'] .mapglobe__legend {
+    @apply mt-3 block max-w-2xl text-sm text-fg-meta;
   }
 
   .mapglobe__note {

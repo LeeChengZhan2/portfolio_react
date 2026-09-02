@@ -616,9 +616,12 @@ route and the link to it.
 
 It exists because of the section immediately above this one. The relief look cannot grow into a
 trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
-do both look like on this page". Two modes, one `Map` object:
+do both look like on this page". Three modes, one `Map` object:
 
 - **Places visited** — globe projection, the same eight footprints, no imagery and no labels.
+- **World atlas** — the same globe, told what it is looking at: country boundaries, 177 country
+  and 243 city names, city dots, and a global hillshade. Added 3 Sep 2026 at the author's
+  request; see "The atlas mode" below.
 - **Trail terrain** — real elevation with a hillshade, and **drop a `.gpx` on the frame** to draw
   a recorded track on it. Parsed with `DOMParser` in the page; the file never leaves the browser.
 
@@ -631,9 +634,11 @@ like it belongs. Do not "improve" one side's data without doing the same to the 
 **`places` mode makes no third-party request, and that took work.** A MapLibre source is fetched
 the moment it is *added*, not when a layer using it becomes visible — so declaring the `raster-dem`
 up front would have put a Mapterhorn request on every page load while the hillshade sat hidden.
-`ensureDem()` adds the source and the hillshade layer on first entry to terrain mode instead. That
-is the only reason `public/globe/README.md`'s "nothing is fetched from a third party at runtime"
-still holds for the globe half.
+`ensureHillshade()` and `ensureTerrainSource()` add them on first entry to a mode that needs them
+instead. That is the only reason `public/globe/README.md`'s "nothing is fetched from a third party
+at runtime" still holds for the globe half. Verified in Chrome: with the map loaded and left in
+`places`, the set of third-party hosts contacted is empty; it becomes exactly
+`tiles.mapterhorn.com` the moment atlas or terrain is picked.
 
 Things that look like shortcuts and are not:
 
@@ -701,6 +706,96 @@ Things that look like shortcuts and are not:
   distinction, so a lake that is an inner ring fills as land. Invisible at globe zoom; it would
   matter only if this became the real basemap, and the fix then is a proper polygon source.
 
+### The atlas mode (3 Sep 2026)
+
+The author's complaint about the `places` globe was that it is beautiful and says nothing: no way
+to tell which country you are looking at, and no terrain. The answer shipped is **a third mode
+rather than a change to the second** — `places` is untouched, down to the byte it fetches.
+
+What it adds, and where each part comes from:
+
+| | Source | Layer |
+|---|---|---|
+| Country boundaries | `public/globe/borders.json`, already on disk | `borders`, dashed line |
+| Country names | `atlas-countries.json`, 177 anchors | HTML markers |
+| City names | `atlas-cities.json`, 243 anchors | HTML markers |
+| City dots | the same file | `city-dot`, circle |
+| Relief | Mapterhorn DEM, the one terrain mode uses | `hillshade` |
+
+**It keeps the trips.** The footprints and the eight trip cards are visible in atlas mode too —
+the point is the places in context, not a second map that forgot what the page is about. Visited
+countries additionally read in the page's **accent**, which is the one thing on this globe that is
+about this site rather than about the world, and it keeps "where has this person been" legible at
+the zoom where a footprint is half a pixel.
+
+Things that look like bugs or shortcuts and are not:
+
+- **Switching `places` ↔ `atlas` deliberately does not move the camera.** Same globe, same scale:
+  the reader stays where they spun to and the world gains or loses its names underneath them.
+  Only `terrain` is a journey, and only a return from it flies home. Verified — after a drag, the
+  projected position of the Tokyo marker is identical across both switches to within a pixel.
+- **Still no `glyphs` key and no symbol layer.** That rule was cheap at eight names and is not at
+  420, and it is now paid for in two functions. `retier()` decides which labels are on the map at
+  all; `declutter()` decides which of those can be read. MapLibre does both for `symbol` layers and
+  neither for HTML markers. What it buys is that every name is a themeable DOM node — a country
+  label follows the theme picker for free, which a glyph-server symbol layer could not.
+- **A label below its zoom is removed from the map, not hidden.** MapLibre reprojects every marker
+  it holds on every frame, so an invisible marker costs a projection and a style write sixty times
+  a second while an absent one costs nothing. The tiering runs on `moveend`, never per frame.
+- **The zoom that tiers each name is Natural Earth's, not one invented here.** `MIN_LABEL` and
+  `min_zoom` are a cartographer's decision about when a name should appear, and `LABELRANK` is the
+  same judgement expressed as a collision priority. Measured at the home view: 57 of 420 labels are
+  on the map and 19 survive decluttering.
+- **`opacityWhenCovered: '0'`, overriding MapLibre's default of `'0.2'`.** This fixed a real bug
+  that predates the atlas. `declutter` has always skipped markers at opacity `'0'` — a test that
+  never fired while the covered value was `'0.2'`, so every occluded label still claimed a slot in
+  the greedy pass and could hide a label the reader could actually see, and an occluded trip label
+  stayed clickable at 20% opacity. Eight trips hid the symptom; twenty country names did not.
+  Visible labels at the home view went 30 → 19 when this landed, and all 19 are on the near side.
+- **Countries in letterspaced mono caps, cities in mixed-case sans.** Telling two ranks of name
+  apart by their setting rather than by a legend is the oldest convention on any map. Labels carry
+  a `text-shadow` halo in `--color-band` rather than a chip: eight boxed cards is a map, sixty is a
+  pin board. The halo inverts with the theme on its own.
+- **`pointer-events: none` on every atlas label, and `display: block`.** A marker element swallows
+  the drag that starts on it, and these are not links. `block` is load-bearing too — MapLibre
+  positions a marker with `transform`, which does not apply to a non-replaced inline element, so a
+  bare `<span>` sits in the corner of the frame.
+- **The city dot takes the *coastline's* colour, not `p.city`.** `city` steps 0.30 off the ground
+  against land's 0.20 — a tenth of the ramp apart, and invisible the moment the hillshade started
+  texturing the land under it. `palette.ts` also gained one step, `boundary` at 0.36: the existing
+  `border` at 0.15 is *lighter* than land and reads as a hairline scored into the surface, which is
+  right for the three.js vector look and wrong for a boundary drawn over shaded relief.
+- **The hillshade is one layer at two strengths.** `SHADE.atlas` is much gentler than
+  `SHADE.terrain` — a whole hemisphere at ~20 km per pixel takes the numbers tuned for a single
+  ridge and turns every mountain range into a bruise. Both still anchor to black and white rather
+  than to `fg`, for the reason in the section above.
+
+**Mapterhorn is a sparse pyramid, and the console said so.** A tile containing no land does not
+exist: measured, `0/0/0`, `2/3/1` and `6/53/26` return 200 while `3/0/0` and `6/54/28` return 404.
+Over a whole hemisphere that is a handful of expected 404s per view, which is exactly enough to
+bury the errors worth reading, so `map.on('error')` now filters a 404 on a DEM source and logs
+everything else. MapLibre draws nothing where a tile is missing, which is the right answer for open
+ocean. The browser still prints its own "failed to load resource" line per tile; that one belongs
+to the network stack and no handler can remove it.
+
+**What it costs.** The MapLibre engine chunk went 242.9 → 244.5 KB gz — 1.6 KB for the whole atlas,
+because the expensive parts are data, and the data is fetched on first entry to the mode: the two
+label files are 9 KB gz together and `borders.json` is 82 KB, none of it requested by a reader who
+stays in `places`. The eager page script is **unchanged at 1.8 KB**, and site-wide CSS and JS are
+untouched.
+
+**Verified in Chrome against the production build**, not the dev server — which matters here,
+because the first pass ran against a long-running `astro dev` that was serving stale scoped CSS and
+showed every label unstyled. Both themes, Sepia, 1400px and 390px (0 horizontal overflow), the
+camera-continuity check above, terrain still reached and left correctly, and a clean console.
+
+**Not yet decided, and left alone deliberately:** at the home view the trip cards sit on top of the
+country labels for China, Japan and Thailand, so those names lose their space. That is the
+declutter working as designed — a card naming the city says more than the country name under it —
+but it does mean the accent treatment only shows one or two countries until you zoom. And
+`PLACES_HOME` at zoom 2.3 is tuned for the desktop frame; in a 390px-wide frame it crops to Asia
+rather than showing the globe. Both of those are true of `places` mode too and predate this work.
+
 ### Never statically import a value from a lazily-imported engine
 
 Found while building the above, and it was **already broken for the three.js globe** — the claim
@@ -729,12 +824,19 @@ Measured on `/about/travel-preview`, gzipped:
 | Eager page script | 140.2 KB | **1.8 KB** |
 | three.js engine, on scroll | — | 138.6 KB |
 | MapLibre engine, on scroll | — | 242.9 KB |
-| MapLibre CSS, with its engine | — | 10.3 KB |
+| MapLibre CSS, **eager, render-blocking** | — | 10.3 KB |
 | MapLibre worker, on first map | — | 128.4 KB |
 
 Neither engine is fetched until its stage is a screen away, and the MapLibre one is not fetched at
 all by a visitor who stops at the first earth. Site-wide eager JS is unchanged — this is all
-page-scoped.
+page-scoped. The MapLibre engine chunk is 244.5 KB gz since the atlas landed (3 Sep 2026).
+
+**The CSS row is the exception, and the table used to say otherwise.** `maplibre-gl.css` is
+imported by `engine.ts`, and Astro hoists CSS from anywhere in a page's module graph into a
+`<link rel="stylesheet">` in the head — so it is render-blocking on `/about/travel-preview`
+whether or not either earth is ever scrolled to. Four stylesheets on that page against two on
+`/about`. It is page-scoped, so it costs the other 24 routes nothing, and it is the only part of
+MapLibre that is not deferred. Measured, not assumed: grep the built HTML for `rel="stylesheet"`.
 
 **Count the worker when comparing the two.** MapLibre's real cost at the moment a map appears is
 the engine *plus* its worker — 371 KB gz against three.js's 139 KB, not 243 against 139. The
