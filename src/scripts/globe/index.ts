@@ -13,8 +13,10 @@
  * would never touch.
  */
 
-import type { Globe, GlobeTrip, Look } from './engine';
-import { LOOKS } from './engine';
+import type { Globe, GlobeTrip } from './engine';
+// Values come from looks.ts, never from engine.ts — see the note there. A single
+// static value import from the engine puts three.js in the eager bundle.
+import { LOOKS, type Look } from './looks';
 
 const STORAGE_KEY = 'globe-look';
 const DEFAULT_LOOK: Look = 'dots';

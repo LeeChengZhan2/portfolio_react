@@ -23,8 +23,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { palette, type Palette } from './palette';
 
-export const LOOKS = ['dots', 'vector', 'line', 'relief', 'duotone', 'hex'] as const;
-export type Look = (typeof LOOKS)[number];
+import type { Look } from './looks';
+
+export type { Look };
 
 /**
  * three types an object's material as Material | Material[] unless the generic

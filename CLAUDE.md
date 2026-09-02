@@ -607,6 +607,181 @@ track and an elevation profile beside it. Do not try to grow the globe into it.
 Data, provenance and the regeneration traps live in `public/globe/README.md`. The ids in
 `visited.json` are trip ids and must track `src/content/trips/*.md` filenames.
 
+## The MapLibre earth (`/about/travel-preview`, 2 Sep 2026)
+
+A **second** earth, directly under the three.js one on the same preview page, so the two can be
+judged in the same page and the same theme rather than from screenshots. `MapGlobeStage.astro`
+plus `src/scripts/mapglobe/`. Both sections are throwaway: when one wins, delete the loser, this
+route and the link to it.
+
+It exists because of the section immediately above this one. The relief look cannot grow into a
+trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
+do both look like on this page". Two modes, one `Map` object:
+
+- **Places visited** — globe projection, the same eight footprints, no imagery and no labels.
+- **Trail terrain** — real elevation with a hillshade, and **drop a `.gpx` on the frame** to draw
+  a recorded track on it. Parsed with `DOMParser` in the page; the file never leaves the browser.
+
+**The comparison is deliberately narrow, and that is what makes it worth anything.** Both earths
+read the same `public/globe/land.json` and the same `visited.json`, and both derive every colour
+through the same `src/scripts/globe/palette.ts`. Feeding two renderers identical data and
+identical colours is what isolates the only question being asked, which is whether it *looks*
+like it belongs. Do not "improve" one side's data without doing the same to the other.
+
+**`places` mode makes no third-party request, and that took work.** A MapLibre source is fetched
+the moment it is *added*, not when a layer using it becomes visible — so declaring the `raster-dem`
+up front would have put a Mapterhorn request on every page load while the hillshade sat hidden.
+`ensureDem()` adds the source and the hillshade layer on first entry to terrain mode instead. That
+is the only reason `public/globe/README.md`'s "nothing is fetched from a third party at runtime"
+still holds for the globe half.
+
+Things that look like shortcuts and are not:
+
+- **There is no `glyphs` key in the style, and it must be OMITTED rather than set to
+  `undefined`.** This was the bug that blocked everything for a whole session. MapLibre validates
+  on the key's *presence*, so `glyphs: undefined` fails with `glyphs: string expected, undefined
+  found`, `_load` throws, and **the `load` event never fires and never rejects** — leaving a live
+  canvas, no layers, no markers, a status stuck on "Drawing the map", and nothing in the console.
+  It presented as a hang, so three unrelated things were "fixed" before the real cause surfaced.
+  Two defences are now in place: `map.on('error')` is wired to the console (MapLibre reports
+  style/source/tile failures as events, not throws), and the `load` await is raced against a
+  15 s timeout so a rejected style becomes a visible failure instead of a permanent spinner.
+- **Named imports from `maplibre-gl`, never a default.** v6 removed the default export.
+- **`setWorkerUrl()` is called at module scope, and it is not optional.** MapLibre v6 finds its
+  worker with `new URL('./maplibre-gl-worker.mjs', import.meta.url)`, which resolves against
+  wherever the *bundled* module landed — never next to the worker. Dev pointed into
+  `node_modules/.vite/deps/` and said so out loud (`The file does not exist at
+  ".../maplibre-gl-worker.mjs" which is in the optimize deps directory`); **production failed the
+  same way and silently**, resolving beside the hashed chunk in `_astro/` where no worker asset
+  was emitted at all. The import must be `?worker&url` and **not plain `?url`** — the shipped
+  worker imports a sibling, `maplibre-gl-shared.mjs`, and `?url` copies the file verbatim without
+  following it, so the worker dies on its first line in a production build. Verified by grepping
+  the emitted worker for bare imports: there are none, which is what says the sibling got bundled
+  in.
+- **No `glyphs` and no symbol layer anywhere.** A symbol layer needs a glyph server, which is a
+  third-party font fetch on every load for eight words. City names are HTML `Marker`s, which are
+  also themeable from the component's CSS for free.
+- **`sky`, `horizon` and `fog` all take the ground colour, and `atmosphere-blend` is 0.** The
+  space around the globe is then the band the frame is painted in, so the sphere sits on the page
+  instead of floating in a rendering of space. A blue halo is the "embedded widget" tell.
+- **Each mode sets its projection explicitly, and terrain attaches only on arrival.** The globe
+  does hand over to mercator on its own near z12, and relying on that was a bug: flying from z1.6
+  to a ridge with terrain already attached drags the camera through two seconds of
+  *globe projection with terrain on*, which is the combination MapLibre had to fix once already
+  (issue #4792). Terrain mode now sets mercator up front and calls `setTerrain` on `moveend`;
+  places mode calls `setTerrain(null)` **before** switching back to globe. The order of those
+  lines is the whole point of them. `fitBounds` after a GPX load re-arms the same wait, because
+  it restarts the camera the first one was waiting on.
+- **The DEM source declares its own `tileSize` and `encoding` — never override them.** Mapterhorn's
+  TileJSON says `"tileSize": 512, "encoding": "terrarium"`. A hardcoded `tileSize: 256` on the
+  source wins over the TileJSON and decodes 512px tiles at half size: the elevation comes out as
+  noise and takes the terrain mesh with it. That shipped once. `map.addSource('dem', { type:
+  'raster-dem', url: DEM_URL })` and nothing else.
+- **Hillshade colours anchor to black and white, not to the theme's `fg`.** The one place the
+  "everything derives from the page" rule bends, and it has to: a shadow being darker than the
+  surface is physics, not palette. Deriving the shadow from `p.coast` — which steps *toward* `fg`,
+  and `fg` is LIGHT in dark theme — made shadows lighter than highlights, so the relief rendered
+  as a negative: a near-white mountain range on a dark page that read as "the theme did not
+  apply". `mix(p.land, '#000000' | '#ffffff', k)` inverts correctly on its own, because the land
+  colour it starts from is already themed.
+- **Labels are decluttered greedily on `render`, and hidden rather than faded.** MapLibre
+  declutters `symbol` layers but does nothing for HTML markers, and six of the eight cities sit
+  inside one 2,000 km square — the default view stacked five cards on top of each other. Nearest
+  to frame centre wins its space. A label that cannot be read must not be clickable either. Same
+  rule the three.js engine follows; 7 of 8 show at 1400px.
+- **`map.on('error')` is wired to the console.** MapLibre reports tile, source and style failures
+  as events rather than by throwing, so a 404ing DEM tile or a rejected paint property is
+  otherwise a map that silently does nothing.
+- **The wheel is handed back at either zoom limit**, via `data-lenis-prevent`, exactly as the
+  three.js globe does it and for exactly the same reason — MapLibre's `preventDefault` stops the
+  browser scrolling but not Lenis.
+- **Ascent is summed off a 3 m threshold.** GPS altitude noise is a couple of metres per sample;
+  summing raw positive deltas turns a flat walk into a thousand metres of climbing.
+- **`land.json` rings fill as polygons with no hole handling.** The source carries no outer/inner
+  distinction, so a lake that is an inner ring fills as land. Invisible at globe zoom; it would
+  matter only if this became the real basemap, and the fix then is a proper polygon source.
+
+### Never statically import a value from a lazily-imported engine
+
+Found while building the above, and it was **already broken for the three.js globe** — the claim
+in that section that the engine "does not fire until the stage scrolls into view" was not true as
+shipped.
+
+`index.ts` imported `LOOKS` — one value — from `engine.ts`, which it otherwise reached only
+through a dynamic `import()`. Rollup cannot split a module that is also statically reachable, so
+it hoisted the entire engine, three.js included, into the page entry. The `IntersectionObserver`
+was deferring nothing. The build had been saying so the whole time and it reads like a style note:
+
+```
+[INEFFECTIVE_DYNAMIC_IMPORT] src/scripts/globe/engine.ts is dynamically imported by
+src/scripts/globe/index.ts but also statically imported by …, dynamic import will not
+move module into another chunk.
+```
+
+The fix is a third module holding just the constant — `globe/looks.ts` and `mapglobe/modes.ts` —
+imported by both sides. **Types are free** (erased before Rollup sees them), so `import type` from
+an engine is fine. Values are not.
+
+Measured on `/about/travel-preview`, gzipped:
+
+| | before | after |
+|---|---|---|
+| Eager page script | 140.2 KB | **1.8 KB** |
+| three.js engine, on scroll | — | 138.6 KB |
+| MapLibre engine, on scroll | — | 242.9 KB |
+| MapLibre CSS, with its engine | — | 10.3 KB |
+| MapLibre worker, on first map | — | 128.4 KB |
+
+Neither engine is fetched until its stage is a screen away, and the MapLibre one is not fetched at
+all by a visitor who stops at the first earth. Site-wide eager JS is unchanged — this is all
+page-scoped.
+
+**Count the worker when comparing the two.** MapLibre's real cost at the moment a map appears is
+the engine *plus* its worker — 371 KB gz against three.js's 139 KB, not 243 against 139. The
+worker is a separate asset on a separate request, so it is easy to read the chunk list and
+undercount by a third.
+
+**Verified in Chrome, not just built.** Driven through Playwright against the dev server: both
+modes render, 8 city markers place correctly, a GPX drop parses and draws (2.1 km / 267 m ascent /
+3,150–3,417 m read back off the file), the dark round-trip repaints both modes, decluttering keeps
+7 of 8 labels at 1400px, and the console is clean of errors and 404s. That session is what found
+the `glyphs` bug, the DEM `maxzoom` 404s and the inverted hillshade — none of which `astro check`
+can see, which is the same lesson as the top of "Theming contract".
+
+**The polar lines are fixed** (3 Sep 2026). They came from reusing `land.json` — coastline rings
+meant to be drawn as *lines on a sphere*, where a jump from longitude +179.87 to -180 wraps
+invisibly around the back. Three rings do that (Antarctica, Eurasia at Chukotka, one near 71°N),
+and MapLibre reads rings in Mercator, so each one drew a line straight across the globe. The hole
+in Antarctica was the same cause: that ring spans latitude -85.19 to -63.23 and never closes over
+the pole. `scripts/build-land.mjs` now emits `land-polygons.json` from Natural Earth's published
+polygons — antimeridian-split, closed to the pole, holes preserved — and validates both properties
+before writing. Verified in Chrome: both bands gone, Antarctica solid.
+
+**Fill and coastline come from different files, and that is the fix for the polar ring.** The
+polygon file closes Antarctica with a synthetic edge along the pole — necessary to fill the
+continent, and wrong to stroke: as a line that edge is a circle of latitude, and it drew a visible
+ring around the south pole. The `coast` layer is therefore built from `land.json` instead, whose
+Antarctic ring is pure coast (-85.19 to -63.23) with no closure, by `coastLines()` in the engine —
+which splits a ring wherever consecutive points jump more than 180° of longitude, since that jump
+is exactly where a line on a sphere wraps around the back. No extra download on the preview page:
+the other earth already fetches that file.
+
+**What is NOT fixed, and cannot be from the data side.** Antarctica renders with a wedge missing
+when you spin to the south pole, and it degenerates further as you zoom in there. This is
+MapLibre's globe triangulation of a polygon that *encircles* the pole. Established, not assumed:
+the same polygon fills correctly under `mercator`; the data was verified (no antimeridian jump
+over 5.72°, `minLat -89.99`, 257 distinct vertices on the pole ring); and clamping the pole edge
+to -89.99, to the Web Mercator limit -85.05, and to the true -90 all render identically.
+
+**This is a real result for the comparison, not just a defect.** The three.js earth draws the
+poles correctly and MapLibre does not — worth weighing alongside the capability gap, since the
+preview page exists to decide between them. It is out of frame in the default Asia-centred view.
+If it ever needs to go, the move is to drop Antarctica from the *fill* and leave it as coastline
+only, which removes the pole-enclosing polygon entirely; that is an appearance decision, so it
+has not been taken unilaterally.
+
+The page has also not been driven at **390px**.
+
 ## Reveal animation contract
 
 Two halves that must stay in sync:

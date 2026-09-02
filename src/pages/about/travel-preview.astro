@@ -3,7 +3,9 @@ import { getEntry, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import TravelContent from '../../components/astro/TravelContent.astro';
 import GlobeStage from '../../components/astro/GlobeStage.astro';
+import MapGlobeStage from '../../components/astro/MapGlobeStage.astro';
 import type { GlobeTrip } from '../../scripts/globe/engine';
+import type { MapTrip } from '../../scripts/mapglobe/engine';
 import { getSections, getTrips, tripYear } from '../../lib/content';
 
 /**
@@ -92,6 +94,7 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
     </p>
 
     <GlobeStage slot="after-timeline" trips={globeTrips} />
+    <MapGlobeStage slot="after-timeline" trips={globeTrips satisfies MapTrip[]} />
 
     <Content slot="essay" />
   </TravelContent>
@@ -100,6 +103,7 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
 <script>
   import '../../scripts/trips-view';
   import '../../scripts/globe';
+  import '../../scripts/mapglobe';
 </script>
 
 <style>

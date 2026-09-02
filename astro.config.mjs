@@ -45,6 +45,9 @@ export default defineConfig({
     // IntersectionObserver, so Vite first sees three.js when the visitor
     // scrolls — and the in-flight import dies on `504 (Outdated Optimize Dep)`.
     // Observed, not guessed.
+    // `maplibre-gl` is here for exactly the same reason as `three`: the
+    // MapLibre earth on the same preview page is a dynamic import behind an
+    // IntersectionObserver, so Vite would first see it mid-scroll.
     optimizeDeps: {
       include: [
         'gsap',
@@ -52,6 +55,7 @@ export default defineConfig({
         '@gsap/react',
         'three',
         'three/addons/controls/OrbitControls.js',
+        'maplibre-gl',
       ],
     },
   },

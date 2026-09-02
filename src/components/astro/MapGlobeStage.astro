@@ -1,0 +1,322 @@
+---
+/**
+ * The MapLibre earth — the second section on /about/travel-preview, sitting
+ * directly under GlobeStage so the two renderers can be compared in the same
+ * page, in the same theme, on the same data.
+ *
+ * The comparison is deliberately narrow. Both earths read the same
+ * public/globe/land.json and the same visited footprints, and both derive every
+ * colour through src/scripts/globe/palette.ts. What differs is what each one
+ * can DO: this one can also put a real elevation surface under a recorded GPS
+ * track, which is the thing the three.js engine cannot grow into.
+ *
+ * Not an island. See src/scripts/mapglobe/index.ts — a dynamic import behind an
+ * IntersectionObserver, the same deferral `client:visible` would give without
+ * pulling React onto the page.
+ *
+ * Throwaway, like the section above it. When one of the two wins, delete the
+ * loser and this whole preview route with it.
+ */
+import type { MapTrip } from '../../scripts/mapglobe/engine';
+
+interface Props {
+  trips: MapTrip[];
+}
+
+const { trips } = Astro.props;
+
+const MODES = [
+  {
+    id: 'places',
+    name: 'Places visited',
+    hint: 'The globe. Local data only — no third-party request is made in this mode.',
+  },
+  {
+    id: 'terrain',
+    name: 'Trail terrain',
+    hint: 'Real elevation, pitched. Fetches DEM tiles when you switch to it.',
+  },
+] as const;
+---
+
+<section class="mapglobe" data-mapglobe aria-labelledby="mapglobe-heading">
+  <div class="mapglobe__head">
+    <p class="mapglobe__eyebrow">The alternative · MapLibre GL JS 6.6.0</p>
+    <h2 id="mapglobe-heading" class="mapglobe__title">The same earth, and a mountain</h2>
+    <p class="mapglobe__intro">
+      The same eight footprints and the same coastline file as the earth above, drawn by a map
+      engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
+      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the second
+      mode: a real elevation surface, which is what a recorded route needs to sit on.
+      <strong>Drop a <code>.gpx</code> file anywhere on the frame</strong> and it is drawn on the
+      terrain. The file is read in your browser and never leaves it.
+    </p>
+  </div>
+
+  {/*
+    aria-checked ships as the default on every item and the script corrects it
+    on load: a static build cannot know what the visitor stored. Same reasoning
+    as GlobeStage and ThemePicker.
+  */}
+  <div class="switch" role="radiogroup" aria-label="Map mode">
+    {MODES.map((mode) => (
+      <button
+        type="button"
+        class="switch__opt"
+        role="radio"
+        aria-checked={mode.id === 'places'}
+        title={mode.hint}
+        data-mapglobe-mode={mode.id}
+      >
+        {mode.name}
+      </button>
+    ))}
+  </div>
+
+  <div class="mapglobe__frame">
+    <div class="mapglobe__stage" data-mapglobe-stage></div>
+    <div class="mapglobe__labels" data-mapglobe-labels></div>
+    <p class="mapglobe__status" data-mapglobe-status>Scroll down to load the map</p>
+    <p class="mapglobe__drop">Drop to draw the track</p>
+  </div>
+
+  <div class="mapglobe__foot">
+    <p class="mapglobe__readout" data-mapglobe-readout data-state="empty">No track loaded.</p>
+
+    <div class="mapglobe__actions">
+      {/* A label rather than a button, so the file picker is reachable from a
+          keyboard without scripting a click through to a hidden input. */}
+      <label class="mapglobe__action">
+        Load a .gpx
+        <input type="file" accept=".gpx,application/gpx+xml" data-mapglobe-file />
+      </label>
+      <button type="button" class="mapglobe__action" data-mapglobe-clear>Clear</button>
+    </div>
+  </div>
+
+  <p class="mapglobe__note">
+    Colours come from the same palette module the earth above uses, so both follow the theme
+    picker. In <strong>Places visited</strong> nothing is fetched from a third party &mdash; the
+    coastline and footprints are the local files. <strong>Trail terrain</strong> requests elevation
+    tiles from Mapterhorn, which is the one property the terrain mode cannot preserve.
+  </p>
+
+  {/* The trips, handed to the script as data rather than fetched again. */}
+  <script id="mapglobe-trips" type="application/json" set:html={JSON.stringify(trips)} is:inline />
+</section>
+
+<style>
+  @reference "#styles";
+
+  .mapglobe {
+    @apply mt-20 border-t border-line pt-12;
+  }
+
+  .mapglobe__head {
+    @apply mb-6 flex flex-col gap-3;
+  }
+
+  .mapglobe__eyebrow {
+    @apply font-mono text-[0.7rem] tracking-[0.14em] text-fg-meta uppercase;
+  }
+
+  .mapglobe__title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .mapglobe__intro {
+    @apply max-w-2xl leading-relaxed text-fg-body;
+  }
+
+  .mapglobe__intro code {
+    @apply rounded border border-line bg-surface-2 px-1 font-mono text-[0.8em] text-fg;
+  }
+
+  /* Inert without JS, and an inert control is worse than no control. Same
+     `html.js` gate as GlobeStage, TripsViewToggle and ThemePicker. */
+  .switch {
+    @apply hidden;
+  }
+
+  :global(html.js) .switch {
+    @apply mb-4 flex flex-wrap gap-0.5 rounded-full border border-line p-0.5;
+  }
+
+  .switch__opt {
+    @apply rounded-full px-3 py-1.5 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta;
+    @apply hover:text-accent;
+  }
+
+  .switch__opt[aria-checked='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .switch__opt:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* Matches GlobeStage exactly — same breakout, same heights. The two frames
+     have to be the same size or the comparison is about scale rather than look.
+
+     left/transform rather than `margin-inline: calc(50% - 50vw)`: 100vw
+     includes the scrollbar, so the usual full-bleed trick overflows by its
+     width and puts a horizontal scrollbar on the page. */
+  .mapglobe__frame {
+    @apply relative overflow-hidden rounded-xl border border-line bg-band;
+    height: min(64vh, 26rem);
+  }
+
+  @media (min-width: 640px) {
+    .mapglobe__frame {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 74rem);
+      transform: translateX(-50%);
+      height: min(88vh, 56rem);
+    }
+  }
+
+  .mapglobe__stage {
+    @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+  }
+
+  [data-state='ready'] .mapglobe__stage {
+    @apply opacity-100;
+  }
+
+  .mapglobe__labels {
+    @apply pointer-events-none absolute inset-0;
+  }
+
+  /* Built by engine.ts as MapLibre markers rather than rendered here, so the
+     selectors have to be global — Astro's scoping only reaches markup in this
+     file. Styled to match GlobeStage's labels so the two earths read as the
+     same page rather than two widgets. */
+  .mapglobe__frame :global(.mapglobe__label) {
+    @apply flex flex-col rounded border border-line-strong px-2 py-1 leading-tight whitespace-nowrap no-underline;
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    backdrop-filter: blur(4px);
+  }
+
+  .mapglobe__frame :global(.mapglobe__label:hover) {
+    @apply border-accent;
+  }
+
+  .mapglobe__frame :global(.mapglobe__label-name) {
+    @apply text-xs font-semibold text-fg;
+  }
+
+  .mapglobe__frame :global(.mapglobe__label:hover .mapglobe__label-name) {
+    @apply text-accent;
+  }
+
+  .mapglobe__frame :global(.mapglobe__label-when) {
+    @apply font-mono text-[0.6rem] uppercase tracking-[0.1em] text-fg-meta;
+  }
+
+  /* MapLibre ships its own control chrome. The attribution is a licence
+     requirement and stays, but it is toned to the page rather than left in the
+     library's blue-on-white. */
+  .mapglobe__frame :global(.maplibregl-ctrl-attrib) {
+    @apply rounded-tl border-t border-l border-line font-mono text-[0.6rem];
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    color: var(--color-fg-meta);
+  }
+
+  .mapglobe__frame :global(.maplibregl-ctrl-attrib a) {
+    color: var(--color-fg-meta);
+  }
+
+  .mapglobe__frame :global(.maplibregl-ctrl-attrib-button) {
+    background-color: transparent;
+  }
+
+  .mapglobe__status {
+    @apply absolute inset-0 flex items-center justify-center px-6 text-center;
+    @apply font-mono text-xs tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .mapglobe__status[data-state='ready'] {
+    @apply hidden;
+  }
+
+  /* A failure message is a sentence, not a label. */
+  .mapglobe__status[data-state='failed'] {
+    @apply tracking-normal normal-case;
+  }
+
+  /* Shown only while a file is being dragged over the frame. */
+  .mapglobe__drop {
+    @apply pointer-events-none absolute inset-2 hidden items-center justify-center rounded-lg;
+    @apply border-2 border-dashed border-accent text-center;
+    @apply font-mono text-xs tracking-[0.12em] text-accent uppercase;
+    background: color-mix(in oklab, var(--color-bg) 70%, transparent);
+  }
+
+  /* A general sibling combinator, not a chain of adjacent ones — the status and
+     label layers between them are free to move without silently killing this. */
+  .mapglobe__stage[data-drop] ~ .mapglobe__drop {
+    @apply flex;
+  }
+
+  .mapglobe__foot {
+    @apply mt-3 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  /* Matches the frame's breakout so the readout and the buttons sit at its
+     edges rather than floating in the middle of it. */
+  @media (min-width: 640px) {
+    .mapglobe__foot,
+    .mapglobe__note {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 74rem);
+      transform: translateX(-50%);
+    }
+  }
+
+  .mapglobe__readout {
+    @apply font-mono text-xs text-fg-meta;
+  }
+
+  .mapglobe__readout strong {
+    @apply font-semibold text-fg;
+  }
+
+  .mapglobe__readout[data-state='error'] {
+    @apply text-accent;
+  }
+
+  .mapglobe__actions {
+    @apply hidden;
+  }
+
+  :global(html.js) .mapglobe__actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .mapglobe__action {
+    @apply cursor-pointer rounded-full border border-line px-3 py-1 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta hover:text-accent;
+  }
+
+  .mapglobe__action:focus-within,
+  .mapglobe__action:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* The input is the control; the label is its skin. Hidden with sr-only rather
+     than display:none so it stays focusable from the keyboard. */
+  .mapglobe__action input {
+    @apply sr-only;
+  }
+
+  .mapglobe__note {
+    @apply mt-3 max-w-2xl text-sm text-fg-meta;
+  }
+
+  .mapglobe__note strong {
+    @apply font-medium text-fg-body;
+  }
+</style>
