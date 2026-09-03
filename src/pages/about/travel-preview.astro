@@ -61,15 +61,15 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
 }));
 
 /**
- * The same trips with one field more, rather than one array with a field the
- * three.js engine has no use for. `country` is read only by the MapLibre atlas,
- * where it picks the country labels to draw in the accent colour — see
- * `visitedCountries` in src/scripts/mapglobe/engine.ts.
+ * Both earths now read exactly the same trip array, so `MapTrip` and `GlobeTrip`
+ * are the same shape and this is an alias rather than a second mapping.
+ *
+ * It carried one field more until 3 Sep 2026 — `country`, which the MapLibre
+ * atlas used to pick the country labels it drew in the accent. That highlight
+ * came off at the author's request (the footprints already say where the trips
+ * are), and the field went with it rather than being left as data nothing reads.
  */
-const mapTrips: MapTrip[] = globeTrips.map((trip, index) => ({
-  ...trip,
-  country: trips[index]!.data.country,
-}));
+const mapTrips: MapTrip[] = globeTrips;
 ---
 
 <BaseLayout

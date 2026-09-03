@@ -16,10 +16,19 @@
 import type { MapGlobe, MapTrip, TrackStats } from './engine';
 // Values come from modes.ts, never from engine.ts — see the note there. A single
 // static value import from the engine puts MapLibre in the eager bundle.
-import { MAP_MODES, type MapMode } from './modes';
+import { DEFAULT_LAYERS, MAP_LAYERS, MAP_MODES, type MapLayer, type MapMode } from './modes';
 
 const STORAGE_KEY = 'mapglobe-mode';
 const DEFAULT_MODE: MapMode = 'places';
+
+/**
+ * The filter set lives under its own key, not inside the mode.
+ *
+ * Same reasoning as the site's two theme keys: a reader who tunes the filters,
+ * looks at Trail terrain and comes back should find their filters where they
+ * left them. One combined key would have to forget one to remember the other.
+ */
+const LAYERS_KEY = 'mapglobe-layers';
 
 const section = document.querySelector<HTMLElement>('[data-mapglobe]');
 const stage = document.querySelector<HTMLElement>('[data-mapglobe-stage]');
@@ -49,6 +58,10 @@ function isMode(value: string | null | undefined): value is MapMode {
   return MAP_MODES.includes(value as MapMode);
 }
 
+function isLayer(value: string | null | undefined): value is MapLayer {
+  return MAP_LAYERS.includes(value as MapLayer);
+}
+
 function storedMode(): MapMode {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -59,9 +72,29 @@ function storedMode(): MapMode {
   return DEFAULT_MODE;
 }
 
+function storedLayers(): MapLayer[] {
+  try {
+    const saved = localStorage.getItem(LAYERS_KEY);
+    // An empty string is a real answer — every filter switched off — so it is
+    // told apart from "nothing stored" by the null check rather than by falsiness.
+    if (saved !== null) return MAP_LAYERS.filter((layer) => saved.split(',').includes(layer));
+  } catch {
+    // Private browsing can refuse reads. Fall through to the defaults.
+  }
+  return [...DEFAULT_LAYERS];
+}
+
 function markSelected(mode: MapMode): void {
   for (const button of document.querySelectorAll<HTMLElement>('[data-mapglobe-mode]')) {
     button.setAttribute('aria-checked', String(button.dataset.mapglobeMode === mode));
+  }
+}
+
+function markLayers(active: MapLayer[]): void {
+  const on = new Set(active);
+  for (const button of document.querySelectorAll<HTMLElement>('[data-mapglobe-layer]')) {
+    const layer = button.dataset.mapglobeLayer;
+    if (isLayer(layer)) button.setAttribute('aria-pressed', String(on.has(layer)));
   }
 }
 
@@ -98,10 +131,12 @@ function showTrackError(message: string): void {
 if (section && stage && labelLayer) {
   let globe: MapGlobe | null = null;
   let mode = storedMode();
+  let active = storedLayers();
 
-  // The markup ships the default as checked, because a static build cannot know
-  // what the visitor stored. Correct it before any interaction.
+  // The markup ships the defaults as selected, because a static build cannot
+  // know what the visitor stored. Correct both before any interaction.
   markSelected(mode);
+  markLayers(active);
 
   /* ---- switching, which works before the map has loaded ------------------- */
   document.addEventListener('click', (event) => {
@@ -115,6 +150,26 @@ if (section && stage && labelLayer) {
       section.dataset.mode = mode;
       try {
         localStorage.setItem(STORAGE_KEY, mode);
+      } catch {
+        // Works for this page view; just will not be remembered.
+      }
+      return;
+    }
+
+    const layerButton = target?.closest<HTMLElement>('[data-mapglobe-layer]');
+    if (layerButton && isLayer(layerButton.dataset.mapglobeLayer)) {
+      const layer = layerButton.dataset.mapglobeLayer;
+      const next = new Set(active);
+      if (next.has(layer)) next.delete(layer);
+      else next.add(layer);
+
+      // Rebuilt in MAP_LAYERS order rather than in click order, so the stored
+      // string is stable and a filter set is comparable between visits.
+      active = MAP_LAYERS.filter((id) => next.has(id));
+      markLayers(active);
+      globe?.setLayers(active);
+      try {
+        localStorage.setItem(LAYERS_KEY, active.join(','));
       } catch {
         // Works for this page view; just will not be remembered.
       }
@@ -180,7 +235,7 @@ if (section && stage && labelLayer) {
     setStatus('loading', 'Drawing the map');
     try {
       const { createMapGlobe } = await import('./engine');
-      globe = await createMapGlobe(stage!, labelLayer!, readTrips(), mode);
+      globe = await createMapGlobe(stage!, labelLayer!, readTrips(), mode, active);
       section!.dataset.state = 'ready';
       setStatus('ready', '');
     } catch (error) {

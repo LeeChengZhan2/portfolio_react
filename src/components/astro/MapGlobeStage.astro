@@ -7,15 +7,19 @@
  * The comparison is deliberately narrow. Both earths read the same
  * public/globe/land.json and the same visited footprints, and both derive every
  * colour through src/scripts/globe/palette.ts. What differs is what each one
- * can DO, which is what the three modes are:
+ * can DO, which is what the four modes are:
  *
  *   places  — the stylised globe, matching the earth above. No third-party byte.
  *   atlas   — the same globe, told what it is looking at: boundaries, country
  *             and city names, and real relief. This is the one that answers
- *             "which country is that" without leaving the page.
+ *             "which country is that" without leaving the page. Fixed.
+ *   explore — the same globe with a filter row. It starts at boundaries and
+ *             country names alone; city names, relief, peaks and water are
+ *             added a chip at a time, and each is fetched only when it is
+ *             asked for.
  *   terrain — one ridge at 20 m per pixel with a recorded GPS track on it.
  *
- * The last two are the things the three.js engine cannot grow into: its normal
+ * The last three are things the three.js engine cannot grow into: its normal
  * map stores a shading vector rather than a height, and it has no names at all.
  *
  * Not an island. See src/scripts/mapglobe/index.ts — a dynamic import behind an
@@ -26,6 +30,10 @@
  * loser and this whole preview route with it.
  */
 import type { MapTrip } from '../../scripts/mapglobe/engine';
+/* Values, not just types — but this is frontmatter, which runs at build time
+   only, so importing them here adds nothing to what the browser downloads. The
+   client reaches the same module through the <script> at the foot of this file. */
+import { DEFAULT_LAYERS, MAP_LAYERS, type MapLayer } from '../../scripts/mapglobe/modes';
 
 interface Props {
   trips: MapTrip[];
@@ -47,11 +55,34 @@ const MODES = [
       'Fetches elevation tiles when you switch to it.',
   },
   {
+    id: 'explore',
+    name: 'Explore',
+    hint:
+      'A filter row over the same globe. Starts at boundaries and country names; ' +
+      'everything else is a chip away.',
+  },
+  {
     id: 'terrain',
     name: 'Trail terrain',
     hint: 'Real elevation, pitched. Fetches DEM tiles when you switch to it.',
   },
 ] as const;
+
+/**
+ * The chip copy, keyed by layer id.
+ *
+ * A `Record<MapLayer, …>` rather than a list, so adding a layer to MAP_LAYERS
+ * and forgetting its chip is a build error rather than a filter that silently
+ * cannot be reached. The row renders in MAP_LAYERS order, which is where that
+ * order is decided.
+ */
+const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
+  countries: { name: 'Countries', hint: 'Boundaries, and the name of every country.' },
+  cities: { name: 'Cities', hint: 'City dots and names. Capitals get a larger dot.' },
+  relief: { name: 'Relief', hint: 'Shaded terrain. This is the layer that fetches DEM tiles.' },
+  peaks: { name: 'Peaks', hint: '632 named mountains, with their height. Marked ▲.' },
+  water: { name: 'Rivers & lakes', hint: 'Major rivers and lakes, in the sea colour.' },
+};
 ---
 
 <section class="mapglobe" data-mapglobe aria-labelledby="mapglobe-heading">
@@ -62,10 +93,14 @@ const MODES = [
       The same eight footprints and the same coastline file as the earth above, drawn by a map
       engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
       whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the other
-      two modes. <strong>World atlas</strong> keeps the globe and tells you what you are looking
-      at: country boundaries, country and city names, and shaded relief, with the countries you
-      have been to picked out in the page&rsquo;s own accent. <strong>Trail terrain</strong> drops
-      to a single ridge on a real elevation surface &mdash;
+      three modes. <strong>World atlas</strong> keeps the globe and tells you what you are looking
+      at: country boundaries, country and city names, and shaded relief, with the eight footprints
+      still picked out in the page&rsquo;s own accent underneath.
+      <strong>Explore</strong> is the same globe with a filter row, and it starts quiet &mdash;
+      boundaries and country names, nothing else. Add city names, shaded relief, named peaks or
+      rivers and lakes a chip at a time; each layer is only downloaded once you ask for it, and the
+      trips stay on the map whatever you switch on or off.
+      <strong>Trail terrain</strong> drops to a single ridge on a real elevation surface &mdash;
       <strong>drop a <code>.gpx</code> file anywhere on the frame</strong> and it is drawn on it.
       The file is read in your browser and never leaves it.
     </p>
@@ -94,6 +129,54 @@ const MODES = [
   <div class="mapglobe__frame">
     <div class="mapglobe__stage" data-mapglobe-stage></div>
     <div class="mapglobe__labels" data-mapglobe-labels></div>
+
+    {/*
+      The controls sit INSIDE the frame, over the map, which is where a map's
+      controls live. Three things follow from that and none is decorative:
+
+      - The panel is a sibling of the stage, not a child of the map container,
+        so MapLibre never sees a pointer event that starts on it. Drag and wheel
+        over the panel do nothing to the camera, which is what you want; drag
+        and wheel anywhere else are untouched.
+      - It is positioned rather than laid out, so it costs the frame no height.
+        At 390px the frame is 26rem and a control row above it was eating an
+        eighth of the map.
+      - It is hidden until `data-state="ready"`, so it never floats over the
+        "Drawing the map" message.
+
+      The chips are toggles, so they carry `aria-pressed`. They ship their
+      defaults and are corrected from storage on load, like the mode switcher,
+      and they are hidden without JS — a control that cannot control is worse
+      than no control.
+    */}
+    <div class="filters">
+      {/*
+        The group is `display: contents`, so its label and its chips are direct
+        children of the panel's grid rather than of the group. That is the whole
+        reason it exists: labels land in the first column and chip rows in the
+        second, so a row lines up with every other row rather than with itself.
+        There is one group now that the relief ladder has gone; the structure is
+        kept because a second one would otherwise be pushed right by the width
+        of its own label, which is exactly the bug this fixed.
+      */}
+      <div class="filters__group">
+        <span class="filters__legend" id="mapglobe-layers-label">Layers</span>
+        <div class="filters__row" role="group" aria-labelledby="mapglobe-layers-label">
+          {MAP_LAYERS.map((layer) => (
+            <button
+              type="button"
+              class="filters__opt"
+              aria-pressed={DEFAULT_LAYERS.includes(layer)}
+              title={LAYER_COPY[layer].hint}
+              data-mapglobe-layer={layer}
+            >
+              {LAYER_COPY[layer].name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+
     <p class="mapglobe__status" data-mapglobe-status>Scroll down to load the map</p>
     <p class="mapglobe__drop">Drop to draw the track</p>
   </div>
@@ -104,8 +187,12 @@ const MODES = [
       second guess at them and would be wrong the first time a step changed. */}
   <p class="mapglobe__legend">
     Dashed lines are country borders and the dots are cities &mdash; capitals slightly larger.
-    Country names in the accent colour are the ones with a trip in them. The relief is real
-    elevation at about 20&nbsp;km per pixel, lit from the north-west.
+    <span class="mapglobe__legend-extra"
+      >&#9650; marks a named peak and its height, and rivers and lakes take the sea&rsquo;s
+      colour.</span
+    >
+    The places with a trip in them are the ones picked out in the page&rsquo;s accent on the map
+    itself. The relief is real elevation at about 20&nbsp;km per pixel, lit from the north-west.
   </p>
 
   <div class="mapglobe__foot">
@@ -125,10 +212,12 @@ const MODES = [
   <p class="mapglobe__note">
     Colours come from the same palette module the earth above uses, so both follow the theme
     picker. In <strong>Places visited</strong> nothing is fetched from a third party &mdash; the
-    coastline and footprints are the local files, and so are the atlas&rsquo;s boundaries and
-    names. <strong>World atlas</strong> and <strong>Trail terrain</strong> both request elevation
-    tiles from Mapterhorn, which is the one property neither can preserve; nothing is requested
-    until you switch to them.
+    coastline and footprints are the local files, and so is every atlas layer &mdash; boundaries,
+    names, peaks, and rivers and lakes. The single exception is <strong>Relief</strong>, which
+    reads elevation tiles from Mapterhorn; it is on by default in <strong>World atlas</strong> and
+    <strong>Explore</strong> and is the whole of <strong>Trail terrain</strong>, and it is the one
+    property those modes cannot preserve. Nothing is requested until you ask for it &mdash; not the
+    tiles, and not any of the local layers either.
   </p>
 
   {/* The trips, handed to the script as data rather than fetched again. */}
@@ -184,6 +273,80 @@ const MODES = [
 
   .switch__opt:focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* A panel floating over the map, in the corner of the frame. Inert without
+     JS and shown in `explore` only, once the map is actually drawn — the same
+     `html.js` gate as the switcher, plus `data-state` so it never sits on top
+     of the "Drawing the map" message.
+
+     `max-width` rather than a fixed width, so the same panel is a tidy block at
+     1400px and a full-width strip at 390px without a second layout. */
+  .filters {
+    @apply hidden;
+  }
+
+  /* A two-column grid — labels in the first, chip rows in the second — so the
+     rows align with each other rather than each aligning with itself. */
+  :global(html.js) [data-mode='explore'][data-state='ready'] .filters {
+    @apply absolute top-3 left-3 z-10 grid items-baseline gap-x-2.5 gap-y-1.5;
+    @apply rounded-lg border border-line p-2.5;
+    grid-template-columns: auto 1fr;
+    max-width: min(32rem, calc(100% - 1.5rem));
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  /* `contents`, so the label and the row below are laid out by the PANEL's grid
+     rather than by this box. See the note in the markup. */
+  .filters__group {
+    display: contents;
+  }
+
+  .filters__row {
+    @apply flex flex-wrap gap-1;
+  }
+
+  .filters__legend {
+    @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .filters__opt {
+    @apply rounded-full border border-line px-2 py-0.5 transition-colors;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-faint uppercase;
+    @apply hover:text-accent;
+  }
+
+  /* Pressed reads as filled, unpressed as an outline. The two states have to be
+     told apart at a glance across five chips, and a colour change alone is not
+     enough when four of them start off. */
+  .filters__opt[aria-pressed='true'] {
+    @apply border-line-strong bg-surface-2 text-fg;
+  }
+
+  .filters__opt:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* The frame is short on a phone, so the panel gives back everything it can:
+     tighter padding, smaller type, and the label column collapses — 45px of
+     fixed width is worth more as a chip than as the word "Layers" when the
+     whole frame is 390px wide. Labels then sit above their own rows, which is
+     still aligned, just vertically. */
+  @media (max-width: 639px) {
+    :global(html.js) [data-mode='explore'][data-state='ready'] .filters {
+      @apply top-2 left-2 gap-x-0 gap-y-1 p-2;
+      grid-template-columns: 1fr;
+      max-width: calc(100% - 1rem);
+    }
+
+    .filters__legend {
+      grid-column: 1;
+    }
+
+    .filters__opt {
+      @apply px-1.5 text-[0.58rem] tracking-[0.04em];
+    }
   }
 
   /* Matches GlobeStage exactly — same breakout, same heights. The two frames
@@ -249,32 +412,133 @@ const MODES = [
 
      A halo rather than a chip. The eight trip labels are cards because they are
      links and there are eight of them; sixty boxed cards is a pin board, and a
-     name with a halo behind it is what a map does instead. The halo is the band
-     the frame is painted in, so it inverts with the theme for free — a dark
-     halo around light text on a dark page.
+     name with a halo behind it is what a map does instead.
+
+     THE HALO IS `--color-bg`, NOT `--color-band`, and that is the whole reason
+     it works in both directions (3 Sep 2026). The frame is painted in `band`,
+     which is the ground palette.ts steps every one of the globe's own colours
+     off — the sea is 10% of the way from it toward `fg` and the land 20% — so a
+     band-coloured halo is a tenth of the ramp away from whatever is behind the
+     text and barely separates from it. `bg` is on the far side of the ground
+     from `fg` in every theme by construction, light and dark alike, so it is
+     always the furthest thing from the map under it: measured against the land
+     colour it is 1.77:1 in Classic and in dark, against band's 1.61:1, and
+     against the TEXT it is a full step better in all nine themes.
+
+     Four cardinal offsets at zero blur draw a crisp ring; the two blurred
+     copies fill the diagonals and soften the edge. Repeating a shadow is what
+     multiplies its opacity — a single one is transparent enough to read the
+     coastline through.
 
      `block` is load-bearing: MapLibre positions a marker with `transform`, and
      transforms do not apply to a non-replaced inline element, so a bare span
      would sit in the corner. `pointer-events: none` is too — a marker element
-     swallows the drag that started on it, and these are not links. */
+     swallows the drag that started on it, and these are not links.
+
+     The base is every atlas name; a rank below overrides only what it changes,
+     and only the peak changes a colour.
+
+     TWO CONTRASTS ACROSS THREE RANKS, one weight (3 Sep 2026, author's
+     spec). This rule is the base, and it is BOTH the city and the country:
+     they share `fg-meta` and are told apart by their setting alone. Only the
+     peak overrides it. Weight stays 400 everywhere; the trip cards carry 600.
+
+     Stated in dark mode, because that is where the author reads it and because
+     "darker" and "lighter" swap meaning between the two themes — the semantic
+     tokens swap with them, so one order covers both:
+
+       peak            fg-body   #c3c3c9   the one rank that steps up
+       country, city   fg-meta   #94949e   the map they sit on
+
+     Light mode mirrors it exactly — peak `#374151`, the other two `#6b7280` —
+     because that is what the token layer is for. Do NOT re-specify this per
+     theme.
+
+     Country and city sharing a colour is the point rather than a shortcut. The
+     setting already separates them and has since the atlas shipped — letterspaced
+     mono caps against mixed-case sans — so a second signal saying the same thing
+     bought a step of contrast that had to come from somewhere, and the place it
+     came from was the trip cards' share of the reader's attention. What is left
+     is one quiet ground of names with the peaks lifted out of it, and the eight
+     accent footprints above both.
+
+     `fg-meta` is safe HERE for a reason that does not generalise: these labels
+     carry a six-deep halo in `--color-bg`, and at a 10px glyph the 1px ring
+     covers a letter's whole immediate surround. So the contrast that decides
+     legibility is text-against-halo, not text-against-land — 4.83:1 Classic,
+     5.22–5.59 across the other light themes, 6.46 dark. NOTHING WITHOUT THIS
+     HALO may use it: against bare land the same colour is 2.74:1 in Classic.
+     `fg-faint` stays off the table entirely — 2.54:1 against the halo there,
+     under the 3:1 floor a UI mark needs — which is why extra steps have always
+     had to come off the top of this ladder rather than the bottom.
+
+     0.64rem, up from the 0.6rem this shipped with. Kept deliberately at the
+     author's call when the size was put to them separately: small type over
+     shaded relief needs it, and the cost is colliding a little sooner in the
+     declutter pass. */
   .mapglobe__frame :global(.mapglobe__place) {
+    --halo: var(--color-bg);
     @apply pointer-events-none block whitespace-nowrap;
-    @apply font-mono text-[0.62rem] tracking-[0.1em] text-fg-body uppercase;
+    @apply font-sans text-[0.64rem] font-normal text-fg-meta;
     text-shadow:
-      0 0 3px var(--color-band),
-      0 0 3px var(--color-band),
-      0 0 7px var(--color-band);
+      1px 0 0 var(--halo),
+      -1px 0 0 var(--halo),
+      0 1px 0 var(--halo),
+      0 -1px 0 var(--halo),
+      0 0 3px var(--halo),
+      0 0 6px var(--halo);
   }
 
-  .mapglobe__frame :global(.mapglobe__place.is-visited) {
-    @apply font-semibold text-accent;
+  /* Countries in letterspaced mono caps against everything else's mixed-case
+     sans. Telling ranks of name apart by their setting rather than by a legend
+     is the oldest convention on any map.
+
+     It declares no colour and no weight, which is the whole of its current
+     rank: it is a city label in a different setting. It ran at `fg-body` for
+     several rounds and at `fg` AND weight 500 for one, and that round is the
+     mistake to remember — a country name is context, it exists so the earth is
+     not blank, and there are three times as many of them on screen as there are
+     cities, spread in wide caps across every landmass. "Two ranks must stay a
+     step apart" is true, and it does not follow that the step should be taken by
+     raising the BACKGROUND rank. Here it is not taken at all. */
+  .mapglobe__frame :global(.mapglobe__place--country) {
+    @apply font-mono text-[0.62rem] tracking-[0.1em] uppercase;
   }
 
-  /* Cities in mixed case and a sans face against the countries' letterspaced
-     mono caps. Telling two ranks of name apart by their setting rather than by
-     a legend is the oldest convention on any map. */
-  .mapglobe__frame :global(.mapglobe__place--city) {
-    @apply font-sans text-[0.6rem] tracking-normal text-fg-meta normal-case;
+  /* The only atlas rank that steps off the base — brightest in dark, darkest
+     in light.
+
+     It has been three things: `fg-meta` as shipped, then `fg`, then the
+     `color-mix` step between `fg` and `fg-body`. Both of the last two were
+     reaching for separation from the trip cards, and `fg-body` gets it more
+     cheaply than either — the card is 12px at weight 600 inside a bordered box
+     in `fg`, and this is 10.2px at 400 with nothing around it, a full token
+     below. The mix bought a rung that no longer had anything to sit between
+     once the country came down to `fg-meta`.
+
+     Measured on land: 4.74–6.25:1 across all nine themes, comfortably clear of
+     AA at this size, and 7.83–11.07 against the halo.
+
+     The ▲ and the height inherit it and declare no colour of their own, so a
+     peak label reads as one object rather than a name with two accessories. */
+  .mapglobe__frame :global(.mapglobe__place--peak) {
+    @apply text-fg-body;
+  }
+
+  /* The ▲ that stands in for an icon layer — see `placeElement` in engine.ts.
+     Subordinate by SIZE and nothing else: it briefly ran at `fg-faint`, which is
+     2.7:1 on the land colour in Classic and under the 3:1 floor a UI mark needs.
+     Ranking a glyph by fading it only works while the fade is still legible, and
+     there is no room left below `fg-meta` to fade into. */
+  .mapglobe__frame :global(.mapglobe__place-mark) {
+    @apply mr-0.5 align-middle text-[0.72em];
+  }
+
+  /* A peak's height. Mono so a column of them lines up, and inheriting the
+     name's colour — the setting and the size already tell them apart. The margin
+     is small because there is a real space in the markup too. */
+  .mapglobe__frame :global(.mapglobe__place-sub) {
+    @apply ml-px font-mono text-[0.85em];
   }
 
   /* MapLibre ships its own control chrome. The attribution is a licence
@@ -382,8 +646,20 @@ const MODES = [
     @apply hidden;
   }
 
-  [data-mode='atlas'] .mapglobe__legend {
+  [data-mode='atlas'] .mapglobe__legend,
+  [data-mode='explore'] .mapglobe__legend {
     @apply mt-3 block max-w-2xl text-sm text-fg-meta;
+  }
+
+  /* The marks only exist in explore, where the layers that use them can be
+     switched on. Naming them under World atlas would describe things the reader
+     cannot see. */
+  .mapglobe__legend-extra {
+    @apply hidden;
+  }
+
+  [data-mode='explore'] .mapglobe__legend-extra {
+    @apply inline;
   }
 
   .mapglobe__note {

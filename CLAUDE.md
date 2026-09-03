@@ -175,6 +175,23 @@ without a stored choice, plus toggle, persistence, live-OS-change-is-ignored, no
 frame-by-frame no-flash probe. Two real bugs surfaced there that the build was perfectly happy
 with: an invisible footer boundary, and cards reading as recessed instead of raised.
 
+**And verify against `npm run build && npm run preview`, NOT against a long-running `astro dev`.**
+This has cost real time three separate days (3 Sep 2026). A running dev server picks up markup
+changes in an `.astro` file by HMR but can go on serving the **previous component's scoped
+stylesheet**, so the page renders new markup with old CSS and the symptom looks like a code bug
+rather than a stale asset. Both times it was diagnosed by comparing the same probe on both ports:
+
+| | dev :4321 | build :4322 |
+|---|---|---|
+| atlas label `text-transform` | `none` | `uppercase` |
+| control panel `position` | `static` | `absolute` |
+
+The second one presented as "the buttons do nothing" — unpositioned, the panel fell behind the
+absolutely-positioned MapLibre canvas, which then swallowed every click. `document.elementFromPoint`
+at each control is the one-line test that tells a stale stylesheet from a real z-index bug: on the
+build all 11 chips returned themselves, on dev all 11 returned `maplibregl-canvas`. **Restart the
+dev server after changing a component's `<style>` block**, or check the built site.
+
 ## Legacy app (`legacy/`, reference only)
 
 The CRA 5.0.1 / React 18 original, moved out of `src/` on 12 Aug 2026. Excluded from
@@ -616,12 +633,16 @@ route and the link to it.
 
 It exists because of the section immediately above this one. The relief look cannot grow into a
 trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
-do both look like on this page". Three modes, one `Map` object:
+do both look like on this page". Four modes, one `Map` object:
 
 - **Places visited** — globe projection, the same eight footprints, no imagery and no labels.
 - **World atlas** — the same globe, told what it is looking at: country boundaries, 177 country
   and 243 city names, city dots, and a global hillshade. Added 3 Sep 2026 at the author's
-  request; see "The atlas mode" below.
+  request; see "The atlas mode" below. **Fixed** — it has no controls.
+- **Explore** — the same globe with a filter row. It starts at boundaries and country names
+  alone; city names, relief, named peaks and rivers and lakes are added a chip at a time, and each
+  is fetched only when it is switched on. The trips are on the map whatever the filter says. Added
+  3 Sep 2026, also at the author's request; see "The explore mode" below.
 - **Trail terrain** — real elevation with a hillshade, and **drop a `.gpx` on the frame** to draw
   a recorded track on it. Parsed with `DOMParser` in the page; the file never leaves the browser.
 
@@ -689,11 +710,27 @@ Things that look like shortcuts and are not:
   as a negative: a near-white mountain range on a dark page that read as "the theme did not
   apply". `mix(p.land, '#000000' | '#ffffff', k)` inverts correctly on its own, because the land
   colour it starts from is already themed.
-- **Labels are decluttered greedily on `render`, and hidden rather than faded.** MapLibre
-  declutters `symbol` layers but does nothing for HTML markers, and six of the eight cities sit
-  inside one 2,000 km square — the default view stacked five cards on top of each other. Nearest
-  to frame centre wins its space. A label that cannot be read must not be clickable either. Same
-  rule the three.js engine follows; 7 of 8 show at 1400px.
+- **Labels are decluttered greedily on `render` and again whenever the label set changes**, and
+  hidden rather than faded. MapLibre declutters `symbol` layers but does nothing for HTML markers,
+  and six of the eight cities sit inside one 2,000 km square — the default view stacked five cards
+  on top of each other. Nearest to frame centre wins its space. A label that cannot be read must
+  not be clickable either. Same rule the three.js engine follows; 7 of 8 show at 1400px.
+- **The atlas labels' halo is `--color-bg`, not `--color-band`** (3 Sep 2026). The frame is
+  painted in `band`, which is the ground palette.ts steps every one of the globe's own colours off
+  — sea 0.10 toward `fg`, land 0.20 — so a band-coloured halo is a tenth of the ramp away from
+  whatever is behind the text and barely separates from it. `bg` is on the far side of the ground
+  from `fg` in every theme *by construction*, light and dark alike, so it is always the furthest
+  thing from the map under it: 1.77:1 against the land colour in Classic and in dark, against
+  band's 1.61:1, and a full step better against the text in all nine themes.
+- **`fg-faint` never appears on an atlas label, and `fg-meta` only ever behind the halo**
+  (3 Sep 2026, author's request to improve legibility). Measured on bare land, `fg-meta` is 2.74:1
+  in Classic, 3.03 in Paper, 3.11 in Sepia — under the 3:1 floor a UI mark needs, and it was once
+  the colour of city names, peak heights and the ▲ glyph alike. City and country names are on it
+  again *because of the six-deep `--color-bg` halo*, which at a 10px glyph is what the eye actually
+  measures against: 4.83:1 at worst. `fg-faint` clears neither test and is out entirely. The ▲ is
+  subordinate by SIZE (0.72em) rather than by fade — ranking a glyph by fading it only works while
+  the fade is still legible. Dark was never the bad case: the same `fg-meta` measures 3.65:1 on
+  land and 6.46 on the halo there. See the rank ladder below for what each rank ended up on.
 - **`map.on('error')` is wired to the console.** MapLibre reports tile, source and style failures
   as events rather than by throwing, so a 404ing DEM tile or a rejected paint property is
   otherwise a map that silently does nothing.
@@ -723,10 +760,17 @@ What it adds, and where each part comes from:
 | Relief | Mapterhorn DEM, the one terrain mode uses | `hillshade` |
 
 **It keeps the trips.** The footprints and the eight trip cards are visible in atlas mode too —
-the point is the places in context, not a second map that forgot what the page is about. Visited
-countries additionally read in the page's **accent**, which is the one thing on this globe that is
-about this site rather than about the world, and it keeps "where has this person been" legible at
-the zoom where a footprint is half a pixel.
+the point is the places in context, not a second map that forgot what the page is about. The
+**accent footprints are the only thing on this globe that is about this site** rather than about
+the world, and they are the whole answer to "where has this person been".
+
+A country containing a trip also drew its NAME in the accent at weight 600 for two days. That came
+off on 3 Sep 2026 at the author's request — *"no need to highlight country name, just the area that
+I visit is enough"* — and it was the right call: two accent marks for one fact, and the louder of
+the two was the one that mattered less. Its priority boost (5, ahead of every other country) went
+with the colour rather than surviving it; a label that quietly outranks its neighbours for a reason
+the reader cannot see is worse than one that does not. `MapTrip.country` and the build-time check
+that guarded the name match went too, so `mapTrips` is now just `globeTrips`.
 
 Things that look like bugs or shortcuts and are not:
 
@@ -753,9 +797,91 @@ Things that look like bugs or shortcuts and are not:
   stayed clickable at 20% opacity. Eight trips hid the symptom; twenty country names did not.
   Visible labels at the home view went 30 → 19 when this landed, and all 19 are on the near side.
 - **Countries in letterspaced mono caps, cities in mixed-case sans.** Telling two ranks of name
-  apart by their setting rather than by a legend is the oldest convention on any map. Labels carry
-  a `text-shadow` halo in `--color-band` rather than a chip: eight boxed cards is a map, sixty is a
-  pin board. The halo inverts with the theme on its own.
+  apart by their setting rather than by a legend is the oldest convention on any map — and it is
+  what carries the third rank `explore` adds, a peak with its ▲ and its height. **Setting is now
+  the only thing separating a country from a city**, since the two share `fg-meta` and one weight;
+  the peak is the single rank that also steps up in contrast. See the ladder below. Labels carry a
+  `text-shadow` halo rather than a chip: eight boxed cards is a map, sixty is a pin board. The
+  halo is `--color-bg` and inverts with the theme on its own — see the note in the list above for
+  why it is `bg` and not the `band` the frame is painted in.
+- **Two contrasts across three ranks, one weight** (settled 3 Sep 2026, author's spec — the
+  ASSIGNMENT is theirs, not derived). Stated in dark mode, because that is where the author reads
+  it and because "darker" and "lighter" swap meaning between the two themes. The semantic tokens
+  swap with them, so one statement covers both and it must never be re-specified per theme:
+
+  | | size | weight | colour | dark | light | halo / land, Classic |
+  |---|---|---|---|---|---|---|
+  | Trip card | 12px | **600** | `fg` + box | `#f2f2f3` | `#111827` | 17.74 / 10.04 |
+  | Peak, its ▲ and height | 10.2px | 400 | **`fg-body`** | `#c3c3c9` | `#374151` | 10.31 / 5.83 |
+  | Country | 9.9px | 400 | `fg-meta` | `#94949e` | `#6b7280` | 4.83 / 2.74 |
+  | City | 10.2px | 400 | `fg-meta` | `#94949e` | `#6b7280` | 4.83 / 2.74 |
+
+  **The country and the city share a colour, and that is the decision** — not a shortcut and not
+  the absence of one. Their setting has separated them since the atlas shipped, so a second signal
+  saying the same thing bought a step of contrast that had to come from somewhere, and where it
+  came from was the trip cards' share of the reader's attention. What is on the globe now is one
+  quiet ground of names, the peaks lifted a token out of it, and the eight accent footprints above
+  both. Ramp positions: peak **0.79–0.82** along ground→`fg`, country and city **0.57–0.68**.
+
+  **The peak is the only rank that has moved**, and it has now been four things — `fg-meta` as
+  shipped, `fg`, a `color-mix` step between `fg` and `fg-body`, and `fg-body`. The last two were
+  both reaching for separation from the trip cards; `fg-body` gets it more cheaply, because the
+  card is 12px at weight 600 inside a bordered box while the peak is 10.2px at 400 with nothing
+  around it. **The `color-mix` is gone** — it existed to sit between `fg` and `fg-body`, and once
+  the country came down to `fg-meta` there was nothing left for it to sit between. Do not
+  reintroduce it without a fourth rank that needs the rung.
+
+  **`fg-faint` is off the table**, and the reason is narrower than it looks: it sits at **0.36**
+  along Classic's ground→fg ramp where every other theme puts it near 0.52, and that one outlier
+  drags it to 2.54:1 against the halo — under the 3:1 floor a UI mark needs. (In the other light
+  themes it is 3.42–3.70, and in dark 4.77.) It is a known fault in the original palette, left
+  alone so Classic stays what shipped. It is why there is no usable token below `fg-meta`, and so
+  why every extra step this ladder has ever needed had to come off the top rather than the bottom.
+
+  **`fg-meta` on the city and the country is safe for a reason that does not generalise, so do not
+  copy it elsewhere.** Every atlas label carries a six-deep halo in `--color-bg`, and at a 10px
+  glyph the 1px ring covers a letter's whole immediate surround — so the contrast that decides
+  legibility is text-against-halo, not text-against-land: 4.83:1 at worst (Classic), 5.22–5.59
+  across the other light themes, 6.46 in dark. Against bare land the same colour is 2.74:1. **The
+  halo is load-bearing**, not decoration — weaken that `text-shadow` and both label ranks go with
+  it.
+
+  **Classic is the constraint, not dark.** Every tier's worst light-theme figure is Classic's,
+  because a pure-white page pushes the derived land furthest from the text; dark is the most
+  forgiving theme at every single tier. Check a change against Classic first. A live reference with
+  all nine themes, every token and the continuous ramp under them:
+  https://claude.ai/code/artifact/ee4ab1ad-9917-4092-a3eb-a805477571ea
+
+  Nine passes to get here, and the two failures are worth more than the result:
+
+  | | city | country | peak |
+  |---|---|---|---|
+  | 1. as it shipped | `fg-meta` | `fg-body` | `fg-meta` |
+  | 2. contrast pass — **wrong** | `fg-body` 500 | `fg` 500 | `fg-body` 500 |
+  | 3. country back down | `fg-body` 500 | `fg-body` | `fg-body` 500 |
+  | 4. everything down a grade | `fg-body` | `fg-meta` | `fg-body` |
+  | 5. one colour for all | `fg-meta` | `fg-meta` | `fg-meta` |
+  | 6. three contrasts — **wrong way round** | `fg` | `fg-body` | `fg-meta` |
+  | 7. order corrected | `fg-meta` | `fg-body` | `fg` |
+  | 8. peak off the card's colour | `fg-meta` | `fg-body` | `fg` 50% + `fg-body` |
+  | 9. **shipped** — country joins the city | `fg-meta` | `fg-meta` | `fg-body` |
+
+  **Step 2**: "two ranks must stay a step apart" is true, and it does not follow that the step
+  should be taken by raising the BACKGROUND rank. Country names are three times as numerous as
+  city names and set in wide caps across every landmass; at `fg` and weight 500 they buried the
+  trip cards the page exists for — *"the countries name is just to make the earth don't too
+  blank."*
+
+  **Step 6**: "darker" and "lighter" are unusable words on a two-theme site and I read both of them
+  backwards. Settle a question like this in one theme's hex values, not in adjectives — that is
+  what finally resolved it, and it took one question instead of a fourth guess. Sizes were
+  confirmed separately at the same time: 0.64rem for city and peak, up from the 0.6rem this
+  shipped with, kept deliberately because small type over shaded relief needs it.
+
+  **Steps 5 and 9 are not the same answer.** Five put every name including the peak on one colour;
+  nine keeps the peak a token above. The difference is what `explore` added in between — a rank
+  whose labels are the longest strings on the map and the only ones carrying a number, which is
+  worth one step and the countries are not.
 - **`pointer-events: none` on every atlas label, and `display: block`.** A marker element swallows
   the drag that starts on it, and these are not links. `block` is load-bearing too — MapLibre
   positions a marker with `transform`, which does not apply to a non-replaced inline element, so a
@@ -765,10 +891,35 @@ Things that look like bugs or shortcuts and are not:
   texturing the land under it. `palette.ts` also gained one step, `boundary` at 0.36: the existing
   `border` at 0.15 is *lighter* than land and reads as a hairline scored into the surface, which is
   right for the three.js vector look and wrong for a boundary drawn over shaded relief.
-- **The hillshade is one layer at two strengths.** `SHADE.atlas` is much gentler than
-  `SHADE.terrain` — a whole hemisphere at ~20 km per pixel takes the numbers tuned for a single
-  ridge and turns every mountain range into a bruise. Both still anchor to black and white rather
-  than to `fg`, for the reason in the section above.
+- **Relief is one strength, and it is `faint`** (settled 3 Sep 2026). The author's first note was
+  that the relief showed height but not obviously; the replacement came back as *too* obvious; the
+  third answer was a `RELIEF_LEVELS` ladder of five and a row of chips, the same conclusion the
+  light themes reached — when the right amount is a matter of screen, room and eyes, the page can
+  let the reader say. They said `faint`: a 45° sun, `standard` method, shadow 0.26 / highlight
+  0.20, exaggeration 0.90 — which is exactly what the atlas originally shipped with, reached the
+  long way round. **The ladder, the chips and the `mapglobe-relief` key are all gone**; `SHADE` is
+  back to two rows, `atlas` and `terrain`.
+
+  What the ladder established, and what the surviving numbers encode:
+
+  - **The sun angle is the control that matters, and it is not obvious why.** MapLibre shades by
+    *slope*, and at ~20 km per pixel even the Himalaya is a gentle slope from one pixel to the
+    next, so a high sun lights the whole range almost flatly while `hillshade-exaggeration` —
+    capped at 1 — runs out of room long before the relief reads.
+  - **`hillshade-method: multidirectional` is the bigger visible step of the two**, because it
+    lights ridges that run parallel to a single sun.
+  - And **neither is what was wanted here.** A 45° sun and `standard` is the gentlest rung, and it
+    is the one that leaves the landmass light enough for a page of typography to sit beside.
+
+  Rejected, so do not reach for them again: shadow 0.42 at a 28° sun with exaggeration 1 (shipped
+  for one round, came back as too obvious), and shadow 0.52 at 20°, which darkens the whole
+  landmass until the globe reads as a satellite render — the one thing this page is trying not to
+  look like.
+
+  Relief is also **off by default in `explore` now** and on only in `atlas`, which has a side
+  effect worth knowing: entering `explore` makes no third-party request at all until the Relief
+  chip is pressed. Terrain mode keeps its own separate setting and always did. Both still anchor
+  to black and white rather than to `fg`, for the reason in the section above — verified in dark.
 
 **Mapterhorn is a sparse pyramid, and the console said so.** A tile containing no land does not
 exist: measured, `0/0/0`, `2/3/1` and `6/53/26` return 200 while `3/0/0` and `6/54/28` return 404.
@@ -791,10 +942,141 @@ camera-continuity check above, terrain still reached and left correctly, and a c
 
 **Not yet decided, and left alone deliberately:** at the home view the trip cards sit on top of the
 country labels for China, Japan and Thailand, so those names lose their space. That is the
-declutter working as designed — a card naming the city says more than the country name under it —
-but it does mean the accent treatment only shows one or two countries until you zoom. And
-`PLACES_HOME` at zoom 2.3 is tuned for the desktop frame; in a 390px-wide frame it crops to Asia
-rather than showing the globe. Both of those are true of `places` mode too and predate this work.
+declutter working as designed — a card naming the city says more than the country name under it.
+It used to matter, because it hid the accent treatment; with that gone it is simply a country name
+covered by something more specific. And `PLACES_HOME` at zoom 2.3 is tuned for the desktop frame;
+in a 390px-wide frame it crops to Asia rather than showing the globe. Both are true of `places`
+mode too and predate this work.
+
+### The explore mode (3 Sep 2026)
+
+The brief was "more information on the earth, but do not make it messy" — so the answer is not
+more layers on the atlas, it is a **fourth mode with a filter row**. `MAP_LAYERS` is five filters
+and `DEFAULT_LAYERS` is what `explore` opens with.
+
+**`DEFAULT_LAYERS` is `['countries']` alone** (revised 3 Sep 2026, author's request). It used to
+be the same list as `ATLAS_LAYERS`, on the reasoning that the two modes should agree until the
+reader changes something — which made the first thing anyone saw in `explore` identical to the
+mode beside it, and busy. A filter row is for starting quiet and adding, not starting full and
+subtracting. **`ATLAS_LAYERS` did NOT move with it**: `atlas` is still countries + cities +
+relief, because the switcher's own hint and the page's prose both promise "borders, country and
+city names, and shaded relief", and that list is what makes the promise true. The two constants
+now live side by side in modes.ts precisely so the next reader can see they are deliberately
+different.
+
+| Filter | Default | Draws | Data |
+|---|---|---|---|
+| Countries | on | boundaries + 177 names | `borders.json` + `atlas-countries.json` |
+| Cities | on | dots + 243 names | `atlas-cities.json` |
+| Relief | off | global hillshade, one strength (see below) | Mapterhorn DEM tiles |
+| Peaks | off | 632 named mountains, ▲ + height | `atlas-peaks.json` |
+| Rivers & lakes | off | 552 rivers, 411 lakes, unnamed | `atlas-rivers.json` + `atlas-lakes.json` |
+
+**The trips are not in that table and that is the point.** Footprints and trip cards are drawn
+in every globe mode and answer to no filter. The panel used to say so in a line of small print
+under the chips; that came off on 3 Sep 2026 at the author's request, and the claim now lives in
+the page's own prose above the frame, where it is a sentence rather than a caption on a control.
+
+Things that look like bugs or shortcuts and are not:
+
+- **Data is fetched per filter, not per mode.** `ensureData(layer)` keeps a `Map` of in-flight
+  promises, so switching a layer on downloads exactly its own files, switching it off downloads
+  nothing, and switching it back on re-uses what is already there. Verified in Chrome by watching
+  the request log across nine toggles: entering `explore` fetched borders, countries, cities and
+  DEM and nothing else; each later chip fetched only its own file; every toggle after that fetched
+  nothing at all.
+- **Layer visibility is set in one full pass, never diffed.** `setLayoutProperty` to a value a
+  layer already has is a no-op inside MapLibre, so a diff would be state to keep correct in
+  exchange for nothing.
+- **▲ is text, not an icon layer.** A MapLibre icon needs a sprite sheet — a second network
+  request and a build step — and the glyph is already in every system font. Three ranks of name
+  then tell themselves apart by setting and mark with no legend, no sprite and no glyph server:
+  countries in letterspaced mono caps, cities in mixed-case sans, and peaks with ▲ and a height.
+  The mark is `aria-hidden`: "black up-pointing triangle Everest" is a worse thing for a screen
+  reader to say than "Everest".
+- **Rivers and lakes are geometry only, and were named for exactly one round** (3 Sep 2026). The
+  names were built the way the rest of the atlas is — a fourth label rank in italic, anchored off
+  a third file, `atlas-water.json`, holding 494 anchors: the point half way *along* each river
+  rather than its bbox centre, and the area centroid of a lake's largest ring. It worked, and it
+  was the wrong answer to the brief: at globe zoom that was 91 candidates in the most crowded part
+  of the map, and this mode exists to add information *without* making a mess. The author took
+  them off the same day. **The file, its build step and the `water` entry in `LABEL_LAYER` are all
+  gone rather than left switched off** — a `node scripts/build-atlas.mjs` run that still emitted
+  an orphan would be worse than the churn. Git history has all of it; if the answer changes again,
+  the cheap version is a far bigger `WATER_ZOOM_SHIFT` so only a dozen of the biggest names ever
+  reach the globe view.
+- **The river line is wider than it looks like it should be**, 0.9px at globe zoom against the
+  0.5px it shipped with. The sea steps 0.10 off the ground and the land 0.20, so a river on land
+  is a tenth of the ramp apart from it — 1.24:1, which reads perfectly well as an ocean and not at
+  all as a hairline. The naming round is what surfaced it, and the width is kept now the names are
+  gone: a river at 0.5px was invisible with or without a word on top of it.
+- **A peak's label has a real space before its height, as well as the CSS margin.** The margin
+  separates them on screen; without the space the accessible name and anything copied out of the
+  page read "Mount Everest8,848 m".
+- **Optional layers can never bury the base map.** Declutter priority runs trips 0, visited
+  countries 5, countries 10–17, cities 24–29, peaks 32–38 — the same order as `MAP_LAYERS`, so a
+  layer added at the end of that list cannot cost the ones before it their space. Within peaks the
+  file order (zoom band, then height) carries into a collision. Water draws no labels at all, so
+  it claims no priority.
+- **`retier()` ends by calling `declutter()`**, and that is not tidiness (3 Sep 2026). `declutter`
+  is wired to `render`, and MapLibre only renders when something changes — so switching a layer on
+  while the camera was still added its labels and then left every one of them visible, stacked,
+  until the map happened to repaint. With four optional layers on that was twenty peak names piled
+  over the Himalaya, and it read as a broken collision test rather than an un-run one. Measured
+  before and after at the home view: 26 visible peak labels with overlaps, against 9 with none. A
+  just-added marker has no occlusion opacity yet, so a far-side label can claim a slot for exactly
+  one pass and the next real render corrects it — the right way round, because a label that
+  appears and then goes beats a screenful that never resolves.
+- **Rivers and lakes take the SEA's colour**, not one of their own. A lake is the same substance
+  as the ocean and the palette already says what that looks like in nine themes. The hillshade is
+  inserted beneath them, so relief shows through land and not through water.
+- **`relief`, not `terrain`, as the layer id.** There is already a MODE called `terrain` and it is
+  a completely different thing — one ridge with a GPS track on it, not a global hillshade. One
+  identifier meaning both is how the wrong one gets switched. The chip still reads "Relief".
+- **A second storage key, `mapglobe-layers`.** Same reasoning as the site's two theme keys: a
+  reader who tunes the filters, looks at Trail terrain and comes back should find their filters
+  where they left them, and one combined key would have to forget one to remember the other. An
+  empty stored string is a real answer — every filter off — so it is told apart from "nothing
+  stored" by a null check rather than by falsiness. There is no third key any more; it belonged to
+  the relief ladder.
+- **`LAYER_COPY` is a `Record<MapLayer, …>`.** Adding a layer to `MAP_LAYERS` and forgetting its
+  chip is then a build error rather than a filter nobody can reach.
+- **The controls sit INSIDE the frame, over the map** (3 Sep 2026, author's request), and three
+  things follow from that. The panel is a *sibling* of the stage rather than a child of the map
+  container, so MapLibre never sees a pointer event that starts on it — drag and wheel over the
+  panel do nothing to the camera, and drag and wheel anywhere else are untouched. It is positioned
+  rather than laid out, so it costs the frame no height: at 390px the frame is 26rem and a control
+  row above it was eating an eighth of the map. And it is hidden until `data-state="ready"`, so it
+  never floats over the "Drawing the map" message. Verified both ways in Chrome — a drag started
+  on the panel leaves the globe still, a drag started beside it moves it.
+- **The panel is one grid and its group is `display: contents`.** Labels land in the first
+  column, chip rows in the second, so any two rows of chips start at the same x — wrap each row in
+  a real box instead and the second is pushed right by the width of its own label, which is what
+  it looked like when there were two rows. There is one row now that the relief ladder has gone;
+  the structure is kept because the next group added would hit the same bug. Below 640px the label
+  column collapses and labels sit above their rows: 45px of fixed width is worth more as a chip
+  than as the word "Layers" when the frame is 390px wide.
+
+**What it costs.** The MapLibre engine chunk is 245.2 KB gz and the eager page script 2.0 KB —
+the whole filter mechanism is under a kilobyte, because everything expensive is data and no data
+is fetched until a chip is pressed. Dropping Heritage took 146 KB (45 KB gz) of JSON off the
+repo and one live Wikidata query out of the build, and dropping the water names took another
+23 KB (8 KB gz). Site-wide CSS and JS are untouched.
+
+**Verified in Chrome against the production build.** Four tabs and five chips render; `explore`
+opens with Countries alone and fetches exactly `atlas-countries.json` + `borders.json` and nothing
+else — not even a DEM tile, since Relief is now off by default; each later chip fetches only its
+own files and re-toggling fetches nothing at all; `atlas` is provably unaffected by the filter
+set; no relief ladder, no water label and no note in the DOM; country and city names read back at
+`fg-meta` and peaks at `fg-body`, with a `bg` halo, in both themes; labels at 1400px show **0 pairwise overlaps**,
+including immediately after a toggle with the camera still; 390px gives 5/5 clickable chips and
+0 horizontal overflow; console clean.
+
+**Known and left alone:** at globe zoom the trip cards still cover the country labels for China,
+Japan and Thailand — declutter working as designed, since a card naming the city says more than
+the country name under it. And a cluster of peaks loses most of its names to itself: the Himalaya
+carries a dozen candidates in one degree and greedy decluttering keeps two. That is a property of
+the collision rule rather than of these layers, and it is the same rule the three.js earth uses.
 
 ### Never statically import a value from a lazily-imported engine
 

@@ -14,6 +14,9 @@ would be 880 KB the bundler has to parse.
 | `cities.json` | 14 KB (6 KB gz) | 900 places by population, as `[lat, lon]`. Context dots when zoomed in. **three.js earth only** — it has no names. |
 | `atlas-countries.json` | 9 KB (3 KB gz) | 177 country label anchors: name, `[lon, lat]`, min zoom, rank. **MapLibre atlas only.** |
 | `atlas-cities.json` | 18 KB (6 KB gz) | 243 city label anchors, plus country and a capital flag. **MapLibre atlas only.** |
+| `atlas-peaks.json` | 36 KB (12 KB gz) | 632 named mountains with their height. The `Peaks` filter. |
+| `atlas-rivers.json` | 143 KB (48 KB gz) | 552 river lines, simplified. Half of the `Rivers & lakes` filter. |
+| `atlas-lakes.json` | 124 KB (37 KB gz) | 411 lakes, simplified. The other half. |
 | `visited.json` | 206 KB (24 KB gz) | The eight built-up footprints, keyed by trip id, each with its outer ring, a bounding-box centre and an angular span. |
 | `land-mask.webp` | 121 KB | 2048×1024, land black on white sea. Lossless. |
 | `earth-gray.webp` | 301 KB | NASA Blue Marble, grayscale. The duotone look only, loaded on demand. |
@@ -34,11 +37,32 @@ build step: `LABEL_X`/`LABEL_Y` are hand-placed anchors (a centroid puts "Norway
 "Chile" in Argentina), and `MIN_LABEL`/`min_zoom` is a cartographer's decision about the zoom a
 name should appear at, which is what tiers the atlas instead of a rule invented here.
 
+**Every atlas file is fetched only when its filter is switched on**, one layer at a time — see
+`ensureData` in src/scripts/mapglobe/engine.ts. That granularity is the difference between a
+filter row and a menu of downloads: a reader who wants rivers should not also pay 82 KB for
+borders. Nothing here is requested at all in `places` mode, or by a reader who never opens
+`explore`.
+
 **Regenerate them with `node scripts/build-atlas.mjs`.** It validates before writing, and one of
-its checks is not obvious: the atlas draws the countries in `src/content/trips/*.md` in the page's
-accent, matched on Natural Earth's `NAME`, so the script fails if any of China, Japan, Thailand,
-Indonesia or Taiwan stops matching. That check has already earned its keep — the first draft read
-`NAME_EN`, which is "People's Republic of China" and matched nothing.
+its checks is not obvious: it asserts that five well-known countries still appear under their
+SHORT cartographic names, because `NAME` gives "China" and `NAME_EN` gives "People's Republic of
+China", which is too long to draw on a globe. The first draft read `NAME_EN`, which is how that
+check earned its keep. It was originally there to protect the visited-country accent, which came
+off on 3 Sep 2026; the sample is kept because it is as good a sample as any.
+
+**Rivers and lakes carry no names, and that was a decision rather than an omission.** They were
+named for one round on 3 Sep 2026 — a third file, `atlas-water.json`, holding 494 label anchors:
+the point half way *along* each river rather than the middle of its bounding box (most rivers
+double back, and the bbox centre is dry land), and the area centroid of a lake's largest ring. At
+globe zoom that put 91 candidates into the most crowded part of the map, and the author took them
+straight back off. The file and its build step are gone rather than left emitting an orphan; both
+are in git history.
+
+**The peak zoom is shifted, and that shift is the only invention in the build.** Natural Earth's
+zooms are calibrated for a flat web map where z4 shows a continent, and this globe opens at z2.3
+showing a hemisphere. Left alone, the highest mountain on earth first appears at z4 and the globe
+shows no peaks at all, so the whole column is shifted down by 3. Everything else in these files is
+copied from a source.
 
 **110m, not 50m, and `NAME`, not `NAME_EN`.** These are label anchors, so the geometry scale only
 decides how many names exist; 177 countries and 243 cities is a world atlas's worth, and the 50m
@@ -89,6 +113,16 @@ data nothing looks at.
 - `earth-gray.webp`: NASA Blue Marble. Public domain.
 - `atlas-countries.json`, `atlas-cities.json`: Natural Earth 110m admin-0 countries and
   populated places, via `scripts/build-atlas.mjs`. Public domain.
+- `atlas-peaks.json`: Natural Earth 10m elevation points. Public domain.
+- `atlas-rivers.json`, `atlas-lakes.json`: Natural Earth 50m rivers and lakes, simplified with
+  Douglas–Peucker at 0.02°. Public domain.
+
+Everything in this directory is now Natural Earth or NASA. `atlas-heritage.json` — 1,880 UNESCO
+World Heritage sites queried live from [Wikidata](https://query.wikidata.org/) (`P1435 = Q9259`,
+CC0) — was the one exception, and it was **removed on 3 Sep 2026 at the author's request** along
+with the `Heritage` filter. It is in git history if it is ever wanted back; nothing else depended
+on it, and dropping it also removed the only build step that queried a live endpoint rather than a
+static file.
 
 No API key is needed by anything here, and nothing in this directory is fetched from a third party
 at runtime.

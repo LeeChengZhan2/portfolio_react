@@ -65,9 +65,9 @@ import { mix, palette, type Palette } from '../globe/palette';
  */
 setWorkerUrl(workerUrl);
 
-import type { MapMode } from './modes';
+import { ATLAS_LAYERS, DEFAULT_LAYERS, MAP_LAYERS, type MapLayer, type MapMode } from './modes';
 
-export type { MapMode };
+export type { MapLayer, MapMode };
 
 /** One visited city, as the page hands it over. Same shape as GlobeTrip. */
 export interface MapTrip {
@@ -75,15 +75,6 @@ export interface MapTrip {
   label: string;
   when: string;
   href: string;
-  /**
-   * The trip's country, used only by `atlas` mode, where the matching country
-   * label is drawn in the page's accent. Optional because the three.js engine's
-   * GlobeTrip does not carry it and the two arrays are built from one source.
-   *
-   * Matched against Natural Earth's short cartographic NAME, case-insensitively.
-   * scripts/build-atlas.mjs fails the build if any trip's country stops matching.
-   */
-  country?: string;
 }
 
 /** Matches public/globe/visited.json. `at` is [lat, lon]; `ring` is [lon, lat]. */
@@ -117,6 +108,14 @@ interface AtlasCity extends AtlasCountry {
   cap: 0 | 1;
 }
 
+/** Matches atlas-peaks.json. `e` is metres, and null where the source has none. */
+interface AtlasPeak {
+  n: string;
+  c: [number, number];
+  e: number | null;
+  z: number;
+}
+
 export interface TrackStats {
   name: string;
   points: number;
@@ -128,6 +127,8 @@ export interface TrackStats {
 
 export interface MapGlobe {
   setMode(mode: MapMode): void;
+  /** Which optional layers `explore` draws. Ignored by every other mode. */
+  setLayers(layers: MapLayer[]): void;
   loadGpx(file: File): Promise<TrackStats>;
   clearTrack(): void;
   refreshTheme(): void;
@@ -259,15 +260,20 @@ function ringsToLines(rings: Ring[]): FC {
 
 const EMPTY: FC = { type: 'FeatureCollection', features: [] };
 
-/** The atlas cities, as points. Only `cap` travels with them: the names are
-    HTML labels, and nothing else about a city is styled by attribute. */
-function cityPoints(cities: AtlasCity[]): FC {
+/**
+ * Points for a dot layer. One property travels with them and no more — the names
+ * are HTML labels, and nothing else about a place is styled by attribute.
+ *
+ * `cap` marks a capital, which is the only per-feature difference any dot layer
+ * on this map draws.
+ */
+function points(rows: { c: [number, number]; cap?: 0 | 1 }[]): FC {
   return {
     type: 'FeatureCollection',
-    features: cities.map((city) => ({
+    features: rows.map((row) => ({
       type: 'Feature' as const,
-      properties: { cap: city.cap },
-      geometry: { type: 'Point' as const, coordinates: city.c },
+      properties: { cap: row.cap ?? 0 },
+      geometry: { type: 'Point' as const, coordinates: row.c },
     })),
   };
 }
@@ -327,6 +333,8 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
          first entry to atlas mode; see `loadAtlas`. */
       borders: { type: 'geojson', data: EMPTY },
       cities: { type: 'geojson', data: EMPTY },
+      rivers: { type: 'geojson', data: EMPTY },
+      lakes: { type: 'geojson', data: EMPTY },
       // No `dem` here on purpose — it is added on first entry to terrain mode.
       // A source is fetched when it is ADDED, not when a layer using it becomes
       // visible, so declaring it up front would put a Mapterhorn request on
@@ -348,6 +356,39 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
     layers: [
       { id: 'sea', type: 'background', paint: { 'background-color': p.sea } },
       { id: 'land', type: 'fill', source: 'land', paint: { 'fill-color': p.land } },
+      /* Water takes the SEA's colour, not a colour of its own. A lake is the
+         same substance as the ocean and the palette already says what that
+         looks like in nine themes; inventing a second one would be two answers
+         to the same question. It reads because sea steps 0.10 off the ground
+         against land's 0.20 — water is the lighter of the two in light themes,
+         and the ramp inverts on its own in dark.
+
+         `hillshade` is inserted immediately below these, so relief shows through
+         land but not through water — which is what a lake looks like. */
+      {
+        id: 'lakes',
+        type: 'fill',
+        source: 'lakes',
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': p.sea },
+      },
+      {
+        id: 'rivers',
+        type: 'line',
+        source: 'rivers',
+        layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': p.sea,
+          /* Wider than it looks like it should be, because of what it is drawn
+             IN. The sea steps 0.10 off the ground and the land 0.20, so a river
+             on land is a tenth of the ramp apart from it — 1.24:1, which reads
+             perfectly well as an ocean and not at all as a 0.5px hairline. It
+             now names itself, so it has to be visible enough to be worth naming:
+             at globe zoom a river should read as a thin arm of the sea, which is
+             what it is. */
+          'line-width': ['interpolate', ['linear'], ['zoom'], 1.5, 0.9, 6, 2.2],
+        },
+      },
       {
         id: 'borders',
         type: 'line',
@@ -431,6 +472,7 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
   };
 }
 
+/** Which of the two shading settings a mode uses. */
 type ShadeKind = 'atlas' | 'terrain';
 
 interface Shade {
@@ -438,20 +480,77 @@ interface Shade {
   highlight: number;
   accent: number;
   exaggeration: number;
+  /**
+   * Sun height above the horizon, in degrees. THIS is the control that decides
+   * whether relief reads at globe zoom, and it is not obvious why.
+   *
+   * MapLibre shades by slope, and at 20 km per pixel even the Himalaya is a
+   * gentle slope from one pixel to the next — so a high sun lights the whole
+   * range almost flatly and `hillshade-exaggeration`, which is capped at 1,
+   * runs out of room long before the relief reads. Dropping the sun lengthens
+   * every shadow, which is exactly the trick a relief atlas uses on a page that
+   * cannot be zoomed. Terrain mode does not need it: one ridge filling the
+   * frame is a steep slope per pixel already.
+   */
+  altitude: number;
+  /**
+   * `multidirectional` lights the surface from several angles at once and
+   * combines them, so a ridge running parallel to a single sun still catches
+   * something. At global scale that is the difference between "some mountains
+   * are visible" and "the mountain ranges are the shape of the continent".
+   */
+  method: 'standard' | 'multidirectional';
 }
 
 /**
  * How hard the relief is shaded, per mode.
  *
- * Terrain mode is one ridge filling the frame and can take a strong shade. The
- * atlas is a whole hemisphere at roughly 20 km per pixel — the same resolution
- * as the three.js relief look — where those numbers turn every mountain range
- * into a bruise and the globe stops looking like part of the page. Same layer,
- * same source, two jobs.
+ * Terrain mode is one ridge filling the frame and can take a strong shade from a
+ * conventional 45° sun. The atlas is a whole hemisphere at roughly 20 km per
+ * pixel — the same resolution as the three.js relief look — where the same
+ * settings produce a globe with a suggestion of mountains on it. Same layer,
+ * same source, two genuinely different jobs.
+ *
+ * The atlas row was settled by shipping a ladder of five strengths and letting
+ * the author pick (3 Sep 2026), which is the same conclusion the light themes
+ * reached: when the right amount is a matter of screen, room and eyes, the page
+ * can let the reader say — and once they have said, the picker is one control
+ * that no longer earns its space. `faint` won, and these are its numbers.
+ *
+ * What the ladder established, and what these values encode:
+ *
+ *   - **The sun angle is the control that matters.** MapLibre shades by SLOPE,
+ *     and at 20 km per pixel even the Himalaya is a gentle slope from one pixel
+ *     to the next, so `hillshade-exaggeration` — capped at 1 — runs out of room
+ *     long before the relief reads. Dropping the sun lengthens every shadow.
+ *   - **`multidirectional` is the bigger visible step of the two**, because it
+ *     lights ridges that run parallel to a single sun.
+ *   - And **neither is what the author wanted here.** A 45° sun and `standard`
+ *     is the gentlest rung on the ladder, and it is the one that leaves the
+ *     landmass light enough for a page of typography to sit next to.
+ *
+ * Rejected, so do not reach for them again: shadow 0.42 at a 28° sun with
+ * exaggeration 1 (shipped for one round, came back as too obvious), and shadow
+ * 0.52 at 20° (the whole landmass darkens until the globe reads as a satellite
+ * render, which is the one thing this page is trying not to look like).
  */
 const SHADE: Record<ShadeKind, Shade> = {
-  atlas: { shadow: 0.26, highlight: 0.2, accent: 0.12, exaggeration: 0.9 },
-  terrain: { shadow: 0.45, highlight: 0.35, accent: 0.2, exaggeration: 0.55 },
+  atlas: {
+    shadow: 0.26,
+    highlight: 0.2,
+    accent: 0.12,
+    exaggeration: 0.9,
+    altitude: 45,
+    method: 'standard',
+  },
+  terrain: {
+    shadow: 0.45,
+    highlight: 0.35,
+    accent: 0.2,
+    exaggeration: 0.55,
+    altitude: 45,
+    method: 'standard',
+  },
 };
 
 /**
@@ -473,6 +572,8 @@ function hillshadePaint(p: Palette, s: Shade) {
     'hillshade-highlight-color': mix(p.land, '#ffffff', s.highlight),
     'hillshade-accent-color': mix(p.land, '#000000', s.accent),
     'hillshade-exaggeration': s.exaggeration,
+    'hillshade-illumination-altitude': s.altitude,
+    'hillshade-method': s.method,
   };
 }
 
@@ -495,6 +596,14 @@ function paintHillshade(map: MlMap, p: Palette, s: Shade): void {
   );
   map.setPaintProperty('hillshade', 'hillshade-accent-color', paint['hillshade-accent-color']);
   map.setPaintProperty('hillshade', 'hillshade-exaggeration', paint['hillshade-exaggeration']);
+  map.setPaintProperty(
+    'hillshade',
+    'hillshade-illumination-altitude',
+    paint['hillshade-illumination-altitude'],
+  );
+  // Not strictly a colour, but it moves with the strength and a mode change is
+  // the only thing that ever sets it.
+  map.setPaintProperty('hillshade', 'hillshade-method', paint['hillshade-method']);
 }
 
 /** The hillshade layer, built on demand. See `ensureHillshade`. */
@@ -614,23 +723,47 @@ function boundsOf(coords: number[][]): LngLatBounds {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Which layers each mode shows. Anything not listed here is hidden in that mode,
- * so adding a layer means adding a row — a layer belonging to every mode is
- * simply left out of the table.
+ * The paint layers each optional layer owns. A layer with none of its own —
+ * `relief` is the hillshade, `peaks` is labels only — still appears here, so
+ * that the one loop below both toggles paint and triggers the data fetch.
  */
-const LAYER_MODES: Record<string, readonly MapMode[]> = {
-  coast: ['places', 'atlas'],
-  borders: ['atlas'],
-  'city-dot': ['atlas'],
-  'region-fill': ['places', 'atlas'],
-  'region-line': ['places', 'atlas'],
+const LAYER_IDS: Record<MapLayer, readonly string[]> = {
+  countries: ['borders'],
+  cities: ['city-dot'],
+  relief: [],
+  peaks: [],
+  water: ['lakes', 'rivers'],
 };
+
+/** Layers every globe mode draws, and `terrain` does not. Not optional: the
+    footprints are what the page is about. */
+const GLOBE_LAYERS = ['coast', 'region-fill', 'region-line'] as const;
+
+/** Which label kind belongs to which filter. Trips answer to no filter. */
+/* `water` is deliberately absent: rivers and lakes are geometry only. They were
+   named for one round (3 Sep 2026) and the names came back off at the author's
+   request — see the note on `loadWater`. A layer with no labels simply never
+   appears here, and `retier` reads this map to decide which filter a label
+   answers to. */
+const LABEL_LAYER: Record<Exclude<LabelKind, 'trip'>, MapLayer> = {
+  country: 'countries',
+  city: 'cities',
+  peak: 'peaks',
+};
+
+type LabelKind = 'trip' | 'country' | 'city' | 'peak';
+
+/** What `atlas` is fixed at, and what `explore` opens with. They are no longer
+    the same list: see the note on DEFAULT_LAYERS in modes.ts. */
+const ATLAS_SET: ReadonlySet<MapLayer> = new Set(ATLAS_LAYERS);
+const NO_LAYERS: ReadonlySet<MapLayer> = new Set();
 
 export async function createMapGlobe(
   host: HTMLElement,
   labelLayer: HTMLElement,
   trips: MapTrip[],
   mode: MapMode,
+  layers: MapLayer[] = [...DEFAULT_LAYERS],
 ): Promise<MapGlobe> {
   /* land-polygons.json, NOT land.json. The ring file is coastline drawn as line
      geometry on a sphere, where a jump from longitude +179.87 to -180 wraps
@@ -698,22 +831,30 @@ export async function createMapGlobe(
      below, so it is declared before them rather than beside `applyMode`. */
   let current: MapMode = mode;
 
+  /** Which optional layers `explore` draws. Every other mode ignores it. */
+  let chosen: ReadonlySet<MapLayer> = new Set(layers);
+
+  /** The optional layers the CURRENT mode actually draws. */
+  function activeLayers(): ReadonlySet<MapLayer> {
+    if (current === 'atlas') return ATLAS_SET;
+    if (current === 'explore') return chosen;
+    return NO_LAYERS;
+  }
+
   /* ---- labels ------------------------------------------------------------ */
   /* One registry for every name on the map, whatever it names.
 
      HTML markers rather than a symbol layer, because a symbol layer needs a
      glyph server — a third-party font fetch on every page load. That was an
-     easy call for eight city names. The atlas pushes it to 420, so the cost of
-     the choice is now real, and it is paid in the two functions below: MapLibre
-     does tiering and collision for `symbol` layers and neither for markers, so
-     `retier` decides which labels are on the map at all and `declutter` decides
-     which of those can be read.
+     easy call for eight city names. The atlas pushes it past three thousand, so
+     the cost of the choice is now real, and it is paid in the two functions
+     below: MapLibre does tiering and collision for `symbol` layers and neither
+     for markers, so `retier` decides which labels are on the map at all and
+     `declutter` decides which of those can be read.
 
      What it buys is that every label is a themeable DOM node styled by
      MapGlobeStage.astro's own CSS, so a country name follows the theme picker
      for free and a trip label is a real link. */
-
-  type LabelKind = 'trip' | 'country' | 'city';
 
   interface Label {
     marker: Marker;
@@ -721,7 +862,7 @@ export async function createMapGlobe(
     /** [lon, lat]. */
     at: [number, number];
     kind: LabelKind;
-    /** Natural Earth's own MIN_LABEL / min_zoom. See scripts/build-atlas.mjs. */
+    /** The source's own min zoom for this name. See scripts/build-atlas.mjs. */
     minZoom: number;
     /** Lower wins a collision. Trips are 0 — they are what the page is about. */
     priority: number;
@@ -737,20 +878,22 @@ export async function createMapGlobe(
     on: boolean;
   }
 
+  interface LabelSpec {
+    el: HTMLElement;
+    at: [number, number];
+    anchor: 'bottom' | 'center' | 'left';
+    kind: LabelKind;
+    minZoom: number;
+    priority: number;
+    /** Pixels right of the anchor point. A city name has to clear the dot drawn
+        under it; a peak's own ▲ glyph IS its mark, so it sits on the point. */
+    dx?: number;
+  }
+
   const labels: Label[] = [];
 
-  function addLabel(
-    el: HTMLElement,
-    at: [number, number],
-    anchor: 'bottom' | 'center' | 'left',
-    kind: LabelKind,
-    minZoom: number,
-    priority: number,
-  ): void {
-    // A city name sits beside its dot rather than on top of it. The offset has
-    // to be mirrored into `dx`, because declutter computes the label's box
-    // itself rather than asking the DOM where MapLibre put it.
-    const nudge = anchor === 'left' ? 7 : 0;
+  function addLabel(spec: LabelSpec): void {
+    const dx = spec.dx ?? 0;
 
     labels.push({
       /* `opacityWhenCovered: '0'`, overriding MapLibre's default of '0.2'.
@@ -763,23 +906,67 @@ export async function createMapGlobe(
          20% opacity. Eight trips hid the symptom; twenty country names did
          not. */
       marker: new Marker({
-        element: el,
-        anchor,
-        offset: [nudge, 0],
+        element: spec.el,
+        anchor: spec.anchor,
+        offset: [dx, 0],
         opacityWhenCovered: '0',
-      }).setLngLat(at),
-      el,
-      at,
-      kind,
-      minZoom,
-      priority,
-      ax: anchor === 'left' ? 0 : 0.5,
-      ay: anchor === 'bottom' ? 1 : 0.5,
-      dx: nudge,
+      }).setLngLat(spec.at),
+      el: spec.el,
+      at: spec.at,
+      kind: spec.kind,
+      minZoom: spec.minZoom,
+      priority: spec.priority,
+      ax: spec.anchor === 'left' ? 0 : 0.5,
+      ay: spec.anchor === 'bottom' ? 1 : 0.5,
+      dx,
       w: 0,
       h: 0,
       on: false,
     });
+  }
+
+  /**
+   * A label element for one of the atlas ranks.
+   *
+   * The optional `mark` is a text glyph rather than an icon, and that is the
+   * point: a MapLibre icon needs a sprite sheet, which is a second network
+   * request and a build step, while "▲" is already in every system font. Three
+   * ranks of name then tell themselves apart by setting and mark with no
+   * legend, no sprite and no glyph server: countries in letterspaced mono caps,
+   * cities in mixed-case sans, and peaks with a ▲ and a height.
+   */
+  function placeElement(
+    kind: string,
+    name: string,
+    options: { mark?: string; sub?: string; title?: string } = {},
+  ): HTMLElement {
+    const el = document.createElement('span');
+    el.className = `mapglobe__place mapglobe__place--${kind}`;
+
+    if (options.mark) {
+      const mark = document.createElement('span');
+      mark.className = 'mapglobe__place-mark';
+      mark.textContent = options.mark;
+      // Decoration, not content. "Black up-pointing triangle Everest" is a
+      // worse thing for a screen reader to say than "Everest".
+      mark.setAttribute('aria-hidden', 'true');
+      el.append(mark);
+    }
+
+    el.append(document.createTextNode(name));
+
+    if (options.sub) {
+      const sub = document.createElement('span');
+      sub.className = 'mapglobe__place-sub';
+      sub.textContent = options.sub;
+      // A real space, not just the margin. The margin separates them on screen;
+      // without this the accessible name and anything copied out of the page
+      // read "Mount Everest8,848 m".
+      el.append(document.createTextNode(' '), sub);
+    }
+
+    if (options.title) el.title = options.title;
+    return el;
   }
 
   /* ---- the trips --------------------------------------------------------- */
@@ -794,93 +981,176 @@ export async function createMapGlobe(
     el.querySelector('.mapglobe__label-when')!.textContent = trip.when;
 
     const [lat, lon] = visited[trip.id]!.at;
-    addLabel(el, [lon, lat], 'bottom', 'trip', 0, 0);
+    addLabel({ el, at: [lon, lat], anchor: 'bottom', kind: 'trip', minZoom: 0, priority: 0 });
   }
 
-  /* ---- the atlas, fetched on first use ----------------------------------- */
-  /* The same deferral `places` mode gets from the whole engine, one level down.
-     borders.json is 82 KB gzipped and the two label files another 26 KB, and a
-     reader who only ever looks at the eight trips should not pay for the other
-     176 countries. Nothing here is requested until the atlas is asked for.
+  // Markers are appended to the map container by MapLibre. Moving them into the
+  // page's own label layer would fight its positioning, so instead the layer is
+  // used only as the visibility switch the component styles.
+  void labelLayer;
 
-     It is also what lets this mode be honest about the network: every atlas file
-     is local, and the ONLY third-party request it makes is for the DEM tiles the
-     hillshade reads — the same ones terrain mode uses. */
+  /* ---- the optional data, fetched one layer at a time -------------------- */
+  /* The same deferral `places` mode gets from the whole engine, one level down
+     and now per filter. Nothing is requested until a layer is switched on, and
+     switching it off again never re-requests it.
 
-  const visitedCountries = new Set(
-    trips
-      .map((trip) => trip.country?.trim().toLowerCase())
-      .filter((name): name is string => Boolean(name)),
-  );
+     That granularity is the difference between a filter row and a menu of
+     downloads: a reader who wants rivers should not also pay 82 KB for borders,
+     and gzipped these are not small — borders 82 KB, rivers 48, lakes 37,
+     peaks 12, cities 6, countries 3.
 
-  let atlasReady: Promise<void> | null = null;
+     It is also what lets this mode stay honest about the network: every one of
+     those files is local, and the ONLY third-party request any globe mode makes
+     is for the DEM tiles the relief reads. */
 
-  async function loadAtlas(): Promise<void> {
-    const [countries, cities, borderRings] = await Promise.all([
-      fetch(`${DATA_BASE}/atlas-countries.json`).then((r) => r.json() as Promise<AtlasCountry[]>),
-      fetch(`${DATA_BASE}/atlas-cities.json`).then((r) => r.json() as Promise<AtlasCity[]>),
-      fetch(`${DATA_BASE}/borders.json`).then((r) => r.json() as Promise<Ring[]>),
+  const json = <T,>(name: string): Promise<T> =>
+    fetch(`${DATA_BASE}/${name}`).then((response) => {
+      if (!response.ok) throw new Error(`${name} returned ${response.status}`);
+      return response.json() as Promise<T>;
+    });
+
+  const source = (id: string): GeoJSONSource => map.getSource(id) as GeoJSONSource;
+
+  async function loadCountries(): Promise<void> {
+    const [countries, borderRings] = await Promise.all([
+      json<AtlasCountry[]>('atlas-countries.json'),
+      json<Ring[]>('borders.json'),
     ]);
 
-    (map.getSource('borders') as GeoJSONSource).setData(ringsToLines(borderRings));
-    (map.getSource('cities') as GeoJSONSource).setData(cityPoints(cities));
+    source('borders').setData(ringsToLines(borderRings));
 
+    /* Every country label is the same rank, ordered by Natural Earth's own
+       LABELRANK and nothing else.
+
+       A country with a trip in it used to read in the page's accent and win its
+       space ahead of every other country. That came off on 3 Sep 2026 at the
+       author's request — *"no need to highlight country name, just the area that
+       I visit is enough"* — and the accent footprint on the map is what answers
+       "where has this person been". The priority boost went with the colour
+       rather than surviving it: a label that quietly outranks its neighbours for
+       a reason the reader cannot see is worse than one that does not. */
     for (const country of countries) {
-      const el = document.createElement('span');
-      el.className = 'mapglobe__place';
-
-      /* A country the author has been to reads in the page's accent. It is the
-         one thing in the atlas that is about this site rather than about the
-         world, and it keeps the answer to "where has this person been" legible
-         at the zoom where the footprints themselves are half a pixel.
-
-         It also wins its space ahead of every other country rather than at its
-         LABELRANK, which matters because these eight sit in the most crowded
-         part of the map. It still loses to a trip label at priority 0 — the
-         card naming the city says more than the country name it covers. */
-      const visitedHere = visitedCountries.has(country.n.toLowerCase());
-      if (visitedHere) el.classList.add('is-visited');
-
-      el.textContent = country.n;
-      addLabel(el, country.c, 'center', 'country', country.z, visitedHere ? 5 : 10 + country.r);
+      addLabel({
+        el: placeElement('country', country.n),
+        at: country.c,
+        anchor: 'center',
+        kind: 'country',
+        minZoom: country.z,
+        priority: 10 + country.r,
+      });
     }
-
-    for (const city of cities) {
-      const el = document.createElement('span');
-      el.className = 'mapglobe__place mapglobe__place--city';
-      el.textContent = city.n;
-      // The country goes in a tooltip rather than on the label: it answers a
-      // question the reader only sometimes has, and 243 city-and-country pairs
-      // on screen is not an atlas, it is a wall.
-      if (city.a) el.title = `${city.n}, ${city.a}`;
-      addLabel(el, city.c, 'left', 'city', city.z, 24 + city.r);
-    }
-
-    retier();
   }
 
-  function ensureAtlas(): void {
-    atlasReady ??= loadAtlas().catch((error: unknown) => {
-      // A missing atlas is a plainer globe, not a broken page — the same rule
-      // index.ts applies to the engine as a whole.
-      console.error('mapglobe: the atlas data could not be loaded', error);
+  async function loadCities(): Promise<void> {
+    const cities = await json<AtlasCity[]>('atlas-cities.json');
+    source('cities').setData(points(cities));
+
+    for (const city of cities) {
+      addLabel({
+        // The country goes in a tooltip rather than on the label: it answers a
+        // question the reader only sometimes has, and 243 city-and-country
+        // pairs on screen is not an atlas, it is a wall.
+        el: placeElement('city', city.n, {
+          title: city.a ? `${city.n}, ${city.a}` : undefined,
+        }),
+        at: city.c,
+        anchor: 'left',
+        kind: 'city',
+        minZoom: city.z,
+        priority: 24 + city.r,
+        dx: 7,
+      });
+    }
+  }
+
+  async function loadPeaks(): Promise<void> {
+    const peaks = await json<AtlasPeak[]>('atlas-peaks.json');
+
+    peaks.forEach((peak, index) => {
+      addLabel({
+        el: placeElement('peak', peak.n, {
+          mark: '▲',
+          // The height is the information. It is the reason this layer is not
+          // just more dots.
+          sub: peak.e === null ? undefined : `${peak.e.toLocaleString()} m`,
+        }),
+        at: peak.c,
+        anchor: 'left',
+        kind: 'peak',
+        minZoom: peak.z,
+        // The file is sorted by zoom band then by height, so the index carries
+        // that ordering into a collision between two peaks in the same band.
+        priority: 32 + (index / peaks.length) * 6,
+      });
     });
+  }
+
+  /**
+   * Rivers and lakes, as geometry and nothing else.
+   *
+   * They were named for one round (3 Sep 2026) — 494 anchors in an
+   * `atlas-water.json`, set in italic — and the names came straight back off at
+   * the author's request. The brief for this whole mode is "more information,
+   * but do not make it messy", and at globe zoom the water names were 91
+   * candidates in the most crowded part of the map: they read, and they read
+   * over everything else. The file, its build step and the `water` label rank
+   * are all gone rather than left switched off.
+   *
+   * The line width the naming prompted is kept. A river at 0.5px and 1.24:1
+   * against the land was invisible whether or not it had a name on it.
+   */
+  async function loadWater(): Promise<void> {
+    const [rivers, lakes] = await Promise.all([
+      json<FC>('atlas-rivers.json'),
+      json<FC>('atlas-lakes.json'),
+    ]);
+    source('rivers').setData(rivers);
+    source('lakes').setData(lakes);
+  }
+
+  /** `relief` is the one layer with no data of its own — the hillshade brings
+      its source in with it. See `ensureHillshade`. */
+  const LOADERS: Record<MapLayer, (() => Promise<void>) | null> = {
+    countries: loadCountries,
+    cities: loadCities,
+    relief: null,
+    peaks: loadPeaks,
+    water: loadWater,
+  };
+
+  const loaded = new Map<MapLayer, Promise<void>>();
+
+  function ensureData(layer: MapLayer): void {
+    const load = LOADERS[layer];
+    if (!load || loaded.has(layer)) return;
+
+    loaded.set(
+      layer,
+      load()
+        .then(retier)
+        .catch((error: unknown) => {
+          // A layer that will not load is a plainer globe, not a broken page —
+          // the same rule index.ts applies to the engine as a whole.
+          console.error(`mapglobe: the ${layer} layer could not be loaded`, error);
+        }),
+    );
   }
 
   /* ---- which labels are on the map at all -------------------------------- */
   /**
-   * Natural Earth ships a `min_zoom` for every name — the zoom a cartographer
+   * Every source ships a `min_zoom` for every name — the zoom a cartographer
    * decided that label should appear at — and this is where it is spent.
    *
    * Below its own zoom a name is not merely hidden, it is off the map. That
    * distinction is the whole function: MapLibre reprojects every marker it holds
    * on every frame, so a label that was never added costs nothing, while a label
    * that is added and invisible costs a projection and a style write sixty times
-   * a second.
+   * a second. With every layer on there are over three thousand names.
    *
-   * Three filters, cheapest first: the cartographer's zoom, then a bounds test
-   * once the viewport is small enough for it to throw anything away, then
-   * MAX_LABELS as the backstop at the zooms where neither has bitten yet.
+   * Four filters, cheapest first: the layer's own on/off, the cartographer's
+   * zoom, a bounds test once the viewport is small enough for it to throw
+   * anything away, then MAX_LABELS as the backstop at the zooms where none of
+   * them has bitten yet.
    */
   function retier(): void {
     const wanted = new Set<Label>();
@@ -889,16 +1159,19 @@ export async function createMapGlobe(
       for (const label of labels) if (label.kind === 'trip') wanted.add(label);
     }
 
-    if (current === 'atlas') {
+    const active = activeLayers();
+
+    if (active.size) {
       const zoom = map.getZoom();
       const bounds = zoom > BOUNDS_CULL_ZOOM ? map.getBounds() : null;
 
-      const candidates = labels.filter(
-        (label) =>
-          label.kind !== 'trip' &&
-          label.minZoom <= zoom + 0.001 &&
-          (!bounds || bounds.contains(label.at)),
-      );
+      const candidates = labels.filter((label) => {
+        if (label.kind === 'trip') return false;
+        if (!active.has(LABEL_LAYER[label.kind])) return false;
+        if (label.minZoom > zoom + 0.001) return false;
+        return !bounds || bounds.contains(label.at);
+      });
+
       candidates.sort((a, b) => a.priority - b.priority);
       for (const label of candidates.slice(0, MAX_LABELS)) wanted.add(label);
     }
@@ -910,17 +1183,26 @@ export async function createMapGlobe(
       if (want) label.marker.addTo(map);
       else label.marker.remove();
     }
+
+    /* Place them straight away rather than waiting for the next frame.
+       `declutter` is wired to `render`, and MapLibre only renders when something
+       changes — so switching a layer on while the camera is still added its
+       labels and then left every one of them visible, stacked, until the map
+       happened to repaint. With four optional layers on that is twenty peak
+       names piled over the Himalaya, and it looked like the collision test was
+       broken rather than un-run.
+
+       A just-added marker has no occlusion opacity yet, so a far-side label can
+       claim a slot for exactly one pass; the next real render corrects it. That
+       is the right way round — a label that appears and then goes is better than
+       a screenful that never resolves. */
+    declutter();
   }
 
   // `moveend` rather than `move`: retiering adds and removes DOM, which is far
   // too expensive per frame and is not needed per frame — a label's tier can
   // only change once the camera has finished going somewhere.
   map.on('moveend', retier);
-
-  // Markers are appended to the map container by MapLibre. Moving them into the
-  // page's own label layer would fight its positioning, so instead the layer is
-  // used only as the visibility switch the component styles.
-  void labelLayer;
 
   /* ---- decluttering ------------------------------------------------------ */
   /**
@@ -1040,15 +1322,15 @@ export async function createMapGlobe(
     delete host.dataset.lenisPrevent;
   });
 
-  /* ---- modes -------------------------------------------------------------- */
-  /* One map object in three configurations, which is the entire claim being
+  /* ---- modes and layers --------------------------------------------------- */
+  /* One map object in four configurations, which is the entire claim being
      tested here. Switching is a camera animation and a handful of layer toggles
      — not a second renderer, a second canvas or a second download.
 
-     `places` and `atlas` are the same globe at the same scale, so switching
-     between them deliberately does NOT move the camera: the reader stays where
-     they spun to and the world gains or loses its names underneath them. Only
-     `terrain` is a journey, and only a return from it flies home. */
+     `places`, `atlas` and `explore` are the same globe at the same scale, so
+     switching between them deliberately does NOT move the camera: the reader
+     stays where they spun to and the world gains or loses its names underneath
+     them. Only `terrain` is a journey, and only a return from it flies home. */
 
   /**
    * The elevation source `setTerrain` reads, brought in on first entry to
@@ -1077,8 +1359,8 @@ export async function createMapGlobe(
   }
 
   /**
-   * The hillshade, and its own copy of the source. Shared by `atlas` and
-   * `terrain` — the same relief at two scales and two strengths.
+   * The hillshade, and its own copy of the source. Shared by the `relief` filter
+   * and by `terrain` mode — the same relief at two scales and two strengths.
    *
    * A second source over the same URL looks redundant and is not. MapLibre warns
    * when one raster-dem feeds both a hillshade layer and `setTerrain`, because
@@ -1086,19 +1368,21 @@ export async function createMapGlobe(
    * cache costs rendering quality. Two sources, one HTTP cache underneath — the
    * browser fetches each tile once.
    *
-   * It goes in beneath `borders`, so boundaries and the coastline still read
-   * over the relief.
+   * It goes in beneath `lakes`, which puts it under the water, the boundaries
+   * and the coastline: relief shows through land and not through a lake, which
+   * is what a lake looks like.
    */
   function ensureHillshade(): void {
     if (map.getLayer('hillshade')) return;
     if (!map.getSource('dem-hillshade')) {
       map.addSource('dem-hillshade', { type: 'raster-dem', url: DEM_URL, maxzoom: DEM_MAX_ZOOM });
     }
-    map.addLayer(hillshadeLayer(p, SHADE.atlas), 'borders');
+    map.addLayer(hillshadeLayer(p, SHADE.atlas), 'lakes');
   }
 
-  /** Which strength the hillshade is currently painted at, so a theme change
-      can repaint it at the same one. Null when no relief is shown. */
+  /** Which of the two settings the hillshade is currently painted at, so a
+      theme change can repaint it at the same one. Null when no relief is
+      shown. */
   let shade: ShadeKind | null = null;
 
   function setHillshade(kind: ShadeKind | null): void {
@@ -1112,6 +1396,38 @@ export async function createMapGlobe(
     ensureHillshade();
     map.setLayoutProperty('hillshade', 'visibility', 'visible');
     paintHillshade(map, p, SHADE[kind]);
+  }
+
+  /**
+   * Show exactly the layers the current mode and filter ask for.
+   *
+   * One pass over the whole table rather than a diff against what was showing:
+   * `setLayoutProperty` to the value a layer already has is a no-op inside
+   * MapLibre, and a diff would be state to keep correct for no gain.
+   */
+  function applyLayers(): void {
+    const globe = current !== 'terrain';
+    for (const id of GLOBE_LAYERS) {
+      map.setLayoutProperty(id, 'visibility', globe ? 'visible' : 'none');
+    }
+
+    const active = activeLayers();
+
+    for (const layer of MAP_LAYERS) {
+      const on = active.has(layer);
+      // Fetching is triggered here rather than in the click handler, so that a
+      // stored filter set loads on arrival exactly as a click would.
+      if (on) ensureData(layer);
+      for (const id of LAYER_IDS[layer]) {
+        map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+      }
+    }
+
+    // `terrain` shades the one ridge it flew to, at its own strength. A globe
+    // mode shades the whole world, and only if the reader asked for it.
+    setHillshade(current === 'terrain' ? 'terrain' : active.has('relief') ? 'atlas' : null);
+
+    retier();
   }
 
   /**
@@ -1135,21 +1451,13 @@ export async function createMapGlobe(
   function applyMode(next: MapMode, animate: boolean): void {
     const wasGlobe = current !== 'terrain';
     current = next;
-    const terrain = next === 'terrain';
 
-    for (const [id, modes] of Object.entries(LAYER_MODES)) {
-      map.setLayoutProperty(id, 'visibility', modes.includes(next) ? 'visible' : 'none');
-    }
-
-    if (next === 'atlas') ensureAtlas();
-
-    if (!terrain) {
+    if (next !== 'terrain') {
       // Detach BEFORE going back to the globe, for the reason above — the order
       // of these three lines is the whole point of them.
       map.setTerrain(null);
-      setHillshade(next === 'atlas' ? 'atlas' : null);
+      applyLayers();
       map.setProjection({ type: 'globe' });
-      retier();
 
       // Same globe, same scale: leave the camera where the reader put it. Only
       // arriving back from terrain is a journey home.
@@ -1161,19 +1469,25 @@ export async function createMapGlobe(
       return;
     }
 
-    setHillshade('terrain');
+    applyLayers();
     ensureTerrainSource();
     // Mercator explicitly rather than relying on the globe handing over near
     // z12 on its own. The automatic transition is real, but it happens mid-fly
     // and this is the one mode where the projection must be settled first.
     map.setProjection({ type: 'mercator' });
-    retier();
 
     const camera = { ...TERRAIN_HOME, pitch: 66, bearing: -22 };
     if (animate) map.flyTo({ ...camera, duration: 2200, essential: true });
     else map.jumpTo(camera);
 
     attachTerrainWhenSettled();
+  }
+
+  function setLayers(next: MapLayer[]): void {
+    chosen = new Set(next);
+    // Only `explore` reads the set, so a filter changed in any other mode is
+    // remembered and costs nothing until the reader switches back to it.
+    if (current === 'explore') applyLayers();
   }
 
   applyMode(mode, false);
@@ -1229,6 +1543,8 @@ export async function createMapGlobe(
     map.setPaintProperty('borders', 'line-color', p.boundary);
     map.setPaintProperty('city-dot', 'circle-color', p.coast);
     map.setPaintProperty('city-dot', 'circle-stroke-color', p.ground);
+    map.setPaintProperty('lakes', 'fill-color', p.sea);
+    map.setPaintProperty('rivers', 'line-color', p.sea);
     // Only present once a mode that shades relief has been entered, and only
     // repainted at the strength the current mode asked for.
     if (map.getLayer('hillshade') && shade) paintHillshade(map, p, SHADE[shade]);
@@ -1252,6 +1568,7 @@ export async function createMapGlobe(
 
   return {
     setMode: (next) => applyMode(next, true),
+    setLayers,
     loadGpx,
     clearTrack,
     refreshTheme,
