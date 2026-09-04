@@ -13,7 +13,7 @@
  * A delegated listener, not an island.
  */
 
-import type { MapGlobe, MapTrip, TrackStats } from './engine';
+import type { MapGlobe, MapTrail, MapTrip, TrackStats } from './engine';
 // Values come from modes.ts, never from engine.ts — see the note there. A single
 // static value import from the engine puts MapLibre in the eager bundle.
 import { DEFAULT_LAYERS, MAP_LAYERS, MAP_MODES, type MapLayer, type MapMode } from './modes';
@@ -30,6 +30,18 @@ const DEFAULT_MODE: MapMode = 'places';
  */
 const LAYERS_KEY = 'mapglobe-layers';
 
+/**
+ * Which route terrain mode is showing, under a third key for the same reason
+ * the filters got a second one: a reader who picks a route, goes out to the
+ * globe and comes back should find the route they left, and one combined key
+ * would have to forget one choice to remember the other.
+ *
+ * A dropped GPX deliberately does NOT go in here — it is a file on the
+ * visitor's own machine, and a stored id pointing at it would be a promise the
+ * next page load cannot keep.
+ */
+const TRAIL_KEY = 'mapglobe-trail';
+
 const section = document.querySelector<HTMLElement>('[data-mapglobe]');
 const stage = document.querySelector<HTMLElement>('[data-mapglobe-stage]');
 const labelLayer = document.querySelector<HTMLElement>('[data-mapglobe-labels]');
@@ -37,16 +49,20 @@ const status = document.querySelector<HTMLElement>('[data-mapglobe-status]');
 const readout = document.querySelector<HTMLElement>('[data-mapglobe-readout]');
 const fileInput = document.querySelector<HTMLInputElement>('[data-mapglobe-file]');
 
-/** The trips, handed over by the page as JSON rather than re-fetched. */
-function readTrips(): MapTrip[] {
-  const node = document.querySelector<HTMLScriptElement>('#mapglobe-trips');
-  if (!node?.textContent) return [];
+/** Data the page hands over inline rather than making the script fetch it —
+    the trips, and the manifest of recorded routes. Neither is large, and both
+    are already known at build time. */
+function readJson<T>(id: string): T | null {
+  const node = document.querySelector<HTMLScriptElement>(`#${id}`);
+  if (!node?.textContent) return null;
   try {
-    return JSON.parse(node.textContent) as MapTrip[];
+    return JSON.parse(node.textContent) as T;
   } catch {
-    return [];
+    return null;
   }
 }
+
+const trails = readJson<MapTrail[]>('mapglobe-trails') ?? [];
 
 function setStatus(state: string, text: string): void {
   if (!status) return;
@@ -84,9 +100,50 @@ function storedLayers(): MapLayer[] {
   return [...DEFAULT_LAYERS];
 }
 
+/**
+ * The route to open on. A stored id is checked against the manifest before it
+ * is used, so a route deleted since the last visit falls back to the first one
+ * rather than to an empty map.
+ *
+ * The default is `trails[0]`, and the build script's sort is what decides that
+ * — hikes before runs, newest first. There is no separate "default" flag to
+ * keep in step with the ordering.
+ */
+function storedTrail(): MapTrail | null {
+  try {
+    const saved = localStorage.getItem(TRAIL_KEY);
+    // An empty string is a real answer — the reader pressed Clear — and it is
+    // told apart from "nothing stored" by comparing rather than by falsiness,
+    // the same distinction the layers key makes. An id that no longer matches
+    // any route is neither, and falls through to the default below.
+    if (saved === '') return null;
+    const found = trails.find((trail) => trail.id === saved);
+    if (found) return found;
+  } catch {
+    // Private browsing can refuse reads. Fall through to the default.
+  }
+  return trails[0] ?? null;
+}
+
+function rememberTrail(id: string): void {
+  try {
+    localStorage.setItem(TRAIL_KEY, id);
+  } catch {
+    // Works for this page view; just will not be remembered.
+  }
+}
+
 function markSelected(mode: MapMode): void {
   for (const button of document.querySelectorAll<HTMLElement>('[data-mapglobe-mode]')) {
     button.setAttribute('aria-checked', String(button.dataset.mapglobeMode === mode));
+  }
+}
+
+/** `null` unchecks every chip, which is the state a dropped GPX leaves the
+    picker in — what is drawn is not one of the routes it lists. */
+function markTrails(id: string | null): void {
+  for (const button of document.querySelectorAll<HTMLElement>('[data-mapglobe-trail]')) {
+    button.setAttribute('aria-checked', String(button.dataset.mapglobeTrail === id));
   }
 }
 
@@ -122,6 +179,33 @@ function showStats(stats: TrackStats): void {
   readout.append(name, document.createTextNode(` · ${parts.join(' · ')}`));
 }
 
+/**
+ * The same readout for one of the built-in routes.
+ *
+ * Every figure is read straight off the manifest, which measured it from the
+ * full recording at build time — see scripts/build-trails.mjs. Nothing here is
+ * derived from the simplified line the map is drawing.
+ */
+function showTrail(trail: MapTrail): void {
+  if (!readout) return;
+  const parts = [
+    trail.place,
+    trail.when,
+    `${trail.km.toFixed(1)} km`,
+    trail.ascent === null ? null : `${trail.ascent.toLocaleString()} m ascent`,
+    trail.low === null || trail.high === null
+      ? null
+      : `${trail.low.toLocaleString()}–${trail.high.toLocaleString()} m`,
+  ].filter(Boolean);
+
+  readout.dataset.state = 'loaded';
+  readout.innerHTML = '';
+
+  const name = document.createElement('strong');
+  name.textContent = trail.label;
+  readout.append(name, document.createTextNode(` · ${parts.join(' · ')}`));
+}
+
 function showTrackError(message: string): void {
   if (!readout) return;
   readout.dataset.state = 'error';
@@ -132,11 +216,15 @@ if (section && stage && labelLayer) {
   let globe: MapGlobe | null = null;
   let mode = storedMode();
   let active = storedLayers();
+  /** The route the picker is showing as chosen. Null once a dropped file has
+      replaced it, since that file is not in the list. */
+  let trail: MapTrail | null = storedTrail();
 
   // The markup ships the defaults as selected, because a static build cannot
-  // know what the visitor stored. Correct both before any interaction.
+  // know what the visitor stored. Correct all three before any interaction.
   markSelected(mode);
   markLayers(active);
+  markTrails(trail?.id ?? null);
 
   /* ---- switching, which works before the map has loaded ------------------- */
   document.addEventListener('click', (event) => {
@@ -146,13 +234,27 @@ if (section && stage && labelLayer) {
     if (modeButton && isMode(modeButton.dataset.mapglobeMode)) {
       mode = modeButton.dataset.mapglobeMode;
       markSelected(mode);
-      globe?.setMode(mode);
       section.dataset.mode = mode;
       try {
         localStorage.setItem(STORAGE_KEY, mode);
       } catch {
         // Works for this page view; just will not be remembered.
       }
+
+      /* Arriving in terrain mode with a route chosen but nothing drawn — the
+         usual case, since the geometry is only fetched when it is needed —
+         goes straight to the route. `pick` switches the mode itself, so
+         setMode is the branch for everything else. Once a track IS drawn,
+         applyMode fits to it rather than to the placeholder ridge. */
+      if (mode === 'terrain' && trail && !drawn) void pick(trail);
+      else globe?.setMode(mode);
+      return;
+    }
+
+    const trailButton = target?.closest<HTMLElement>('[data-mapglobe-trail]');
+    if (trailButton) {
+      const found = trails.find((item) => item.id === trailButton.dataset.mapglobeTrail);
+      if (found) void pick(found);
       return;
     }
 
@@ -178,6 +280,10 @@ if (section && stage && labelLayer) {
 
     if (target?.closest('[data-mapglobe-clear]')) {
       globe?.clearTrack();
+      drawn = false;
+      trail = null;
+      markTrails(null);
+      rememberTrail('');
       if (readout) {
         readout.dataset.state = 'empty';
         readout.textContent = 'No track loaded.';
@@ -187,11 +293,47 @@ if (section && stage && labelLayer) {
 
   section.dataset.mode = mode;
 
+  /* ---- routes -------------------------------------------------------------- */
+  /** Whether anything is drawn on the map, which is not the same question as
+      whether a route is selected: a route is chosen from the first paint, and
+      its geometry is only fetched when terrain mode actually needs it. */
+  let drawn = false;
+
+  async function pick(next: MapTrail): Promise<void> {
+    trail = next;
+    markTrails(next.id);
+    rememberTrail(next.id);
+
+    // The mode follows the click. Picking a route while looking at the globe
+    // means "show me this", and leaving the reader on the globe would make the
+    // control look broken.
+    mode = 'terrain';
+    markSelected(mode);
+    section!.dataset.mode = mode;
+
+    if (!globe) return;
+    try {
+      await globe.loadTrail(next);
+      drawn = true;
+      showTrail(next);
+    } catch (error) {
+      drawn = false;
+      showTrackError('That route could not be loaded.');
+      console.error('mapglobe: loading a route failed', error);
+    }
+  }
+
   /* ---- a GPX file, read in the browser and never uploaded ----------------- */
   async function take(file: File | undefined): Promise<void> {
     if (!file || !globe) return;
     try {
       showStats(await globe.loadGpx(file));
+      drawn = true;
+      // A dropped file is not one of the listed routes, so nothing in the
+      // picker is showing what is on the map any more.
+      trail = null;
+      markTrails(null);
+      rememberTrail('');
       mode = 'terrain';
       markSelected(mode);
       section!.dataset.mode = mode;
@@ -235,7 +377,23 @@ if (section && stage && labelLayer) {
     setStatus('loading', 'Drawing the map');
     try {
       const { createMapGlobe } = await import('./engine');
-      globe = await createMapGlobe(stage!, labelLayer!, readTrips(), mode, active);
+      /* The route goes in here rather than being loaded afterwards, so that a
+         reader who left in terrain mode comes back to the map already framed
+         on it. Loading it after the map exists would show the placeholder
+         ridge for as long as the geometry took to arrive, and then jump. */
+      const opening = mode === 'terrain' ? trail : null;
+      globe = await createMapGlobe(
+        stage!,
+        labelLayer!,
+        readJson<MapTrip[]>('mapglobe-trips') ?? [],
+        mode,
+        active,
+        opening,
+      );
+      if (opening) {
+        drawn = true;
+        showTrail(opening);
+      }
       section!.dataset.state = 'ready';
       setStatus('ready', '');
     } catch (error) {

@@ -643,8 +643,10 @@ do both look like on this page". Four modes, one `Map` object:
   alone; city names, relief, named peaks and rivers and lakes are added a chip at a time, and each
   is fetched only when it is switched on. The trips are on the map whatever the filter says. Added
   3 Sep 2026, also at the author's request; see "The explore mode" below.
-- **Trail terrain** — real elevation with a hillshade, and **drop a `.gpx` on the frame** to draw
-  a recorded track on it. Parsed with `DOMParser` in the page; the file never leaves the browser.
+- **Trail terrain** — real elevation with a hillshade, carrying **the author's ten recorded
+  routes** behind a picker: seven hikes and three half marathons. Added 4 Sep 2026 at the
+  author's request; see "The route picker" below. Dropping a `.gpx` on the frame still works and
+  is unchanged — parsed with `DOMParser` in the page, the file never leaves the browser.
 
 **The comparison is deliberately narrow, and that is what makes it worth anything.** Both earths
 read the same `public/globe/land.json` and the same `visited.json`, and both derive every colour
@@ -1077,6 +1079,159 @@ Japan and Thailand — declutter working as designed, since a card naming the ci
 the country name under it. And a cluster of peaks loses most of its names to itself: the Himalaya
 carries a dozen candidates in one degree and greedy decluttering keeps two. That is a property of
 the collision rule rather than of these layers, and it is the same rule the three.js earth uses.
+
+### The route picker (4 Sep 2026)
+
+Terrain mode used to be a ridge in Taiwan nobody walked, waiting for a file to be dropped on it.
+It now opens on a real route and carries ten, picked from a panel in the corner of the frame:
+seven hikes and three half marathons, all the author's own.
+
+| | | |
+|---|---|---|
+| Belumut | Johor, Malaysia · 25 Jul 2026 | 14.5 km · 1,127 m · 66–1,017 m |
+| Muluozi – Lamasi | Changping Valley, Chuanxi · 30 Jun 2026 | 10.6 km · 94 m · 3,407–3,667 m |
+| Muluozi – Wuguishi | Changping Valley, Chuanxi · 29 Jun 2026 | 11.1 km · 201 m · 3,664–3,754 m |
+| Lamasi – Muluozi | Changping Valley, Chuanxi · 28 Jun 2026 | 11.5 km · 316 m · 3,412–3,675 m |
+| Cape Krathing | Phuket, Thailand · 17 Nov 2025 | 3.8 km · 203 m · 1–136 m |
+| Lambak | Johor, Malaysia · 31 Aug 2025 | 5.4 km · 529 m · 63–518 m |
+| Pulai | Johor, Malaysia · 9 Aug 2025 | 10.2 km · 557 m · 41–622 m |
+| Iskandar City | Johor, Malaysia · 25 Apr 2026 | 20.7 km |
+| Kulai | Johor, Malaysia · 21 Dec 2025 | 21.3 km |
+| Dato Onn | Johor Bahru, Malaysia · 21 Sep 2025 | 21.2 km |
+
+The three Changping Valley walks are legs of one trek and fall inside the Chengdu trip
+(26 Jun – 1 Jul 2026); Cape Krathing falls inside Phuket (14–18 Nov 2025). Nothing links them in
+code — that is an observation, not a feature, and a trip page showing its own routes is the
+obvious next step if this earth wins.
+
+**It is a build step, and it has to be.** The ten GPX exports are 31 MB of XML: Strava samples
+every two seconds and writes a heart rate on every point, so one afternoon on a hill is 27,533 of
+them. `scripts/build-trails.mjs` simplifies at 4 m with Douglas–Peucker — under one GPS fix's own
+error, so there is no real detail left to lose — and 124,219 points become 2,341. That is 46 KB
+on disk and 11 KB gzipped across ten files. The GPX originals stay outside the repo; the script
+reads them from `~/Downloads/gpx` by default, laid out as `hike/` and `run/`, walking nested
+folders.
+
+**The figures and the geometry are measured on different tracks, deliberately.** Distance, ascent,
+elevation range and point count come from the FULL recording; only the drawn line is simplified.
+Simplifying a GPS trace cuts its measured length by a few percent, so measuring the simplified
+line would quietly shorten every distance the page prints, and nobody would ever catch it. The two
+never touch, so tightening the tolerance cannot move a printed number. Cross-checked against a
+completely separate code path: dropping `Lambak_Johor_Malaysia_Morning_Hike.gpx` on the frame,
+which parses in the browser, reads back the same 5.4 km and 63–518 m as the built-in route.
+
+Things that look like shortcuts and are not:
+
+- **The manifest is in `src/data/`, the geometry in `public/globe/trails/`, and that split is the
+  whole design.** `MapGlobeStage.astro` imports the manifest at build time and renders the ten
+  chips as static markup, so nothing is fetched to draw the picker; the same 2.1 KB goes inline as
+  JSON for the readout's figures. Only geometry crosses the network, only for a route someone
+  picks, and only once — `loadTrail` caches the in-flight promise, the way `ensureData` does for
+  the atlas layers. Measured: entering terrain mode fetches exactly one file, and re-picking two
+  already-seen routes fetches nothing at all.
+- **`places` mode still contacts nobody.** Verified again after this landed — the set of
+  third-party hosts is empty with the map loaded and left in `places`. The routes are local files,
+  so picking one is a request to this site and to nowhere else.
+- **There is no bounding box in the manifest.** The camera is framed from the geometry it just
+  drew. An extent carried alongside would be a second source of truth for where a route is: one
+  that could disagree with the line on the map, and would be believed.
+- **A third storage key, `mapglobe-trail`.** Same reasoning as the layers key, and an empty string
+  is again a real answer — it means the reader pressed Clear, and it is told apart from "nothing
+  stored" by comparing rather than by falsiness. A stored id matching no route is neither, and
+  falls through to the default. A dropped GPX stores the empty string too: it is a file on the
+  visitor's own machine, and an id pointing at it is a promise the next page load cannot keep.
+- **The default route is `trails[0]`, so the build script's sort is what picks it.** Hikes before
+  runs, newest first. No separate "default" flag that could drift out of step with the ordering.
+- **The opening route is drawn BEFORE the first `applyMode`, not after.** `applyMode` reads
+  `trackBounds` to decide where the camera goes, so in this order the map arrives already framed
+  on the route; the other way round it frames the Taiwan placeholder and jumps once the geometry
+  lands. It also means `attachTerrainWhenSettled` is now reached once with no `dem` source declared
+  yet — hence `ensureTerrainSource()` moved inside it, so the function that attaches terrain owns
+  its source and the order cannot come apart again. That bug shipped for one build and said so out
+  loud: *cannot load terrain, because there exists no source with ID: dem*.
+- **Terrain mode remembers.** Going out to the globe and back returns to the route rather than to
+  TERRAIN_HOME, because `applyMode` prefers `trackBounds` when there is one. TERRAIN_HOME is now
+  only what to look at when Clear has emptied the map.
+- **Track layers are hidden in every globe mode.** A 14 km walk at globe zoom is a sub-pixel speck
+  of accent somewhere in Johor. It answers no question the globe is being asked, and it competes
+  with the footprints that do.
+- **A filled dot at the start and a ring at the end, as their own source.** A circle layer over a
+  LineString draws a circle at every vertex, so the ends cannot be marked off the `track` source.
+  Without them a loop and a point-to-point walk are the same picture, and three of these routes are
+  one half of an out-and-back. On a real loop the two coincide, and the end is pushed first so the
+  start wins the overlap.
+- **The picker shares its CSS with the explore filters** — one `.panel` grammar, two panels, each
+  gated on its own mode. A chip is a chip, and a picker appearing in a different corner at a
+  different size would read as a different kind of control. It is also exactly the two-group case
+  the `display: contents` structure was kept for: labels land in the first column and chip rows in
+  the second, so the `Hikes` and `Runs` rows start at the same x. The routes panel adds a
+  `max-height` and a scroll, because ten chips in two rows is taller than five in one and the frame
+  is 26rem on a phone.
+- **One radiogroup across both rows.** Exactly one route is on the map at a time, so two
+  independent groups would misdescribe the control; the `Hikes` / `Runs` legends are plain text
+  inside it. Radio rather than the `aria-pressed` toggles next door, because those five layers are
+  independent and these ten are one choice.
+- **The date is shifted by longitude before it is formatted.** GPX times are UTC and three of the
+  ten start before 04:00 local, so printed as UTC they would be dated the previous day — and a GPX
+  file carries no timezone at all. 15° per hour is an hour out for Sichuan and cannot move any of
+  these dates, since every one starts at least five hours from midnight. A recording that starts
+  near local midnight is the case to distrust.
+- **Three run names are a hand-written table in the build script.** The derived name works for the
+  hikes, where Strava writes `<where>, <region…> <activity>` and the first comma is the split. The
+  runs do not follow that shape at all ("First Half Marathon Morning Run - Dato Onn"). A file not
+  in the table still builds; it just gets the rougher name.
+
+**The theme bug this surfaced, which was there all along.** `refreshTheme`'s `setPaintProperty`
+calls do not reach a draped map: with terrain attached MapLibre renders each tile into a texture
+and drapes it, and a paint change does not invalidate that cache — nor does moving the camera, nor
+does waiting. Measured as the mean colour of the canvas across a light → dark flip:
+
+| | light | dark |
+|---|---|---|
+| `places` | 231 | 32 |
+| `atlas` | 230 | 33 |
+| `terrain`, before | 178 | **166** |
+| `terrain`, now | 178 | **60** |
+
+Nothing in the route work caused it — terrain mode simply never had content worth looking at
+before, so nobody saw it. The fix is to detach and re-attach the terrain, **and it has to wait for
+a render.** Doing it in the same tick as the paint changes is coalesced away and stops at 152;
+hanging it off the next `render` event still only reaches 141, and leaves the map a theme behind in
+*both* directions. It has to be `once('idle')` — the drape can only be rebuilt from a style that
+has actually finished drawing in the new colours. One frame of flat terrain, on a theme change
+only. Round trip verified: 178 → 60 → 178.
+
+**Astro drops the whitespace between a text node and an inline tag that opens the next line.**
+Three of these were live on this page — "underneath.Explore", "on or off.Trail terrain",
+"colour.The places" — and they are invisible in the source and in a passing build. They showed up
+at 390px, where the wrap put them mid-line. Keep an opening `<strong>` or `<code>` on the same line
+as the words before it, even where that leaves a long line.
+
+**What it costs.** Page-scoped, entirely:
+
+| | before | after |
+|---|---|---|
+| eager page script | 1.97 | **2.29** KB gz |
+| MapLibre engine chunk | 245.83 | **246.25** KB gz |
+| `/about/travel-preview` CSS | 3.21 | **3.29** KB gz |
+| site-wide CSS and JS | — | unchanged |
+
+**Verified in Chrome against the production build.** Ten chips in two rows; terrain opens on
+Belumut having fetched exactly one route file; picking another swaps the line and the readout;
+re-picking two already-seen routes fetches nothing; mode and route both survive a reload; a dropped
+GPX still draws and unchecks the picker; Clear empties the map and persists as "no route"; the
+picker is keyboard-reachable as one `radiogroup` and Enter selects; the light↔dark round trip
+repaints the draped terrain; 390px gives 10/10 clickable chips, 0 horizontal overflow, and a panel
+inside the frame at 29% of its height. Console clean apart from transient
+`ERR_CONNECTION_RESET`s on Mapterhorn tiles, which the engine's error handler reports correctly.
+
+**Known and left alone.** Over flat coastal ground — the three runs — the global hillshade shows a
+hard diagonal seam at a DEM tile boundary, rotated to match the -22° bearing. It is a
+discontinuity in Mapterhorn's data at that zoom rather than a rendering bug, it survives twelve
+seconds of settling, and it is invisible on the seven hikes. The unselected chips are `fg-faint`,
+already recorded above as 2.31:1 in Classic and a known fault in the original palette; that strains
+harder here, where the chips are ten proper names rather than five common words, but the style is
+shared with the explore filters and changing it is a design decision rather than a fix.
 
 ### Never statically import a value from a lazily-imported engine
 

@@ -17,7 +17,9 @@
  *             country names alone; city names, relief, peaks and water are
  *             added a chip at a time, and each is fetched only when it is
  *             asked for.
- *   terrain — one ridge at 20 m per pixel with a recorded GPS track on it.
+ *   terrain — one ridge at 20 m per pixel with a recorded route drawn on it,
+ *             picked from the author's own GPX exports (scripts/build-trails.mjs),
+ *             or from a file dropped on the frame.
  *
  * The last three are things the three.js engine cannot grow into: its normal
  * map stores a shading vector rather than a height, and it has no names at all.
@@ -29,7 +31,19 @@
  * Throwaway, like the section above it. When one of the two wins, delete the
  * loser and this whole preview route with it.
  */
-import type { MapTrip } from '../../scripts/mapglobe/engine';
+import type { MapTrail, MapTrip } from '../../scripts/mapglobe/engine';
+/**
+ * The recorded routes, read at BUILD time and rendered into the picker below.
+ *
+ * This is why the manifest lives in src/data/ rather than in public/globe/ with
+ * the geometry: nothing fetches it. The chips are static markup, the same
+ * inline JSON handoff the trips already use carries the figures the readout
+ * needs, and the only thing that crosses the network at runtime is the geometry
+ * for a route someone actually clicks — 0.5 to 2 KB gzipped each.
+ *
+ * Regenerate with `node scripts/build-trails.mjs`.
+ */
+import trails from '../../data/trails.json';
 /* Values, not just types — but this is frontmatter, which runs at build time
    only, so importing them here adds nothing to what the browser downloads. The
    client reaches the same module through the <script> at the foot of this file. */
@@ -64,7 +78,7 @@ const MODES = [
   {
     id: 'terrain',
     name: 'Trail terrain',
-    hint: 'Real elevation, pitched. Fetches DEM tiles when you switch to it.',
+    hint: 'Recorded routes on real elevation, pitched. Fetches DEM tiles when you switch to it.',
   },
 ] as const;
 
@@ -83,6 +97,36 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
   peaks: { name: 'Peaks', hint: '632 named mountains, with their height. Marked ▲.' },
   water: { name: 'Rivers & lakes', hint: 'Major rivers and lakes, in the sea colour.' },
 };
+
+/**
+ * The routes, split into the two rows the picker shows.
+ *
+ * Order inside each row is the manifest's own — hikes before runs, newest
+ * first — and `routes[0]` is what terrain mode opens on, so the build script's
+ * sort is the only place that ordering is decided. A kind with no routes drops
+ * its row entirely rather than rendering an empty one.
+ */
+/* The assertion is the seam between a generated file and a checked one:
+   TypeScript reads `kind` out of JSON as `string` and cannot know that
+   scripts/build-trails.mjs only ever writes 'hike' or 'run'. That script is the
+   guarantee; this is the line where it is taken on trust. */
+const routes = trails as MapTrail[];
+const KINDS = [
+  { id: 'hike', name: 'Hikes' },
+  { id: 'run', name: 'Runs' },
+] as const;
+
+/** The whole of a route in one line, for the chip's tooltip: a five-word chip
+    cannot say where or when, and both are the first things anyone asks. */
+const routeHint = (route: MapTrail): string =>
+  [
+    route.place,
+    route.when,
+    `${route.km.toFixed(1)} km`,
+    route.ascent === null ? null : `${route.ascent.toLocaleString()} m ascent`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 ---
 
 <section class="mapglobe" data-mapglobe aria-labelledby="mapglobe-heading">
@@ -95,15 +139,27 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
       whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the other
       three modes. <strong>World atlas</strong> keeps the globe and tells you what you are looking
       at: country boundaries, country and city names, and shaded relief, with the eight footprints
-      still picked out in the page&rsquo;s own accent underneath.
-      <strong>Explore</strong> is the same globe with a filter row, and it starts quiet &mdash;
-      boundaries and country names, nothing else. Add city names, shaded relief, named peaks or
-      rivers and lakes a chip at a time; each layer is only downloaded once you ask for it, and the
-      trips stay on the map whatever you switch on or off.
-      <strong>Trail terrain</strong> drops to a single ridge on a real elevation surface &mdash;
-      <strong>drop a <code>.gpx</code> file anywhere on the frame</strong> and it is drawn on it.
-      The file is read in your browser and never leaves it.
+      still picked out in the page&rsquo;s own accent underneath. <strong>Explore</strong> is the
+      same globe with a filter row, and it starts quiet &mdash; boundaries and country names,
+      nothing else. Add city names, shaded relief, named peaks or rivers and lakes a chip at a
+      time; each layer is only downloaded once you ask for it, and the trips stay on the map
+      whatever you switch on or off. <strong>Trail terrain</strong> drops to a single route on a
+      real elevation surface, and carries {routes.length} of them &mdash; every hike and half
+      marathon recorded so far. Pick one from the panel and the camera flies to it; the filled dot
+      is where it started and the ring is where it ended. You can also <strong>drop a <code>.gpx</code> file anywhere on the frame</strong> to draw your own,
+      which is read in your browser and never leaves it.
     </p>
+    {/* MIND THE LINE BREAKS in the paragraph above, and in the note at the foot
+        of this file. Astro drops the whitespace between a text node and an
+        inline tag that opens the next line, so
+
+          … own accent underneath.
+          <strong>Explore</strong> is the same globe …
+
+        renders as "underneath.Explore". Three of those shipped before anyone
+        read the page at 390px, where the wrap made them obvious. Keep an
+        opening tag on the same line as the words before it — even where that
+        leaves a long line, as it does above — or break inside the element. */}
   </div>
 
   {/*
@@ -149,23 +205,23 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
       and they are hidden without JS — a control that cannot control is worse
       than no control.
     */}
-    <div class="filters">
+    <div class="panel filters">
       {/*
         The group is `display: contents`, so its label and its chips are direct
         children of the panel's grid rather than of the group. That is the whole
         reason it exists: labels land in the first column and chip rows in the
         second, so a row lines up with every other row rather than with itself.
-        There is one group now that the relief ladder has gone; the structure is
-        kept because a second one would otherwise be pushed right by the width
-        of its own label, which is exactly the bug this fixed.
+        This panel has one group; the routes panel below has two, which is the
+        case the structure was kept for — wrap each row in a real box instead
+        and the second is pushed right by the width of its own label.
       */}
-      <div class="filters__group">
-        <span class="filters__legend" id="mapglobe-layers-label">Layers</span>
-        <div class="filters__row" role="group" aria-labelledby="mapglobe-layers-label">
+      <div class="panel__group">
+        <span class="panel__legend" id="mapglobe-layers-label">Layers</span>
+        <div class="panel__row" role="group" aria-labelledby="mapglobe-layers-label">
           {MAP_LAYERS.map((layer) => (
             <button
               type="button"
-              class="filters__opt"
+              class="panel__opt"
               aria-pressed={DEFAULT_LAYERS.includes(layer)}
               title={LAYER_COPY[layer].hint}
               data-mapglobe-layer={layer}
@@ -176,6 +232,51 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
         </div>
       </div>
     </div>
+
+    {/*
+      The route picker, the same panel in the same corner for terrain mode.
+
+      ONE radiogroup across both rows, not one per row. Exactly one route is on
+      the map at a time, so two independent groups would be a lie about what the
+      controls do; the `Hikes` / `Runs` legends are plain text inside it, and
+      each chip's tooltip carries the place, the date and the distance that a
+      one-word chip cannot.
+
+      Radio rather than the toggle chips next door, for the same reason: those
+      five layers are independent and these ten are one choice.
+
+      `aria-checked` ships on the first route and the script corrects it from
+      storage on load, exactly as the mode switcher does — a static build cannot
+      know which route the visitor last looked at.
+    */}
+    {routes.length > 0 && (
+      <div class="panel routes" role="radiogroup" aria-label="Recorded route">
+        {KINDS.map(
+          (kind) =>
+            routes.some((route) => route.kind === kind.id) && (
+              <div class="panel__group">
+                <span class="panel__legend">{kind.name}</span>
+                <div class="panel__row">
+                  {routes
+                    .filter((route) => route.kind === kind.id)
+                    .map((route) => (
+                      <button
+                        type="button"
+                        class="panel__opt"
+                        role="radio"
+                        aria-checked={route.id === routes[0]!.id}
+                        title={routeHint(route)}
+                        data-mapglobe-trail={route.id}
+                      >
+                        {route.label}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ),
+        )}
+      </div>
+    )}
 
     <p class="mapglobe__status" data-mapglobe-status>Scroll down to load the map</p>
     <p class="mapglobe__drop">Drop to draw the track</p>
@@ -190,8 +291,7 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
     <span class="mapglobe__legend-extra"
       >&#9650; marks a named peak and its height, and rivers and lakes take the sea&rsquo;s
       colour.</span
-    >
-    The places with a trip in them are the ones picked out in the page&rsquo;s accent on the map
+    > The places with a trip in them are the ones picked out in the page&rsquo;s accent on the map
     itself. The relief is real elevation at about 20&nbsp;km per pixel, lit from the north-west.
   </p>
 
@@ -214,14 +314,23 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
     picker. In <strong>Places visited</strong> nothing is fetched from a third party &mdash; the
     coastline and footprints are the local files, and so is every atlas layer &mdash; boundaries,
     names, peaks, and rivers and lakes. The single exception is <strong>Relief</strong>, which
-    reads elevation tiles from Mapterhorn; it is on by default in <strong>World atlas</strong> and
-    <strong>Explore</strong> and is the whole of <strong>Trail terrain</strong>, and it is the one
-    property those modes cannot preserve. Nothing is requested until you ask for it &mdash; not the
-    tiles, and not any of the local layers either.
+    reads elevation tiles from Mapterhorn; it is on by default in <strong>World atlas</strong>
+    and <strong>Explore</strong> and is the whole of <strong>Trail terrain</strong>, and it is
+    the one
+    property those modes cannot preserve. The routes themselves are local, one small file each,
+    fetched only for the route you pick. Nothing is requested until you ask for it &mdash; not the
+    tiles, not the routes, and not any of the local layers either.
   </p>
 
   {/* The trips, handed to the script as data rather than fetched again. */}
   <script id="mapglobe-trips" type="application/json" set:html={JSON.stringify(trips)} is:inline />
+
+  {/* And the routes, for the same reason. This is the figures the readout
+      prints and the bounds the camera flies to — everything about a route
+      except its geometry, which is the only part big enough to be worth a
+      request. Under 4 KB for all ten, and it saves the script a round trip
+      before it can draw the one terrain mode opens on. */}
+  <script id="mapglobe-trails" type="application/json" set:html={JSON.stringify(routes)} is:inline />
 </section>
 
 <style>
@@ -282,13 +391,20 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
 
      `max-width` rather than a fixed width, so the same panel is a tidy block at
      1400px and a full-width strip at 390px without a second layout. */
-  .filters {
+  .panel {
     @apply hidden;
   }
 
   /* A two-column grid — labels in the first, chip rows in the second — so the
-     rows align with each other rather than each aligning with itself. */
-  :global(html.js) [data-mode='explore'][data-state='ready'] .filters {
+     rows align with each other rather than each aligning with itself.
+
+     Two panels share this and only one is ever shown, because each is gated on
+     the mode it belongs to. One grammar rather than two near-identical blocks:
+     a chip is a chip, and the routes panel appearing in a different corner or a
+     different size from the filters panel would read as a different kind of
+     thing when it is the same kind of thing. */
+  :global(html.js) [data-mode='explore'][data-state='ready'] .filters,
+  :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
     @apply absolute top-3 left-3 z-10 grid items-baseline gap-x-2.5 gap-y-1.5;
     @apply rounded-lg border border-line p-2.5;
     grid-template-columns: auto 1fr;
@@ -297,34 +413,46 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
     backdrop-filter: blur(6px);
   }
 
+  /* Ten routes in two rows is taller than five filter chips in one, and the
+     frame is 26rem on a phone. A cap plus a scroll keeps the panel from owning
+     the map; `overscroll-behavior` stops a flick that runs off the end of the
+     list from carrying on into the page. */
+  :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
+    max-height: calc(100% - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   /* `contents`, so the label and the row below are laid out by the PANEL's grid
      rather than by this box. See the note in the markup. */
-  .filters__group {
+  .panel__group {
     display: contents;
   }
 
-  .filters__row {
+  .panel__row {
     @apply flex flex-wrap gap-1;
   }
 
-  .filters__legend {
+  .panel__legend {
     @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-faint uppercase;
   }
 
-  .filters__opt {
+  .panel__opt {
     @apply rounded-full border border-line px-2 py-0.5 transition-colors;
     @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-faint uppercase;
     @apply hover:text-accent;
   }
 
-  /* Pressed reads as filled, unpressed as an outline. The two states have to be
-     told apart at a glance across five chips, and a colour change alone is not
-     enough when four of them start off. */
-  .filters__opt[aria-pressed='true'] {
+  /* Selected reads as filled, unselected as an outline. The two states have to
+     be told apart at a glance across a row of chips, and a colour change alone
+     is not enough when most of them are off. Both attributes, because the
+     filters are toggles and the routes are one choice — see the markup. */
+  .panel__opt[aria-pressed='true'],
+  .panel__opt[aria-checked='true'] {
     @apply border-line-strong bg-surface-2 text-fg;
   }
 
-  .filters__opt:focus-visible {
+  .panel__opt:focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
   }
 
@@ -334,17 +462,22 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
      whole frame is 390px wide. Labels then sit above their own rows, which is
      still aligned, just vertically. */
   @media (max-width: 639px) {
-    :global(html.js) [data-mode='explore'][data-state='ready'] .filters {
+    :global(html.js) [data-mode='explore'][data-state='ready'] .filters,
+    :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
       @apply top-2 left-2 gap-x-0 gap-y-1 p-2;
       grid-template-columns: 1fr;
       max-width: calc(100% - 1rem);
     }
 
-    .filters__legend {
+    :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
+      max-height: calc(100% - 1rem);
+    }
+
+    .panel__legend {
       grid-column: 1;
     }
 
-    .filters__opt {
+    .panel__opt {
       @apply px-1.5 text-[0.58rem] tracking-[0.04em];
     }
   }

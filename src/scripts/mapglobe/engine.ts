@@ -9,6 +9,10 @@
  * than a height, so a track has nothing to sit on. That is the whole reason
  * this file exists; the globe half is here only so the comparison is fair.
  *
+ * `terrain` mode now carries the author's own recorded routes — see MapTrail
+ * and scripts/build-trails.mjs. Dropping a GPX still works and is unchanged;
+ * the difference is that the mode has something to show before you do.
+ *
  * Deliberately the same shape as the three.js engine, so the comparison is
  * about looks and capability rather than plumbing:
  *
@@ -77,6 +81,41 @@ export interface MapTrip {
   href: string;
 }
 
+/**
+ * One recorded route, exactly as `src/data/trails.json` carries it.
+ *
+ * Built by scripts/build-trails.mjs from the author's own GPX exports. Every
+ * figure here is measured off the FULL recording, while the geometry the map
+ * draws — fetched separately from public/globe/trails/<id>.json — is simplified
+ * to a few hundred points. That split is the whole reason the readout can be
+ * trusted: simplifying the line harder can never shorten the distance the page
+ * claims, because the two never touch.
+ *
+ * There is deliberately no bounding box here. The camera is framed from the
+ * geometry it just drew, so a second copy of the extent would be a second
+ * source of truth for where the route is — one that could disagree with the
+ * line on the map and would be believed.
+ */
+export interface MapTrail {
+  id: string;
+  /** Short, for a picker chip: "Belumut", "Muluozi – Wuguishi". */
+  label: string;
+  /** Where, for the readout: "Changping Valley, Chuanxi, China". */
+  place: string;
+  kind: 'hike' | 'run';
+  /** Already formatted — "25 Jul 2026". See localDate() in the build script. */
+  when: string;
+  /** The same date sortable. Only the build script reads it — it is what orders
+      the list, and therefore what picks the route terrain mode opens on. */
+  date: string;
+  km: number;
+  /** Null where the recording carried no elevation at all. Never estimated. */
+  ascent: number | null;
+  low: number | null;
+  high: number | null;
+  points: number;
+}
+
 /** Matches public/globe/visited.json. `at` is [lat, lon]; `ring` is [lon, lat]. */
 interface VisitedFeature {
   ring: [number, number][];
@@ -130,6 +169,13 @@ export interface MapGlobe {
   /** Which optional layers `explore` draws. Ignored by every other mode. */
   setLayers(layers: MapLayer[]): void;
   loadGpx(file: File): Promise<TrackStats>;
+  /**
+   * Draw one of the built-in routes, fetching its geometry on first use.
+   *
+   * `animate` is false for the route terrain mode opens on, so the map arrives
+   * already looking at it rather than flying there from the placeholder view.
+   */
+  loadTrail(trail: MapTrail, animate?: boolean): Promise<void>;
   clearTrack(): void;
   refreshTheme(): void;
   destroy(): void;
@@ -175,6 +221,11 @@ const DEM_MAX_ZOOM = 12;
 const PLACES_HOME = { center: [110, 18] as [number, number], zoom: 2.3 };
 
 const TERRAIN_HOME = { center: [121.2736, 24.1425] as [number, number], zoom: 11.6 };
+
+/** The terrain setting, as one object because it is now applied from two places
+    — on arrival in terrain mode, and again on a theme change. See refreshTheme
+    for why the second one exists. */
+const TERRAIN = { source: 'dem', exaggeration: 1.35 };
 
 /* ---- label tuning --------------------------------------------------------- */
 
@@ -322,6 +373,10 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
       coast: { type: 'geojson', data: coast },
       regions: { type: 'geojson', data: regions },
       track: { type: 'geojson', data: EMPTY },
+      /* The two ends of that track, as their own source rather than as extra
+         features on `track`. A circle layer over a LineString draws a circle at
+         every vertex, so there is no way to mark just the ends off one source. */
+      'track-ends': { type: 'geojson', data: EMPTY },
       /* The atlas sources are declared here EMPTY rather than added on first
          use, and unlike `dem` below that costs nothing: a geojson source with
          inline data makes no network request, so an empty one is free. What it
@@ -467,6 +522,26 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
         source: 'track',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': p.visited, 'line-width': 3.2 },
+      },
+      /* Where the walk started and where it stopped — a filled dot and a ring.
+         Without these a point-to-point route and a loop are the same picture,
+         and three of the routes here are one half of an out-and-back that only
+         makes sense once you can see which end is which. Filled at the start
+         because that is the one you read first.
+
+         For a genuine loop the two land on top of each other, and `drawTrack`
+         pushes the end first so the start wins that overlap. Two circles in
+         exactly the same place is itself the right answer for a loop. */
+      {
+        id: 'track-end',
+        type: 'circle',
+        source: 'track-ends',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': ['case', ['==', ['get', 'role'], 'start'], p.visited, p.ground],
+          'circle-stroke-color': ['case', ['==', ['get', 'role'], 'start'], p.ground, p.visited],
+          'circle-stroke-width': 2,
+        },
       },
     ],
   };
@@ -739,6 +814,10 @@ const LAYER_IDS: Record<MapLayer, readonly string[]> = {
     footprints are what the page is about. */
 const GLOBE_LAYERS = ['coast', 'region-fill', 'region-line'] as const;
 
+/** The recorded route and its two ends — the exact complement of the above.
+    Only `terrain` draws these. */
+const TRACK_LAYERS = ['track-casing', 'track', 'track-end'] as const;
+
 /** Which label kind belongs to which filter. Trips answer to no filter. */
 /* `water` is deliberately absent: rivers and lakes are geometry only. They were
    named for one round (3 Sep 2026) and the names came back off at the author's
@@ -764,6 +843,9 @@ export async function createMapGlobe(
   trips: MapTrip[],
   mode: MapMode,
   layers: MapLayer[] = [...DEFAULT_LAYERS],
+  /** The route to open terrain mode on. Ignored in every other mode, and null
+      is fine — terrain then opens on the TERRAIN_HOME placeholder. */
+  trail: MapTrail | null = null,
 ): Promise<MapGlobe> {
   /* land-polygons.json, NOT land.json. The ring file is coastline drawn as line
      geometry on a sphere, where a jump from longitude +179.87 to -180 wraps
@@ -1410,6 +1492,13 @@ export async function createMapGlobe(
     for (const id of GLOBE_LAYERS) {
       map.setLayoutProperty(id, 'visibility', globe ? 'visible' : 'none');
     }
+    /* A track belongs to terrain mode and to nothing else. Left visible on the
+       globe, a 14 km walk is a sub-pixel speck of accent somewhere in Johor —
+       not wrong exactly, but a mark on the map that answers no question the
+       globe is being asked, and it competes with the footprints that do. */
+    for (const id of TRACK_LAYERS) {
+      map.setLayoutProperty(id, 'visibility', globe ? 'none' : 'visible');
+    }
 
     const active = activeLayers();
 
@@ -1442,7 +1531,16 @@ export async function createMapGlobe(
    */
   function attachTerrainWhenSettled(): void {
     const attach = (): void => {
-      if (current === 'terrain') map.setTerrain({ source: 'dem', exaggeration: 1.35 });
+      if (current !== 'terrain') return;
+      /* The source, here rather than only in applyMode. Opening the page
+         straight into terrain mode draws its route BEFORE the first applyMode
+         runs — that is what puts the camera on the route instead of on the
+         placeholder — so this is reached once with no `dem` declared yet, and
+         setTerrain throws "there exists no source with ID: dem". Making the
+         function that attaches terrain responsible for its own source is the
+         fix that cannot come apart again if the order changes. */
+      ensureTerrainSource();
+      map.setTerrain(TERRAIN);
     };
     if (map.isMoving()) map.once('moveend', attach);
     else attach();
@@ -1476,6 +1574,15 @@ export async function createMapGlobe(
     // and this is the one mode where the projection must be settled first.
     map.setProjection({ type: 'mercator' });
 
+    /* A drawn track is where terrain mode belongs, and TERRAIN_HOME is only
+       what to look at when there is no track at all. Reading `trackBounds`
+       here is also what lets a reader go out to the globe and come back to the
+       route they were reading rather than to a ridge in Taiwan. */
+    if (trackBounds) {
+      fitTrack(animate);
+      return;
+    }
+
     const camera = { ...TERRAIN_HOME, pitch: 66, bearing: -22 };
     if (animate) map.flyTo({ ...camera, duration: 2200, essential: true });
     else map.jumpTo(camera);
@@ -1490,40 +1597,124 @@ export async function createMapGlobe(
     if (current === 'explore') applyLayers();
   }
 
-  applyMode(mode, false);
-
   /* ---- a track ------------------------------------------------------------ */
-  let hasTrack = false;
+  /**
+   * Where the drawn track is, or null when nothing is drawn.
+   *
+   * This is what makes terrain mode remember: leave it for the globe and come
+   * back and the camera returns to the route rather than to the placeholder
+   * ridge, because `applyMode` reads this before it reaches for TERRAIN_HOME.
+   */
+  let trackBounds: LngLatBounds | null = null;
+
+  /**
+   * Geometry already fetched, keyed by trail id — the promise rather than the
+   * result, so two fast clicks on the same chip make one request.
+   *
+   * Same shape as `loaded` for the atlas layers above, and the same principle:
+   * a route is downloaded when someone picks it and never again.
+   */
+  const geometry = new Map<string, Promise<number[][]>>();
+
+  function trackEnd(role: 'start' | 'end', at: number[]): GeoJSON.Feature {
+    return {
+      type: 'Feature',
+      properties: { role },
+      geometry: { type: 'Point', coordinates: at },
+    };
+  }
+
+  function drawTrack(coords: number[][]): void {
+    (map.getSource('track') as GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } },
+      ],
+    });
+    // End first, so that on a loop — where the two coincide — the start is the
+    // one drawn on top. See the `track-end` layer.
+    (map.getSource('track-ends') as GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: [trackEnd('end', coords.at(-1)!), trackEnd('start', coords[0]!)],
+    });
+    trackBounds = boundsOf(coords);
+  }
+
+  /**
+   * Put the camera on the drawn track.
+   *
+   * The padding scales with the frame rather than sitting at a fixed 80px: at
+   * 390px that would be 160 of the 390 given away to margin, and a 20 km run
+   * would be fitted into the strip left over.
+   */
+  function fitTrack(animate: boolean): void {
+    if (!trackBounds) return;
+    map.fitBounds(trackBounds, {
+      padding: Math.min(80, host.clientWidth * 0.1),
+      pitch: 62,
+      bearing: -22,
+      duration: animate ? 2000 : 0,
+      essential: true,
+    });
+    // fitBounds restarts the camera, so re-arm: an attach queued against the
+    // pre-fit view would otherwise fire while the map was still travelling.
+    attachTerrainWhenSettled();
+  }
 
   async function loadGpx(file: File): Promise<TrackStats> {
     const { line, stats } = parseGpx(await file.text(), file.name.replace(/\.gpx$/i, ''));
-    (map.getSource('track') as GeoJSONSource).setData({
-      type: 'FeatureCollection',
-      features: [line],
-    });
-    hasTrack = true;
+    drawTrack((line.geometry as GeoJSON.LineString).coordinates);
 
     if (current !== 'terrain') applyMode('terrain', false);
-
-    map.fitBounds(boundsOf((line.geometry as GeoJSON.LineString).coordinates), {
-      padding: 80,
-      pitch: 62,
-      bearing: -22,
-      duration: 2000,
-      essential: true,
-    });
-    // fitBounds re-starts the camera, so re-arm: the attach queued by applyMode
-    // above would otherwise fire against the pre-fit view.
-    attachTerrainWhenSettled();
+    fitTrack(true);
 
     return stats;
   }
 
+  async function loadTrail(trail: MapTrail, animate = true): Promise<void> {
+    let pending = geometry.get(trail.id);
+    if (!pending) {
+      pending = fetch(`${DATA_BASE}/trails/${trail.id}.json`).then((r) => {
+        if (!r.ok) throw new Error(`${r.status} fetching the ${trail.id} route`);
+        return r.json() as Promise<number[][]>;
+      });
+      geometry.set(trail.id, pending);
+    }
+
+    let coords: number[][];
+    try {
+      coords = await pending;
+    } catch (error) {
+      // Let the next click try again rather than caching the failure.
+      geometry.delete(trail.id);
+      throw error;
+    }
+
+    drawTrack(coords);
+    if (current !== 'terrain') applyMode('terrain', false);
+    fitTrack(animate);
+  }
+
   function clearTrack(): void {
     (map.getSource('track') as GeoJSONSource).setData(EMPTY);
-    hasTrack = false;
+    (map.getSource('track-ends') as GeoJSONSource).setData(EMPTY);
+    trackBounds = null;
     if (current === 'terrain') map.flyTo({ ...TERRAIN_HOME, pitch: 66, bearing: -22, duration: 1400 });
   }
+
+  /* The route terrain mode opens on, drawn BEFORE the first applyMode rather
+     than after it. applyMode reads `trackBounds` to decide where the camera
+     goes, so doing it in this order means the map arrives already looking at
+     the route; the other way round it would frame the Taiwan placeholder and
+     then jump once the geometry landed. */
+  if (mode === 'terrain' && trail) {
+    await loadTrail(trail, false).catch((error: unknown) => {
+      // A route that will not load is the placeholder ridge, not a broken page.
+      console.error('mapglobe: the opening route could not be drawn', error);
+    });
+  }
+
+  applyMode(mode, false);
 
   /* ---- theme -------------------------------------------------------------- */
   /* The site's theme controls only add and remove classes on <html>, so neither
@@ -1540,6 +1731,18 @@ export async function createMapGlobe(
     map.setPaintProperty('region-line', 'line-color', p.visitedEdge);
     map.setPaintProperty('track', 'line-color', p.visited);
     map.setPaintProperty('track-casing', 'line-color', p.ground);
+    map.setPaintProperty('track-end', 'circle-color', [
+      'case',
+      ['==', ['get', 'role'], 'start'],
+      p.visited,
+      p.ground,
+    ]);
+    map.setPaintProperty('track-end', 'circle-stroke-color', [
+      'case',
+      ['==', ['get', 'role'], 'start'],
+      p.ground,
+      p.visited,
+    ]);
     map.setPaintProperty('borders', 'line-color', p.boundary);
     map.setPaintProperty('city-dot', 'circle-color', p.coast);
     map.setPaintProperty('city-dot', 'circle-stroke-color', p.ground);
@@ -1562,14 +1765,45 @@ export async function createMapGlobe(
     // text, but it can change the font stack under it, so drop the measurements
     // and let the next declutter re-take them.
     for (const label of labels) label.w = 0;
-  }
 
-  void hasTrack;
+    /* THE SETPAINTPROPERTY CALLS ABOVE DO NOT REACH A DRAPED MAP.
+       With terrain attached, MapLibre renders the map into a texture per tile
+       and drapes those over the mesh, and a paint-property change does not
+       invalidate that cache — nor does moving the camera. Measured across a
+       light → dark flip, as the mean colour of the canvas:
+
+         places    231 → 32     repaints
+         atlas     230 → 33     repaints
+         terrain   178 → 166    does not
+
+       Re-attaching the terrain is what forces the drape to be re-rendered in
+       the new colours. It costs nothing on the network — the DEM tiles are
+       already decoded and in memory — and it is skipped in every mode that
+       does not drape, because getTerrain() is null there.
+
+       IT HAS TO WAIT FOR A RENDER, and that is the whole subtlety. Detaching
+       and re-attaching in this same tick is coalesced away and changes nothing:
+       measured, the flip then stops at 152 and stays there through eight
+       seconds and a camera nudge. The drape can only be rebuilt from a style
+       that has actually been drawn once in the new colours, so the swap is
+       hung off the next `render`, where it reaches 65 — the same value a full
+       manual re-draw settles at. One frame of flat terrain, on a theme change
+       only. */
+    if (map.getTerrain()) {
+      map.once('idle', () => {
+        if (!map.getTerrain()) return;
+        map.setTerrain(null);
+        map.setTerrain(TERRAIN);
+      });
+      map.triggerRepaint();
+    }
+  }
 
   return {
     setMode: (next) => applyMode(next, true),
     setLayers,
     loadGpx,
+    loadTrail,
     clearTrack,
     refreshTheme,
     destroy: () => map.remove(),
