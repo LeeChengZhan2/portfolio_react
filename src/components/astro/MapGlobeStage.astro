@@ -7,22 +7,33 @@
  * The comparison is deliberately narrow. Both earths read the same
  * public/globe/land.json and the same visited footprints, and both derive every
  * colour through src/scripts/globe/palette.ts. What differs is what each one
- * can DO, which is what the four modes are:
+ * can DO, which is what the two modes are:
  *
- *   places  — the stylised globe, matching the earth above. No third-party byte.
- *   atlas   — the same globe, told what it is looking at: boundaries, country
- *             and city names, and real relief. This is the one that answers
- *             "which country is that" without leaving the page. Fixed.
- *   explore — the same globe with a filter row. It starts at boundaries and
- *             country names alone; city names, relief, peaks and water are
- *             added a chip at a time, and each is fetched only when it is
- *             asked for.
- *   terrain — one ridge at 20 m per pixel with a recorded route drawn on it,
- *             picked from the author's own GPX exports (scripts/build-trails.mjs),
- *             or from a file dropped on the frame.
+ *   explore — "Trips". The globe with a filter row over it. It starts at
+ *             boundaries and country names alone, both local files, so entering
+ *             it makes no third-party request; city names, relief, peaks and
+ *             water are added a chip at a time and each is fetched only when it
+ *             is asked for. The eight footprints are drawn whatever the filters
+ *             say — they are the point of the page, not a layer.
+ *   terrain — "Trails". One ridge at 20 m per pixel with a recorded route drawn
+ *             on it, picked from the author's own GPX exports, which are
+ *             simplified and measured at build time by scripts/build-trails.mjs.
+ *             Dropping a .gpx on the frame was removed 7 Sep 2026 — the routes
+ *             are built in now, so the page had nothing left to ask for.
  *
- * The last three are things the three.js engine cannot grow into: its normal
- * map stores a shading vector rather than a height, and it has no names at all.
+ * TWO MODES, AND THERE WERE FOUR UNTIL 7 SEP 2026. `places` — the bare stylised
+ * globe — and `atlas` — the same globe frozen at boundaries, names and relief —
+ * came off at the author's request, and nothing went with them: `explore` opens
+ * on what `atlas` drew minus its relief, and switching its two default chips
+ * off leaves exactly what `places` drew. Two fixed positions on a dial, sitting
+ * in the row beside the dial.
+ *
+ * THE CHIP LABELS ARE NOT THE MODE IDS, deliberately — see the note in
+ * modes.ts. "Trips" and "Trails" are both already taken by data types here:
+ * a MapTrip is one visited city, a MapTrail is one recorded route.
+ *
+ * Both modes are things the three.js engine cannot grow into: its normal map
+ * stores a shading vector rather than a height, and it has no names at all.
  *
  * Not an island. See src/scripts/mapglobe/index.ts — a dynamic import behind an
  * IntersectionObserver, the same deferral `client:visible` would give without
@@ -55,29 +66,31 @@ interface Props {
 
 const { trips } = Astro.props;
 
+/**
+ * The two modes, in switcher order — the globe first, because it is what the
+ * section is about and the cheaper of the two to arrive in.
+ *
+ * The names are the author's (7 Sep 2026) and they are a matched pair on
+ * purpose: both are one word, both are already true of the data behind them —
+ * visited.json holds trips, trails.json holds trails — so neither label can
+ * drift from what its tab shows. They are also short enough that the switcher
+ * stays on one line at 390px, which "Places visited" and "Trail terrain" did
+ * not manage between them.
+ *
+ * `id` is what everything else keys off and it does NOT track these labels. See
+ * modes.ts for why: `trips` and `trails` are taken.
+ */
 const MODES = [
   {
-    id: 'places',
-    name: 'Places visited',
-    hint: 'The globe. Local data only — no third-party request is made in this mode.',
-  },
-  {
-    id: 'atlas',
-    name: 'World atlas',
-    hint:
-      'The same globe with borders, country and city names, and shaded relief. ' +
-      'Fetches elevation tiles when you switch to it.',
-  },
-  {
     id: 'explore',
-    name: 'Explore',
+    name: 'Trips',
     hint:
-      'A filter row over the same globe. Starts at boundaries and country names; ' +
-      'everything else is a chip away.',
+      'The globe, with a filter row. Starts at boundaries and country names — ' +
+      'everything else is a chip away, and nothing is downloaded until you ask.',
   },
   {
     id: 'terrain',
-    name: 'Trail terrain',
+    name: 'Trails',
     hint: 'Recorded routes on real elevation, pitched. Fetches DEM tiles when you switch to it.',
   },
 ] as const;
@@ -136,28 +149,28 @@ const routeHint = (route: MapTrail): string =>
     <p class="mapglobe__intro">
       The same eight footprints and the same coastline file as the earth above, drawn by a map
       engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
-      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the other
-      three modes. <strong>World atlas</strong> keeps the globe and tells you what you are looking
-      at: country boundaries, country and city names, and shaded relief, with the eight footprints
-      still picked out in the page&rsquo;s own accent underneath. <strong>Explore</strong> is the
-      same globe with a filter row, and it starts quiet &mdash; boundaries and country names,
-      nothing else. Add city names, shaded relief, named peaks or rivers and lakes a chip at a
-      time; each layer is only downloaded once you ask for it, and the trips stay on the map
-      whatever you switch on or off. <strong>Trail terrain</strong> drops to a single route on a
-      real elevation surface, and carries {routes.length} of them &mdash; every hike and half
+      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the two
+      modes above the frame. <strong>Trips</strong> is the globe with a filter row over it, and it
+      starts quiet &mdash; country boundaries and country names, nothing else. Add city names,
+      shaded relief, named peaks or rivers and lakes a chip at a time; each layer is only
+      downloaded once you ask for it, and the eight footprints stay picked out in the page&rsquo;s
+      own accent whatever you switch on or off. <strong>Trails</strong> drops to a single route on
+      a real elevation surface, and carries {routes.length} of them &mdash; every hike and half
       marathon recorded so far. Pick one from the panel and the camera flies to it; the filled dot
-      is where it started and the ring is where it ended. You can also <strong>drop a <code>.gpx</code> file anywhere on the frame</strong> to draw your own,
-      which is read in your browser and never leaves it.
+      is where it started and the ring is where it ended. Each route is drawn from a simplified
+      line, but every figure beside it &mdash; distance, ascent, the elevation range &mdash; is
+      measured from the full recording, so tightening the one can never quietly shorten the other.
     </p>
     {/* MIND THE LINE BREAKS in the paragraph above, and in the note at the foot
         of this file. Astro drops the whitespace between a text node and an
         inline tag that opens the next line, so
 
-          … own accent underneath.
-          <strong>Explore</strong> is the same globe …
+          … switch on or off.
+          <strong>Trails</strong> drops to a single route …
 
-        renders as "underneath.Explore". Three of those shipped before anyone
-        read the page at 390px, where the wrap made them obvious. Keep an
+        renders as "switch on or off.Trails". Three of those shipped before
+        anyone read the page at 390px, where the wrap made them obvious, and the
+        7 Sep 2026 rename nearly added a fourth in the note at the foot. Keep an
         opening tag on the same line as the words before it — even where that
         leaves a long line, as it does above — or break inside the element. */}
   </div>
@@ -173,7 +186,7 @@ const routeHint = (route: MapTrail): string =>
         type="button"
         class="switch__opt"
         role="radio"
-        aria-checked={mode.id === 'places'}
+        aria-checked={mode.id === 'explore'}
         title={mode.hint}
         data-mapglobe-mode={mode.id}
       >
@@ -279,45 +292,42 @@ const routeHint = (route: MapTrail): string =>
     )}
 
     <p class="mapglobe__status" data-mapglobe-status>Scroll down to load the map</p>
-    <p class="mapglobe__drop">Drop to draw the track</p>
   </div>
 
-  {/* Shown in atlas mode only, keyed off the same `data-mode` the script writes
+  {/* Shown on the globe only, keyed off the same `data-mode` the script writes
       on the section. Text rather than swatches on purpose: the globe's colours
       are derived at runtime from the theme, so a swatch drawn in CSS would be a
-      second guess at them and would be wrong the first time a step changed. */}
+      second guess at them and would be wrong the first time a step changed.
+
+      The peaks-and-water sentence was a `.mapglobe__legend-extra` span, hidden
+      outside explore because `atlas` could not draw either layer. With atlas
+      gone that span had one side, so it is plain text again. It still names
+      layers that may be switched off — as it always did in explore, since the
+      legend describes what the chips can draw rather than what is drawn. */}
   <p class="mapglobe__legend">
     Dashed lines are country borders and the dots are cities &mdash; capitals slightly larger.
-    <span class="mapglobe__legend-extra"
-      >&#9650; marks a named peak and its height, and rivers and lakes take the sea&rsquo;s
-      colour.</span
-    > The places with a trip in them are the ones picked out in the page&rsquo;s accent on the map
+    &#9650; marks a named peak and its height, and rivers and lakes take the sea&rsquo;s colour.
+    The places with a trip in them are the ones picked out in the page&rsquo;s accent on the map
     itself. The relief is real elevation at about 20&nbsp;km per pixel, lit from the north-west.
   </p>
 
+  {/* Just the readout. A "Load a .gpx" label wrapping a file input and a Clear
+      button sat beside it until 7 Sep 2026 — the first because ten routes are
+      built in now and a visitor's own file answers nothing this page asks, the
+      second because it was that file's undo, and with it gone Clear could only
+      swap a route for an empty hillside. The route picker is the whole control
+      surface for this mode. */}
   <div class="mapglobe__foot">
     <p class="mapglobe__readout" data-mapglobe-readout data-state="empty">No track loaded.</p>
-
-    <div class="mapglobe__actions">
-      {/* A label rather than a button, so the file picker is reachable from a
-          keyboard without scripting a click through to a hidden input. */}
-      <label class="mapglobe__action">
-        Load a .gpx
-        <input type="file" accept=".gpx,application/gpx+xml" data-mapglobe-file />
-      </label>
-      <button type="button" class="mapglobe__action" data-mapglobe-clear>Clear</button>
-    </div>
   </div>
 
   <p class="mapglobe__note">
     Colours come from the same palette module the earth above uses, so both follow the theme
-    picker. In <strong>Places visited</strong> nothing is fetched from a third party &mdash; the
-    coastline and footprints are the local files, and so is every atlas layer &mdash; boundaries,
-    names, peaks, and rivers and lakes. The single exception is <strong>Relief</strong>, which
-    reads elevation tiles from Mapterhorn; it is on by default in <strong>World atlas</strong>
-    and <strong>Explore</strong> and is the whole of <strong>Trail terrain</strong>, and it is
-    the one
-    property those modes cannot preserve. The routes themselves are local, one small file each,
+    picker. Nothing is fetched from a third party when <strong>Trips</strong> opens &mdash; the
+    coastline, the footprints, the boundaries and every name are local files, and so are the
+    peaks, rivers and lakes. The single exception is <strong>Relief</strong>, which reads
+    elevation tiles from Mapterhorn; it is off until you switch it on, and it is the whole of <strong>Trails</strong>, the one mode that cannot preserve the property. The routes
+    themselves are local, one small file each,
     fetched only for the route you pick. Nothing is requested until you ask for it &mdash; not the
     tiles, not the routes, and not any of the local layers either.
   </p>
@@ -705,22 +715,12 @@ const routeHint = (route: MapTrail): string =>
     @apply tracking-normal normal-case;
   }
 
-  /* Shown only while a file is being dragged over the frame. */
-  .mapglobe__drop {
-    @apply pointer-events-none absolute inset-2 hidden items-center justify-center rounded-lg;
-    @apply border-2 border-dashed border-accent text-center;
-    @apply font-mono text-xs tracking-[0.12em] text-accent uppercase;
-    background: color-mix(in oklab, var(--color-bg) 70%, transparent);
-  }
-
-  /* A general sibling combinator, not a chain of adjacent ones — the status and
-     label layers between them are free to move without silently killing this. */
-  .mapglobe__stage[data-drop] ~ .mapglobe__drop {
-    @apply flex;
-  }
-
+  /* One child since the actions row went (7 Sep 2026), so the flex row that
+     used to hold the readout at one end and the buttons at the other is now
+     just a margin. Kept as its own rule rather than folded into the readout:
+     the readout is styled as text, this is where the block sits. */
   .mapglobe__foot {
-    @apply mt-3 flex flex-wrap items-center justify-between gap-3;
+    @apply mt-3;
   }
 
   /* Matches the frame's breakout so the readout and the buttons sit at its
@@ -748,30 +748,6 @@ const routeHint = (route: MapTrail): string =>
     @apply text-accent;
   }
 
-  .mapglobe__actions {
-    @apply hidden;
-  }
-
-  :global(html.js) .mapglobe__actions {
-    @apply flex flex-wrap items-center gap-2;
-  }
-
-  .mapglobe__action {
-    @apply cursor-pointer rounded-full border border-line px-3 py-1 transition-colors;
-    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta hover:text-accent;
-  }
-
-  .mapglobe__action:focus-within,
-  .mapglobe__action:focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent;
-  }
-
-  /* The input is the control; the label is its skin. Hidden with sr-only rather
-     than display:none so it stays focusable from the keyboard. */
-  .mapglobe__action input {
-    @apply sr-only;
-  }
-
   /* Hidden until the script writes `data-mode`, which means hidden without JS —
      consistent with the switcher that would be the only way to reach the mode
      it describes. */
@@ -779,20 +755,8 @@ const routeHint = (route: MapTrail): string =>
     @apply hidden;
   }
 
-  [data-mode='atlas'] .mapglobe__legend,
   [data-mode='explore'] .mapglobe__legend {
     @apply mt-3 block max-w-2xl text-sm text-fg-meta;
-  }
-
-  /* The marks only exist in explore, where the layers that use them can be
-     switched on. Naming them under World atlas would describe things the reader
-     cannot see. */
-  .mapglobe__legend-extra {
-    @apply hidden;
-  }
-
-  [data-mode='explore'] .mapglobe__legend-extra {
-    @apply inline;
   }
 
   .mapglobe__note {

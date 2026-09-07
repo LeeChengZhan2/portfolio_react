@@ -13,19 +13,29 @@
  * A delegated listener, not an island.
  */
 
-import type { MapGlobe, MapTrail, MapTrip, TrackStats } from './engine';
+import type { MapGlobe, MapTrail, MapTrip } from './engine';
 // Values come from modes.ts, never from engine.ts — see the note there. A single
 // static value import from the engine puts MapLibre in the eager bundle.
 import { DEFAULT_LAYERS, MAP_LAYERS, MAP_MODES, type MapLayer, type MapMode } from './modes';
 
 const STORAGE_KEY = 'mapglobe-mode';
-const DEFAULT_MODE: MapMode = 'places';
+/* `explore` — the globe — rather than `terrain`, because the globe is what the
+   travel section is about and terrain mode is the detour. It is also the cheaper
+   of the two on arrival: explore opens on two local files and makes no
+   third-party request at all, while terrain reaches straight for DEM tiles.
+
+   A mode stored before 7 Sep 2026 can be `places` or `atlas`, neither of which
+   exists now. Nothing special handles that, and nothing needs to: `isMode`
+   checks the stored string against MAP_MODES and a miss falls through to here,
+   which is the right answer anyway — both of those modes were positions
+   `explore` can be put in with its own chips. */
+const DEFAULT_MODE: MapMode = 'explore';
 
 /**
  * The filter set lives under its own key, not inside the mode.
  *
  * Same reasoning as the site's two theme keys: a reader who tunes the filters,
- * looks at Trail terrain and comes back should find their filters where they
+ * looks at Trails and comes back should find their filters where they
  * left them. One combined key would have to forget one to remember the other.
  */
 const LAYERS_KEY = 'mapglobe-layers';
@@ -35,10 +45,6 @@ const LAYERS_KEY = 'mapglobe-layers';
  * the filters got a second one: a reader who picks a route, goes out to the
  * globe and comes back should find the route they left, and one combined key
  * would have to forget one choice to remember the other.
- *
- * A dropped GPX deliberately does NOT go in here — it is a file on the
- * visitor's own machine, and a stored id pointing at it would be a promise the
- * next page load cannot keep.
  */
 const TRAIL_KEY = 'mapglobe-trail';
 
@@ -47,7 +53,6 @@ const stage = document.querySelector<HTMLElement>('[data-mapglobe-stage]');
 const labelLayer = document.querySelector<HTMLElement>('[data-mapglobe-labels]');
 const status = document.querySelector<HTMLElement>('[data-mapglobe-status]');
 const readout = document.querySelector<HTMLElement>('[data-mapglobe-readout]');
-const fileInput = document.querySelector<HTMLInputElement>('[data-mapglobe-file]');
 
 /** Data the page hands over inline rather than making the script fetch it —
     the trips, and the manifest of recorded routes. Neither is large, and both
@@ -111,12 +116,12 @@ function storedLayers(): MapLayer[] {
  */
 function storedTrail(): MapTrail | null {
   try {
+    // An empty string used to be a real answer here — the reader had pressed
+    // Clear — and was told apart from "nothing stored" by comparing rather than
+    // by falsiness. Clear is gone (7 Sep 2026), so nothing writes one any more
+    // and a stale one simply matches no route, which is already handled: an id
+    // that matches nothing falls through to the default below.
     const saved = localStorage.getItem(TRAIL_KEY);
-    // An empty string is a real answer — the reader pressed Clear — and it is
-    // told apart from "nothing stored" by comparing rather than by falsiness,
-    // the same distinction the layers key makes. An id that no longer matches
-    // any route is neither, and falls through to the default below.
-    if (saved === '') return null;
     const found = trails.find((trail) => trail.id === saved);
     if (found) return found;
   } catch {
@@ -139,8 +144,8 @@ function markSelected(mode: MapMode): void {
   }
 }
 
-/** `null` unchecks every chip, which is the state a dropped GPX leaves the
-    picker in — what is drawn is not one of the routes it lists. */
+/** `null` unchecks every chip. Only reachable with an empty manifest now that
+    Clear is gone — one of the ten is always the one being shown otherwise. */
 function markTrails(id: string | null): void {
   for (const button of document.querySelectorAll<HTMLElement>('[data-mapglobe-trail]')) {
     button.setAttribute('aria-checked', String(button.dataset.mapglobeTrail === id));
@@ -156,35 +161,16 @@ function markLayers(active: MapLayer[]): void {
 }
 
 /**
- * The track readout. Every figure here is computed from the visitor's own file
- * — nothing is estimated and nothing is filled in, which is why a track with no
- * elevation data reports no ascent rather than reporting zero.
- */
-function showStats(stats: TrackStats): void {
-  if (!readout) return;
-  const parts = [
-    `${stats.km.toFixed(1)} km`,
-    stats.ascent === null ? null : `${stats.ascent.toLocaleString()} m ascent`,
-    stats.low === null || stats.high === null
-      ? null
-      : `${stats.low.toLocaleString()}–${stats.high.toLocaleString()} m`,
-    `${stats.points.toLocaleString()} points`,
-  ].filter(Boolean);
-
-  readout.dataset.state = 'loaded';
-  readout.innerHTML = '';
-
-  const name = document.createElement('strong');
-  name.textContent = stats.name;
-  readout.append(name, document.createTextNode(` · ${parts.join(' · ')}`));
-}
-
-/**
- * The same readout for one of the built-in routes.
+ * The route readout.
  *
  * Every figure is read straight off the manifest, which measured it from the
  * full recording at build time — see scripts/build-trails.mjs. Nothing here is
- * derived from the simplified line the map is drawing.
+ * derived from the simplified line the map is drawing, which is what lets the
+ * geometry be simplified harder without ever shortening a printed distance.
+ *
+ * There was a second readout beside this one until 7 Sep 2026, `showStats`,
+ * which formatted figures computed in the browser from a dropped GPX. It went
+ * with the parser.
  */
 function showTrail(trail: MapTrail): void {
   if (!readout) return;
@@ -216,8 +202,8 @@ if (section && stage && labelLayer) {
   let globe: MapGlobe | null = null;
   let mode = storedMode();
   let active = storedLayers();
-  /** The route the picker is showing as chosen. Null once a dropped file has
-      replaced it, since that file is not in the list. */
+  /** The route the picker is showing as chosen. Null only when the manifest is
+      empty — otherwise one of the ten is always selected. */
   let trail: MapTrail | null = storedTrail();
 
   // The markup ships the defaults as selected, because a static build cannot
@@ -278,17 +264,6 @@ if (section && stage && labelLayer) {
       return;
     }
 
-    if (target?.closest('[data-mapglobe-clear]')) {
-      globe?.clearTrack();
-      drawn = false;
-      trail = null;
-      markTrails(null);
-      rememberTrail('');
-      if (readout) {
-        readout.dataset.state = 'empty';
-        readout.textContent = 'No track loaded.';
-      }
-    }
   });
 
   section.dataset.mode = mode;
@@ -323,46 +298,11 @@ if (section && stage && labelLayer) {
     }
   }
 
-  /* ---- a GPX file, read in the browser and never uploaded ----------------- */
-  async function take(file: File | undefined): Promise<void> {
-    if (!file || !globe) return;
-    try {
-      showStats(await globe.loadGpx(file));
-      drawn = true;
-      // A dropped file is not one of the listed routes, so nothing in the
-      // picker is showing what is on the map any more.
-      trail = null;
-      markTrails(null);
-      rememberTrail('');
-      mode = 'terrain';
-      markSelected(mode);
-      section!.dataset.mode = mode;
-    } catch (error) {
-      showTrackError(error instanceof Error ? error.message : 'That file could not be read.');
-    }
-  }
-
-  fileInput?.addEventListener('change', () => {
-    void take(fileInput.files?.[0]);
-    // Reset so re-picking the same file fires `change` again.
-    fileInput.value = '';
-  });
-
-  // Dropping onto the stage is the fast path, but the file input above is the
-  // one that works from a keyboard, so both exist.
-  for (const type of ['dragenter', 'dragover'] as const) {
-    stage.addEventListener(type, (event) => {
-      event.preventDefault();
-      stage.dataset.drop = '';
-    });
-  }
-  for (const type of ['dragleave', 'drop'] as const) {
-    stage.addEventListener(type, () => delete stage.dataset.drop);
-  }
-  stage.addEventListener('drop', (event) => {
-    event.preventDefault();
-    void take(event.dataTransfer?.files?.[0]);
-  });
+  /* A `take()` here read a GPX dropped on the stage or chosen from a file
+     input, parsed it in the browser and drew it — removed 7 Sep 2026 along with
+     the drop target, the input and the parser in engine.ts. The ten built-in
+     routes are what terrain mode is for now, and every one of them is measured
+     at build time rather than in the visitor's browser. */
 
   /* ---- load on approach --------------------------------------------------- */
   const observer = new IntersectionObserver((entries) => {

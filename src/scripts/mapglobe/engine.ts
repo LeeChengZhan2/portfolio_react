@@ -9,9 +9,12 @@
  * than a height, so a track has nothing to sit on. That is the whole reason
  * this file exists; the globe half is here only so the comparison is fair.
  *
- * `terrain` mode now carries the author's own recorded routes — see MapTrail
- * and scripts/build-trails.mjs. Dropping a GPX still works and is unchanged;
- * the difference is that the mode has something to show before you do.
+ * `terrain` mode carries the author's own recorded routes — see MapTrail and
+ * scripts/build-trails.mjs. It used to also accept a GPX dropped on the frame,
+ * parsed in the browser; that came off on 7 Sep 2026 once the ten routes were
+ * built in, because the feature answered a question the page no longer asks.
+ * The parser, its ascent threshold and the drop target are all gone — git
+ * history has them if a "bring your own track" mode is ever wanted again.
  *
  * Deliberately the same shape as the three.js engine, so the comparison is
  * about looks and capability rather than plumbing:
@@ -25,12 +28,13 @@
  *   - The coastline is the SAME public/globe/land.json. Feeding both renderers
  *     identical data is what makes a look comparison mean anything.
  *
- * One property worth protecting, and the reason terrain is opt-in rather than
- * always on: in `places` mode this makes NO third-party network request. Every
- * byte comes from public/globe/, same as today. Only `terrain` mode reaches
- * for DEM tiles, and only once the visitor asks for it. public/globe/README.md
- * claims "nothing is fetched from a third party at runtime" — this keeps that
- * true everywhere except the one mode that cannot possibly hold it.
+ * One property worth protecting, and the reason terrain is a separate mode
+ * rather than a layer: entering `explore` makes NO third-party network request.
+ * Its two default chips are local files, so every byte comes from
+ * public/globe/. Only Relief and `terrain` mode reach for DEM tiles, and only
+ * once the visitor asks for them. public/globe/README.md claims "nothing is
+ * fetched from a third party at runtime" — this keeps that true everywhere
+ * except where the reader has pressed the control that cannot hold it.
  */
 
 // Named imports, not a default: maplibre-gl v6 has no default export.
@@ -69,7 +73,7 @@ import { mix, palette, type Palette } from '../globe/palette';
  */
 setWorkerUrl(workerUrl);
 
-import { ATLAS_LAYERS, DEFAULT_LAYERS, MAP_LAYERS, type MapLayer, type MapMode } from './modes';
+import { DEFAULT_LAYERS, MAP_LAYERS, type MapLayer, type MapMode } from './modes';
 
 export type { MapLayer, MapMode };
 
@@ -155,20 +159,10 @@ interface AtlasPeak {
   z: number;
 }
 
-export interface TrackStats {
-  name: string;
-  points: number;
-  km: number;
-  ascent: number | null;
-  low: number | null;
-  high: number | null;
-}
-
 export interface MapGlobe {
   setMode(mode: MapMode): void;
   /** Which optional layers `explore` draws. Ignored by every other mode. */
   setLayers(layers: MapLayer[]): void;
-  loadGpx(file: File): Promise<TrackStats>;
   /**
    * Draw one of the built-in routes, fetching its geometry on first use.
    *
@@ -176,7 +170,6 @@ export interface MapGlobe {
    * already looking at it rather than flying there from the placeholder view.
    */
   loadTrail(trail: MapTrail, animate?: boolean): Promise<void>;
-  clearTrack(): void;
   refreshTheme(): void;
   destroy(): void;
 }
@@ -210,15 +203,22 @@ const DEM_MAX_ZOOM = 12;
  * the closest real topography to any trip in the collection — and steep enough
  * that exaggeration is not doing the work.
  *
- * It is a starting view, not a claim about where anyone walked. Drop a GPX on
- * the stage and the camera goes to that instead.
+ * It is a starting view, not a claim about where anyone walked. Nothing can ask
+ * for it any more: the ten routes are built in and Clear was removed on
+ * 7 Sep 2026, so it is reached only on a failure — an empty manifest, or an
+ * opening route that will not load. Not dead code; the null-`trackBounds`
+ * fallback in `applyMode`.
  */
 /**
  * Where the globe sits. zoom 2.3 rather than the 1.6 this shipped with: at 1.6
  * the earth was a small ball with a wide empty margin inside a frame that is
  * the biggest thing on the page.
+ *
+ * Named for the projection, not for a mode. It was PLACES_HOME until the mode
+ * called `places` was removed on 7 Sep 2026, which is the kind of name that
+ * quietly outlives the thing it referred to.
  */
-const PLACES_HOME = { center: [110, 18] as [number, number], zoom: 2.3 };
+const GLOBE_HOME = { center: [110, 18] as [number, number], zoom: 2.3 };
 
 const TERRAIN_HOME = { center: [121.2736, 24.1425] as [number, number], zoom: 11.6 };
 
@@ -350,9 +350,11 @@ function regionPolygons(trips: MapTrip[], visited: Record<string, VisitedFeature
 /**
  * The whole basemap, as a style document. This is the part the memo's argument
  * rests on: there is no imagery, no labels, no roads and no third-party tile
- * server in `places` mode — just two local GeoJSON sources painted in the
- * page's own colours. A MapLibre map only looks like an embedded widget if you
- * hand it a style that looks like one.
+ * server in the style at all — just local GeoJSON sources painted in the page's
+ * own colours. A MapLibre map only looks like an embedded widget if you hand it
+ * a style that looks like one. Everything the optional layers add is bolted on
+ * to this, and the DEM the Relief chip reaches for is the only part of the map
+ * that ever leaves the site.
  */
 function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecification {
   return {
@@ -384,8 +386,8 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
          the coastline, city dots over the visited footprints, the hillshade
          under all of them. A layer added later has to be positioned by naming a
          neighbour, and `addLayer(x, 'coast')` quietly means something different
-         the moment another layer moves in between. The DATA is still fetched on
-         first entry to atlas mode; see `loadAtlas`. */
+         the moment another layer moves in between. The DATA is still fetched
+         only when its own chip is switched on; see `loadAtlas` and `ensureData`. */
       borders: { type: 'geojson', data: EMPTY },
       cities: { type: 'geojson', data: EMPTY },
       rivers: { type: 'geojson', data: EMPTY },
@@ -547,8 +549,10 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
   };
 }
 
-/** Which of the two shading settings a mode uses. */
-type ShadeKind = 'atlas' | 'terrain';
+/** Which of the two shading settings a mode uses. `globe` was `atlas` until
+    that mode was removed; the setting outlived it, because the whole-hemisphere
+    hillshade is still what the Relief chip switches on. */
+type ShadeKind = 'globe' | 'terrain';
 
 interface Shade {
   shadow: number;
@@ -581,12 +585,12 @@ interface Shade {
  * How hard the relief is shaded, per mode.
  *
  * Terrain mode is one ridge filling the frame and can take a strong shade from a
- * conventional 45° sun. The atlas is a whole hemisphere at roughly 20 km per
+ * conventional 45° sun. The globe is a whole hemisphere at roughly 20 km per
  * pixel — the same resolution as the three.js relief look — where the same
  * settings produce a globe with a suggestion of mountains on it. Same layer,
  * same source, two genuinely different jobs.
  *
- * The atlas row was settled by shipping a ladder of five strengths and letting
+ * The globe row was settled by shipping a ladder of five strengths and letting
  * the author pick (3 Sep 2026), which is the same conclusion the light themes
  * reached: when the right amount is a matter of screen, room and eyes, the page
  * can let the reader say — and once they have said, the picker is one control
@@ -610,7 +614,7 @@ interface Shade {
  * render, which is the one thing this page is trying not to look like).
  */
 const SHADE: Record<ShadeKind, Shade> = {
-  atlas: {
+  globe: {
     shadow: 0.26,
     highlight: 0.2,
     accent: 0.12,
@@ -699,90 +703,15 @@ function hillshadeLayer(p: Palette, s: Shade): HillshadeLayerSpecification {
 }
 
 /* -------------------------------------------------------------------------- */
-/* GPX                                                                         */
+/* track geometry                                                              */
 /* -------------------------------------------------------------------------- */
 
-const R_EARTH = 6371;
-
-function haversine(a: number[], b: number[]): number {
-  const rad = Math.PI / 180;
-  const dLat = (b[1]! - a[1]!) * rad;
-  const dLon = (b[0]! - a[0]!) * rad;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(a[1]! * rad) * Math.cos(b[1]! * rad) * Math.sin(dLon / 2) ** 2;
-  return 2 * R_EARTH * Math.asin(Math.sqrt(s));
-}
-
-/**
- * A GPX file to a LineString, parsed in the browser and never uploaded.
- *
- * Deliberately tolerant about which element the points live in: an Apple Watch
- * workout exported through one of the Health readers comes out as `<trkpt>`,
- * but a route planned elsewhere arrives as `<rtept>`, and there is no reason to
- * reject one of them. Elevation is optional — a track with no `<ele>` still
- * draws, it just reports no ascent rather than reporting zero.
- */
-function parseGpx(text: string, fallbackName: string): { line: GeoJSON.Feature; stats: TrackStats } {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.querySelector('parsererror')) throw new Error('That file is not valid XML.');
-
-  const nodes = [...doc.querySelectorAll('trkpt, rtept')];
-  if (nodes.length < 2) throw new Error('No track points found — is this a GPX file?');
-
-  const coords: number[][] = [];
-  const eles: number[] = [];
-
-  for (const node of nodes) {
-    const lon = Number(node.getAttribute('lon'));
-    const lat = Number(node.getAttribute('lat'));
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-    coords.push([lon, lat]);
-    const ele = Number(node.querySelector('ele')?.textContent);
-    if (Number.isFinite(ele)) eles.push(ele);
-  }
-
-  if (coords.length < 2) throw new Error('No usable coordinates in that file.');
-
-  let km = 0;
-  for (let i = 1; i < coords.length; i++) km += haversine(coords[i - 1]!, coords[i]!);
-
-  /* Ascent is summed off a 3 m threshold rather than raw deltas. GPS altitude
-     noise is a couple of metres per sample, and summing every positive tick
-     turns a flat walk into a thousand metres of climbing — the classic bug in
-     naive elevation-gain code. */
-  let ascent: number | null = null;
-  if (eles.length === coords.length && eles.length > 1) {
-    ascent = 0;
-    let mark = eles[0]!;
-    for (const e of eles) {
-      if (e > mark + 3) {
-        ascent += e - mark;
-        mark = e;
-      } else if (e < mark) {
-        mark = e;
-      }
-    }
-  }
-
-  const name = doc.querySelector('trk > name, metadata > name')?.textContent?.trim();
-
-  return {
-    line: {
-      type: 'Feature',
-      properties: {},
-      geometry: { type: 'LineString', coordinates: coords },
-    },
-    stats: {
-      name: name || fallbackName,
-      points: coords.length,
-      km,
-      ascent: ascent === null ? null : Math.round(ascent),
-      low: eles.length ? Math.round(Math.min(...eles)) : null,
-      high: eles.length ? Math.round(Math.max(...eles)) : null,
-    },
-  };
-}
+/* The GPX parser lived here until 7 Sep 2026, along with a haversine and the
+   3 m ascent threshold that kept GPS altitude noise from turning a flat walk
+   into a thousand metres of climbing. All three went with the drop target: the
+   built-in routes carry their figures in the manifest, measured off the FULL
+   recording at build time by scripts/build-trails.mjs, so nothing in the
+   browser has to compute a distance any more. */
 
 function boundsOf(coords: number[][]): LngLatBounds {
   const b = new LngLatBounds(
@@ -832,9 +761,9 @@ const LABEL_LAYER: Record<Exclude<LabelKind, 'trip'>, MapLayer> = {
 
 type LabelKind = 'trip' | 'country' | 'city' | 'peak';
 
-/** What `atlas` is fixed at, and what `explore` opens with. They are no longer
-    the same list: see the note on DEFAULT_LAYERS in modes.ts. */
-const ATLAS_SET: ReadonlySet<MapLayer> = new Set(ATLAS_LAYERS);
+/* `explore` is now the only mode with optional layers at all, so there is one
+   set here rather than two. ATLAS_SET — the frozen countries + cities + relief
+   that defined the `atlas` mode — went with that mode on 7 Sep 2026. */
 const NO_LAYERS: ReadonlySet<MapLayer> = new Set();
 
 export async function createMapGlobe(
@@ -866,7 +795,7 @@ export async function createMapGlobe(
   const map = new MlMap({
     container: host,
     style: buildStyle(p, land, ringsToLines(landRings), regionPolygons(trips, visited)),
-    ...PLACES_HOME,
+    ...GLOBE_HOME,
     attributionControl: { compact: true },
     // The site has its own keyboard story and a map that swallows arrow keys
     // inside a scrolling article is a trap. Drag and wheel stay on.
@@ -916,11 +845,11 @@ export async function createMapGlobe(
   /** Which optional layers `explore` draws. Every other mode ignores it. */
   let chosen: ReadonlySet<MapLayer> = new Set(layers);
 
-  /** The optional layers the CURRENT mode actually draws. */
+  /** The optional layers the CURRENT mode actually draws.
+      Terrain has none: at one ridge, boundaries and country names name nothing
+      the reader can see, and its own hillshade is not the `relief` layer. */
   function activeLayers(): ReadonlySet<MapLayer> {
-    if (current === 'atlas') return ATLAS_SET;
-    if (current === 'explore') return chosen;
-    return NO_LAYERS;
+    return current === 'explore' ? chosen : NO_LAYERS;
   }
 
   /* ---- labels ------------------------------------------------------------ */
@@ -1072,9 +1001,13 @@ export async function createMapGlobe(
   void labelLayer;
 
   /* ---- the optional data, fetched one layer at a time -------------------- */
-  /* The same deferral `places` mode gets from the whole engine, one level down
-     and now per filter. Nothing is requested until a layer is switched on, and
-     switching it off again never re-requests it.
+  /* The same deferral the whole engine gets from its IntersectionObserver, one
+     level down and per filter. Nothing is requested until a layer is switched
+     on, and switching it off again never re-requests it.
+
+     This is what carries the "no third-party byte" property now that the mode
+     which guaranteed it by drawing nothing is gone: `explore` opens on two
+     local files, and the reader chooses when that stops being true.
 
      That granularity is the difference between a filter row and a menu of
      downloads: a reader who wants rivers should not also pay 82 KB for borders,
@@ -1405,22 +1338,25 @@ export async function createMapGlobe(
   });
 
   /* ---- modes and layers --------------------------------------------------- */
-  /* One map object in four configurations, which is the entire claim being
-     tested here. Switching is a camera animation and a handful of layer toggles
-     — not a second renderer, a second canvas or a second download.
+  /* One map object in two configurations, and five filters over one of them,
+     which is the entire claim being tested here. Switching is a camera
+     animation and a handful of layer toggles — not a second renderer, a second
+     canvas or a second download.
 
-     `places`, `atlas` and `explore` are the same globe at the same scale, so
-     switching between them deliberately does NOT move the camera: the reader
-     stays where they spun to and the world gains or loses its names underneath
-     them. Only `terrain` is a journey, and only a return from it flies home. */
+     There were four modes until 7 Sep 2026, and three of them were the same
+     globe at the same scale. Switching between those deliberately did NOT move
+     the camera; with `explore` the only globe left, that behaviour now lives
+     entirely in the filter chips, which change what is drawn and never where
+     the reader is looking. Only `terrain` is a journey, and only a return from
+     it flies home. */
 
   /**
    * The elevation source `setTerrain` reads, brought in on first entry to
    * terrain mode.
    *
-   * This is half of why `places` mode touches no third-party server: a MapLibre
-   * source is fetched the moment it is added, so the only way not to request
-   * Mapterhorn is not to have declared it yet.
+   * This is half of why `explore` touches no third-party server until asked: a
+   * MapLibre source is fetched the moment it is added, so the only way not to
+   * request Mapterhorn is not to have declared it yet.
    *
    * Two rules pulling opposite ways, and both matter.
    *
@@ -1459,7 +1395,7 @@ export async function createMapGlobe(
     if (!map.getSource('dem-hillshade')) {
       map.addSource('dem-hillshade', { type: 'raster-dem', url: DEM_URL, maxzoom: DEM_MAX_ZOOM });
     }
-    map.addLayer(hillshadeLayer(p, SHADE.atlas), 'lakes');
+    map.addLayer(hillshadeLayer(p, SHADE.globe), 'lakes');
   }
 
   /** Which of the two settings the hillshade is currently painted at, so a
@@ -1514,7 +1450,7 @@ export async function createMapGlobe(
 
     // `terrain` shades the one ridge it flew to, at its own strength. A globe
     // mode shades the whole world, and only if the reader asked for it.
-    setHillshade(current === 'terrain' ? 'terrain' : active.has('relief') ? 'atlas' : null);
+    setHillshade(current === 'terrain' ? 'terrain' : active.has('relief') ? 'globe' : null);
 
     retier();
   }
@@ -1560,7 +1496,7 @@ export async function createMapGlobe(
       // Same globe, same scale: leave the camera where the reader put it. Only
       // arriving back from terrain is a journey home.
       if (!wasGlobe) {
-        const home = { ...PLACES_HOME, pitch: 0, bearing: 0 };
+        const home = { ...GLOBE_HOME, pitch: 0, bearing: 0 };
         if (animate) map.flyTo({ ...home, duration: 2200, essential: true });
         else map.jumpTo(home);
       }
@@ -1577,7 +1513,11 @@ export async function createMapGlobe(
     /* A drawn track is where terrain mode belongs, and TERRAIN_HOME is only
        what to look at when there is no track at all. Reading `trackBounds`
        here is also what lets a reader go out to the globe and come back to the
-       route they were reading rather than to a ridge in Taiwan. */
+       route they were reading rather than to a ridge in Taiwan.
+
+       TERRAIN_HOME is now only reached two ways, both of them failures rather
+       than choices: an empty manifest, or an opening route that would not load.
+       It survived the Clear button because of those, not out of habit. */
     if (trackBounds) {
       fitTrack(animate);
       return;
@@ -1661,16 +1601,6 @@ export async function createMapGlobe(
     attachTerrainWhenSettled();
   }
 
-  async function loadGpx(file: File): Promise<TrackStats> {
-    const { line, stats } = parseGpx(await file.text(), file.name.replace(/\.gpx$/i, ''));
-    drawTrack((line.geometry as GeoJSON.LineString).coordinates);
-
-    if (current !== 'terrain') applyMode('terrain', false);
-    fitTrack(true);
-
-    return stats;
-  }
-
   async function loadTrail(trail: MapTrail, animate = true): Promise<void> {
     let pending = geometry.get(trail.id);
     if (!pending) {
@@ -1695,12 +1625,11 @@ export async function createMapGlobe(
     fitTrack(animate);
   }
 
-  function clearTrack(): void {
-    (map.getSource('track') as GeoJSONSource).setData(EMPTY);
-    (map.getSource('track-ends') as GeoJSONSource).setData(EMPTY);
-    trackBounds = null;
-    if (current === 'terrain') map.flyTo({ ...TERRAIN_HOME, pitch: 66, bearing: -22, duration: 1400 });
-  }
+  /* A `clearTrack()` here emptied both track sources and flew back to
+     TERRAIN_HOME. It went with the Clear button on 7 Sep 2026: it was the undo
+     for a dropped GPX, and once the routes were built in its only effect was to
+     replace a route with an empty hillside. Exactly one route is on the map at
+     any time now, and the way to change it is to pick another. */
 
   /* The route terrain mode opens on, drawn BEFORE the first applyMode rather
      than after it. applyMode reads `trackBounds` to decide where the camera
@@ -1772,8 +1701,7 @@ export async function createMapGlobe(
        invalidate that cache — nor does moving the camera. Measured across a
        light → dark flip, as the mean colour of the canvas:
 
-         places    231 → 32     repaints
-         atlas     230 → 33     repaints
+         explore   230 → 33     repaints
          terrain   178 → 166    does not
 
        Re-attaching the terrain is what forces the drape to be re-rendered in
@@ -1802,9 +1730,7 @@ export async function createMapGlobe(
   return {
     setMode: (next) => applyMode(next, true),
     setLayers,
-    loadGpx,
     loadTrail,
-    clearTrack,
     refreshTheme,
     destroy: () => map.remove(),
   };

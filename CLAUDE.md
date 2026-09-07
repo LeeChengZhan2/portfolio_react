@@ -633,20 +633,126 @@ route and the link to it.
 
 It exists because of the section immediately above this one. The relief look cannot grow into a
 trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
-do both look like on this page". Four modes, one `Map` object:
+do both look like on this page". **Two modes, one `Map` object** — there were four until
+7 Sep 2026; see "Two tabs, not four" below.
 
-- **Places visited** — globe projection, the same eight footprints, no imagery and no labels.
-- **World atlas** — the same globe, told what it is looking at: country boundaries, 177 country
-  and 243 city names, city dots, and a global hillshade. Added 3 Sep 2026 at the author's
-  request; see "The atlas mode" below. **Fixed** — it has no controls.
-- **Explore** — the same globe with a filter row. It starts at boundaries and country names
-  alone; city names, relief, named peaks and rivers and lakes are added a chip at a time, and each
-  is fetched only when it is switched on. The trips are on the map whatever the filter says. Added
-  3 Sep 2026, also at the author's request; see "The explore mode" below.
-- **Trail terrain** — real elevation with a hillshade, carrying **the author's ten recorded
+- **Trips** (`explore`) — the globe with a filter row. It starts at country boundaries and the
+  177 country names alone, both local files, so entering it makes no third-party request at all;
+  city names and dots, relief, named peaks and rivers and lakes are added a chip at a time, and
+  each is fetched only when it is switched on. The eight footprints are on the map whatever the
+  filter says. See "The explore mode" below.
+- **Trails** (`terrain`) — real elevation with a hillshade, carrying **the author's ten recorded
   routes** behind a picker: seven hikes and three half marathons. Added 4 Sep 2026 at the
-  author's request; see "The route picker" below. Dropping a `.gpx` on the frame still works and
-  is unchanged — parsed with `DOMParser` in the page, the file never leaves the browser.
+  author's request; see "The route picker" below. Dropping a `.gpx` on the frame was removed on
+  7 Sep 2026, along with the parser behind it — see "Dropping a GPX was removed".
+
+### Two tabs, not four (7 Sep 2026)
+
+`places` — the bare stylised globe — and `atlas` — the same globe frozen at boundaries, names and
+relief — were removed at the author's request, and the two survivors were renamed on the chips.
+**Nothing was lost with them**, which is why it was the right cut: `explore` opens on what `atlas`
+drew minus its relief, and switching its two default chips off leaves exactly what `places` drew.
+They were two fixed positions on a dial sitting in the row next to the dial. "The atlas layers"
+below still describes what those layers do and is still accurate — it is the mode wrapper around
+them that is gone.
+
+**`ATLAS_LAYERS` and `ATLAS_SET` went with `atlas`**, `PLACES_HOME` was renamed `GLOBE_HOME`
+(it is named for the projection now, not for a mode that could outlive it), and the `ShadeKind`
+`'atlas'` became `'globe'` — the whole-hemisphere hillshade setting is still what the Relief chip
+switches on. `DEFAULT_LAYERS` is unchanged at `['countries']` and is now the only layer set in
+modes.ts.
+
+**The chip labels are "Trips" and "Trails"; the ids are still `explore` and `terrain`.** That
+mismatch is deliberate and is written down in modes.ts, because it is exactly the kind of thing a
+later reader "fixes": both label words are already taken in that neighbourhood by narrower types —
+a `MapTrip` is one visited city, a `MapTrail` is one recorded route, and `trips` and `trails` are
+live variables in engine.ts holding those. A mode id colliding with them would read worse than one
+that does not echo its own chip. The names themselves are the author's, chosen over a dozen
+alternatives on the grounds that both are already true of the data behind them — `visited.json`
+holds trips, `trails.json` holds trails — so neither label can drift from what its tab shows. They
+are also short enough that the switcher stays on **one line at 390px**, which "Places visited" and
+"Trail terrain" did not manage between them.
+
+**One piece of markup went with the modes.** `.mapglobe__legend-extra` was a span hiding the
+peaks-and-water sentence outside `explore`, because `atlas` could not draw either layer. With one
+globe mode left that span had one side, so it is plain text again and its two CSS rules are gone.
+The legend still names layers that may be switched off — as it always did in `explore`, since it
+describes what the chips can draw rather than what is drawn.
+
+**Verified in Chrome against the production build** (not the dev server — and there was a live
+`astro dev` on :4321 during this session, which is exactly the trap; :4322 was the build). 32
+checks: two chips reading Trips/Trails with `explore` selected and `data-mode="explore"` on
+arrival; **zero third-party hosts contacted** on arrival, with MapLibre fetching exactly
+`land-polygons.json`, `borders.json` and `atlas-countries.json` and no optional-layer file; five
+filter chips, and the Peaks chip fetching only `atlas-peaks.json`; legend shown in Trips and
+hidden in Trails; switching to Trails loading exactly one route file, reading back
+"Belumut · Johor, Malaysia · 25 Jul 2026 · 14.5 km · 1,127 m ascent" and reaching
+`tiles.mapterhorn.com` only then; ten route chips; the globe returning intact; both dead stored
+ids (`places`, `atlas`) falling back to Trips; 390px with 0 horizontal overflow, the switcher on
+one line and both chips clickable; the light↔dark round trip repainting both modes (233→34→233 and
+180→62→180); prose containing none of the three old names and no glued words from the Astro
+whitespace trap; console clean throughout.
+
+**What it costs, or rather returns.** With the GPX loader and the Clear button removed below in
+the same session, the MapLibre engine chunk went 246.25 → **244.86 KB gz** and the eager page
+script 2.29 → **2.07 KB gz** — a tenth of the page's own script, gone. The three.js engine is
+untouched at 138.57, and site-wide CSS and JS are unchanged: this is all page-scoped.
+
+### The GPX loader and Clear were removed (7 Sep 2026)
+
+The frame used to accept a `.gpx` dropped on it, or chosen through a "Load a .gpx" file input
+beside Clear, parsed in the browser with `DOMParser` and never uploaded. **All of it is gone** at
+the author's request, on the grounds that the ten routes are built in now and a visitor's own file
+answers a question this page stopped asking.
+
+What went, so nobody looks for it: `parseGpx` and its `haversine`/`R_EARTH` helpers and the 3 m
+ascent threshold; `loadGpx` on the engine and its `MapGlobe` interface member; the exported
+`TrackStats` type; `showStats` and `take` in index.ts; the `change` listener, the four
+drag/drop listeners and the `data-drop` attribute; `.mapglobe__drop` and its sibling-combinator
+rule; `.mapglobe__action input` and the `:focus-within` half of the action's focus ring, which
+only existed because a `<label>` cannot take focus itself. Git history has all of it if a "bring
+your own track" mode is ever wanted.
+
+**`boundsOf` stayed** — it frames the camera on whatever is drawn, and the built-in routes need it
+just as much. The section header above it is now "track geometry" rather than "GPX".
+
+**The ascent threshold is not lost, it moved** — `scripts/build-trails.mjs` does that arithmetic
+now, off the FULL recording rather than the simplified line. That split is the reason the readout
+can be trusted and it predates this change; what is new is that it is the only path left, so
+nothing in the browser computes a distance any more.
+
+**Clear went too, in the same session.** It was flagged as probably vestigial and then removed
+when the author asked why it was still there — the reasoning that killed the GPX loader kills it
+as well. Clear was that file's undo; with the routes built in, its only remaining effect was to
+replace a route with an empty hillside, and there was no way to get a route back except to pick
+one, which is what the picker is for. `clearTrack()` and its interface member are gone, the
+`data-mapglobe-clear` branch with them, and `.mapglobe__actions` / `.mapglobe__action` with the
+whole row. `.mapglobe__foot` went from a `justify-between` flex row to a plain margin, since it
+holds one child now.
+
+**`TERRAIN_HOME` survived, and is worth understanding.** It is no longer a destination anyone can
+choose; it is reached only two ways, both failures rather than choices — an empty manifest, or an
+opening route that will not load. Do not delete it as dead code: `applyMode` falls back to it
+whenever `trackBounds` is null.
+
+**An empty string under `mapglobe-trail` is no longer a valid stored value**, but a returning
+visitor can still have one from before this change. `storedTrail` used to compare against `''`
+explicitly to tell "Clear was pressed" from "nothing stored"; that branch is gone, and a stale
+`''` now matches no route and falls through to the default. Verified in Chrome by planting one:
+it opens on Belumut with its chip checked, rather than on an empty map.
+
+**Verified in Chrome against the production build**, 17 + 16 checks plus a re-run of the 31 above,
+all passing: no `input[type=file]`, no `data-mapglobe-file`, no `.mapglobe__drop`, no
+`[data-mapglobe-clear]`, no `.mapglobe__action` and no button reading "Clear" anywhere in the DOM;
+no mention of `.gpx` left in the rendered prose; synthetic `dragenter`/`dragover`/`drop` events on
+the stage setting no `data-drop` and throwing nothing; terrain opening on Belumut in the `loaded`
+readout state; ten chips with exactly one checked, before and after picking a different route; a
+planted stale `''` falling back to a route; the globe half untouched at five filter chips; 0
+horizontal overflow at 390px; console clean throughout.
+
+**A mode stored before this change falls back on its own.** `isMode` checks the stored string
+against `MAP_MODES` and a miss lands on `DEFAULT_MODE`, which is now `explore`. Verified in
+Chrome with both dead ids in `localStorage`.
 
 **The comparison is deliberately narrow, and that is what makes it worth anything.** Both earths
 read the same `public/globe/land.json` and the same `visited.json`, and both derive every colour
@@ -654,14 +760,18 @@ through the same `src/scripts/globe/palette.ts`. Feeding two renderers identical
 identical colours is what isolates the only question being asked, which is whether it *looks*
 like it belongs. Do not "improve" one side's data without doing the same to the other.
 
-**`places` mode makes no third-party request, and that took work.** A MapLibre source is fetched
-the moment it is *added*, not when a layer using it becomes visible — so declaring the `raster-dem`
-up front would have put a Mapterhorn request on every page load while the hillshade sat hidden.
-`ensureHillshade()` and `ensureTerrainSource()` add them on first entry to a mode that needs them
-instead. That is the only reason `public/globe/README.md`'s "nothing is fetched from a third party
-at runtime" still holds for the globe half. Verified in Chrome: with the map loaded and left in
-`places`, the set of third-party hosts contacted is empty; it becomes exactly
-`tiles.mapterhorn.com` the moment atlas or terrain is picked.
+**Arriving in `explore` makes no third-party request, and that took work.** A MapLibre source is
+fetched the moment it is *added*, not when a layer using it becomes visible — so declaring the
+`raster-dem` up front would have put a Mapterhorn request on every page load while the hillshade
+sat hidden. `ensureHillshade()` and `ensureTerrainSource()` add them on first use instead. That is
+the only reason `public/globe/README.md`'s "nothing is fetched from a third party at runtime" still
+holds for the globe half. It used to be `places` mode that carried this property by drawing
+nothing; since 7 Sep 2026 it is carried by `DEFAULT_LAYERS` being two local files with Relief off.
+Verified in Chrome against the production build: with the map loaded and left as it arrives, the
+set of third-party hosts contacted is empty, and MapLibre has fetched exactly `land-polygons.json`,
+`borders.json` and `atlas-countries.json`. It becomes `tiles.mapterhorn.com` the moment Relief or
+Trails is picked. (`cities.json` is fetched on that page by the **three.js** earth above and is
+not MapLibre's — an easy thing to misread in a request log.)
 
 Things that look like shortcuts and are not:
 
@@ -745,11 +855,17 @@ Things that look like shortcuts and are not:
   distinction, so a lake that is an inner ring fills as land. Invisible at globe zoom; it would
   matter only if this became the real basemap, and the fix then is a proper polygon source.
 
-### The atlas mode (3 Sep 2026)
+### The atlas layers (3 Sep 2026)
+
+**The MODE this describes was removed on 7 Sep 2026; its layers were not, and everything below
+still applies to them.** They are what the Countries and Cities chips draw in `explore`, and this
+is still the only account of how the labels are built, tiered, decluttered and coloured. Read
+"mode" here as "the Countries + Cities + Relief layer set".
 
 The author's complaint about the `places` globe was that it is beautiful and says nothing: no way
-to tell which country you are looking at, and no terrain. The answer shipped is **a third mode
-rather than a change to the second** — `places` is untouched, down to the byte it fetches.
+to tell which country you are looking at, and no terrain. The answer shipped at the time was **a
+third mode rather than a change to the second** — `places` was untouched, down to the byte it
+fetched. Both of those modes are now gone and the layers are chips.
 
 What it adds, and where each part comes from:
 
@@ -776,10 +892,12 @@ that guarded the name match went too, so `mapTrips` is now just `globeTrips`.
 
 Things that look like bugs or shortcuts and are not:
 
-- **Switching `places` ↔ `atlas` deliberately does not move the camera.** Same globe, same scale:
-  the reader stays where they spun to and the world gains or loses its names underneath them.
-  Only `terrain` is a journey, and only a return from it flies home. Verified — after a drag, the
-  projected position of the Tokyo marker is identical across both switches to within a pixel.
+- **Gaining or losing names never moves the camera.** Same globe, same scale: the reader stays
+  where they spun to and the world gains or loses its names underneath them. Only `terrain` is a
+  journey, and only a return from it flies home. This was written about switching `places` ↔
+  `atlas`, verified by projecting the Tokyo marker across both switches and finding it identical
+  to within a pixel; with one globe mode left it is the **filter chips** that must hold the
+  property, and they do, because they change layer visibility and never touch the camera.
 - **Still no `glyphs` key and no symbol layer.** That rule was cheap at eight names and is not at
   420, and it is now paid for in two functions. `retier()` decides which labels are on the map at
   all; `declutter()` decides which of those can be read. MapLibre does both for `symbol` layers and
@@ -900,7 +1018,8 @@ Things that look like bugs or shortcuts and are not:
   let the reader say. They said `faint`: a 45° sun, `standard` method, shadow 0.26 / highlight
   0.20, exaggeration 0.90 — which is exactly what the atlas originally shipped with, reached the
   long way round. **The ladder, the chips and the `mapglobe-relief` key are all gone**; `SHADE` is
-  back to two rows, `atlas` and `terrain`.
+  back to two rows — `globe` and `terrain`, the first of which was called `atlas` until that mode
+  was removed on 7 Sep 2026.
 
   What the ladder established, and what the surviving numbers encode:
 
@@ -918,10 +1037,11 @@ Things that look like bugs or shortcuts and are not:
   landmass until the globe reads as a satellite render — the one thing this page is trying not to
   look like.
 
-  Relief is also **off by default in `explore` now** and on only in `atlas`, which has a side
-  effect worth knowing: entering `explore` makes no third-party request at all until the Relief
-  chip is pressed. Terrain mode keeps its own separate setting and always did. Both still anchor
-  to black and white rather than to `fg`, for the reason in the section above — verified in dark.
+  Relief is **off by default**, which has a side effect worth knowing: entering `explore` makes no
+  third-party request at all until the Relief chip is pressed. That was one mode's behaviour out
+  of two when it was written; since 7 Sep 2026 it is simply what arriving on the page does.
+  Trails mode keeps its own separate setting and always did. Both still anchor to black and white
+  rather than to `fg`, for the reason in the section above — verified in dark.
 
 **Mapterhorn is a sparse pyramid, and the console said so.** A tile containing no land does not
 exist: measured, `0/0/0`, `2/3/1` and `6/53/26` return 200 while `3/0/0` and `6/54/28` return 404.
@@ -932,10 +1052,11 @@ ocean. The browser still prints its own "failed to load resource" line per tile;
 to the network stack and no handler can remove it.
 
 **What it costs.** The MapLibre engine chunk went 242.9 → 244.5 KB gz — 1.6 KB for the whole atlas,
-because the expensive parts are data, and the data is fetched on first entry to the mode: the two
-label files are 9 KB gz together and `borders.json` is 82 KB, none of it requested by a reader who
-stays in `places`. The eager page script is **unchanged at 1.8 KB**, and site-wide CSS and JS are
-untouched.
+because the expensive parts are data, and the data is fetched when its chip is switched on: the
+two label files are 9 KB gz together and `borders.json` is 82 KB. The eager page script is
+**unchanged at 1.8 KB**, and site-wide CSS and JS are untouched. (Written when `atlas` was a mode
+and the data arrived on first entry to it; the files and the sizes are the same, the trigger is
+now the chip.)
 
 **Verified in Chrome against the production build**, not the dev server — which matters here,
 because the first pass ran against a long-running `astro dev` that was serving stale scoped CSS and
@@ -946,25 +1067,25 @@ camera-continuity check above, terrain still reached and left correctly, and a c
 country labels for China, Japan and Thailand, so those names lose their space. That is the
 declutter working as designed — a card naming the city says more than the country name under it.
 It used to matter, because it hid the accent treatment; with that gone it is simply a country name
-covered by something more specific. And `PLACES_HOME` at zoom 2.3 is tuned for the desktop frame;
-in a 390px-wide frame it crops to Asia rather than showing the globe. Both are true of `places`
-mode too and predate this work.
+covered by something more specific. And `GLOBE_HOME` at zoom 2.3 is tuned for the desktop frame;
+in a 390px-wide frame it crops to Asia rather than showing the globe. Both predate this work, and
+both survived the 7 Sep 2026 cut to two modes. (`GLOBE_HOME` was `PLACES_HOME` until then.)
 
 ### The explore mode (3 Sep 2026)
 
 The brief was "more information on the earth, but do not make it messy" — so the answer is not
-more layers on the atlas, it is a **fourth mode with a filter row**. `MAP_LAYERS` is five filters
-and `DEFAULT_LAYERS` is what `explore` opens with.
+more layers on the atlas, it is a **mode with a filter row**. `MAP_LAYERS` is five filters and
+`DEFAULT_LAYERS` is what `explore` opens with. It was the fourth of four modes when it shipped;
+since 7 Sep 2026 it is one of two, and it is the chip labelled **Trips**.
 
 **`DEFAULT_LAYERS` is `['countries']` alone** (revised 3 Sep 2026, author's request). It used to
 be the same list as `ATLAS_LAYERS`, on the reasoning that the two modes should agree until the
 reader changes something — which made the first thing anyone saw in `explore` identical to the
 mode beside it, and busy. A filter row is for starting quiet and adding, not starting full and
-subtracting. **`ATLAS_LAYERS` did NOT move with it**: `atlas` is still countries + cities +
-relief, because the switcher's own hint and the page's prose both promise "borders, country and
-city names, and shaded relief", and that list is what makes the promise true. The two constants
-now live side by side in modes.ts precisely so the next reader can see they are deliberately
-different.
+subtracting. **`ATLAS_LAYERS` is gone** (7 Sep 2026), along with the `atlas` mode it defined; this
+is now the only layer set in modes.ts. That the two lists were deliberately different is the
+reason removing `atlas` cost nothing — `explore` already opened on less than it drew, and its
+chips reach everything it drew and more.
 
 | Filter | Default | Draws | Data |
 |---|---|---|---|
@@ -1036,7 +1157,7 @@ Things that look like bugs or shortcuts and are not:
   a completely different thing — one ridge with a GPS track on it, not a global hillshade. One
   identifier meaning both is how the wrong one gets switched. The chip still reads "Relief".
 - **A second storage key, `mapglobe-layers`.** Same reasoning as the site's two theme keys: a
-  reader who tunes the filters, looks at Trail terrain and comes back should find their filters
+  reader who tunes the filters, looks at Trails and comes back should find their filters
   where they left them, and one combined key would have to forget one to remember the other. An
   empty stored string is a real answer — every filter off — so it is told apart from "nothing
   stored" by a null check rather than by falsiness. There is no third key any more; it belonged to
@@ -1065,10 +1186,11 @@ is fetched until a chip is pressed. Dropping Heritage took 146 KB (45 KB gz) of 
 repo and one live Wikidata query out of the build, and dropping the water names took another
 23 KB (8 KB gz). Site-wide CSS and JS are untouched.
 
-**Verified in Chrome against the production build.** Four tabs and five chips render; `explore`
+**Verified in Chrome against the production build** (3 Sep 2026, when there were still four tabs;
+re-verified for two on 7 Sep). Four tabs and five chips render; `explore`
 opens with Countries alone and fetches exactly `atlas-countries.json` + `borders.json` and nothing
-else — not even a DEM tile, since Relief is now off by default; each later chip fetches only its
-own files and re-toggling fetches nothing at all; `atlas` is provably unaffected by the filter
+else — not even a DEM tile, since Relief is off by default; each later chip fetches only its
+own files and re-toggling fetches nothing at all; `atlas` was provably unaffected by the filter
 set; no relief ladder, no water label and no note in the DOM; country and city names read back at
 `fg-meta` and peaks at `fg-body`, with a `bg` halo, in both themes; labels at 1400px show **0 pairwise overlaps**,
 including immediately after a toggle with the camera still; 390px gives 5/5 clickable chips and
@@ -1116,9 +1238,13 @@ folders.
 elevation range and point count come from the FULL recording; only the drawn line is simplified.
 Simplifying a GPS trace cuts its measured length by a few percent, so measuring the simplified
 line would quietly shorten every distance the page prints, and nobody would ever catch it. The two
-never touch, so tightening the tolerance cannot move a printed number. Cross-checked against a
-completely separate code path: dropping `Lambak_Johor_Malaysia_Morning_Hike.gpx` on the frame,
-which parses in the browser, reads back the same 5.4 km and 63–518 m as the built-in route.
+never touch, so tightening the tolerance cannot move a printed number. It was cross-checked once
+against a completely separate code path — dropping `Lambak_Johor_Malaysia_Morning_Hike.gpx` on the
+frame, which parsed in the browser, read back the same 5.4 km and 63–518 m as the built-in route.
+**That second path no longer exists** (7 Sep 2026), so the build script is now the only thing that
+measures a route, and a regression in it has nothing to disagree with. If these figures ever need
+checking again, do it in `scripts/build-trails.mjs` against a known GPX rather than looking for a
+drop target in the page.
 
 Things that look like shortcuts and are not:
 
@@ -1129,17 +1255,20 @@ Things that look like shortcuts and are not:
   picks, and only once — `loadTrail` caches the in-flight promise, the way `ensureData` does for
   the atlas layers. Measured: entering terrain mode fetches exactly one file, and re-picking two
   already-seen routes fetches nothing at all.
-- **`places` mode still contacts nobody.** Verified again after this landed — the set of
-  third-party hosts is empty with the map loaded and left in `places`. The routes are local files,
-  so picking one is a request to this site and to nowhere else.
+- **Arriving on the page still contacts nobody.** Verified again after this landed — the set of
+  third-party hosts is empty with the map loaded and left as it arrives. The routes are local
+  files, so picking one is a request to this site and to nowhere else. (Written of `places` mode;
+  since 7 Sep 2026 the property is carried by `explore`'s two local default layers.)
 - **There is no bounding box in the manifest.** The camera is framed from the geometry it just
   drew. An extent carried alongside would be a second source of truth for where a route is: one
   that could disagree with the line on the map, and would be believed.
-- **A third storage key, `mapglobe-trail`.** Same reasoning as the layers key, and an empty string
-  is again a real answer — it means the reader pressed Clear, and it is told apart from "nothing
-  stored" by comparing rather than by falsiness. A stored id matching no route is neither, and
-  falls through to the default. A dropped GPX stores the empty string too: it is a file on the
-  visitor's own machine, and an id pointing at it is a promise the next page load cannot keep.
+- **A third storage key, `mapglobe-trail`.** Same reasoning as the layers key. An empty string
+  used to be a real answer here — the reader had pressed Clear, or dropped a GPX, neither of which
+  is an id the next page load could honour — and it was told apart from "nothing stored" by
+  comparing rather than by falsiness. **Both writers are gone (7 Sep 2026)**, so nothing stores one
+  any more and the explicit `''` branch went with them; a stale one left by an earlier visit
+  matches no route and falls through to the default, which is the same path a deleted route takes.
+  Verified in Chrome by planting one.
 - **The default route is `trails[0]`, so the build script's sort is what picks it.** Hikes before
   runs, newest first. No separate "default" flag that could drift out of step with the ordering.
 - **The opening route is drawn BEFORE the first `applyMode`, not after.** `applyMode` reads
@@ -1151,7 +1280,9 @@ Things that look like shortcuts and are not:
   loud: *cannot load terrain, because there exists no source with ID: dem*.
 - **Terrain mode remembers.** Going out to the globe and back returns to the route rather than to
   TERRAIN_HOME, because `applyMode` prefers `trackBounds` when there is one. TERRAIN_HOME is now
-  only what to look at when Clear has emptied the map.
+  reached only on a failure — an empty manifest, or an opening route that will not load — since
+  Clear, which was the one way to ask for it deliberately, was removed on 7 Sep 2026. It is not
+  dead code; it is the null-`trackBounds` fallback.
 - **Track layers are hidden in every globe mode.** A 14 km walk at globe zoom is a sub-pixel speck
   of accent somewhere in Johor. It answers no question the globe is being asked, and it competes
   with the footprints that do.
@@ -1188,10 +1319,18 @@ does waiting. Measured as the mean colour of the canvas across a light → dark 
 
 | | light | dark |
 |---|---|---|
-| `places` | 231 | 32 |
-| `atlas` | 230 | 33 |
+| `places` (removed) | 231 | 32 |
+| `atlas` (removed) | 230 | 33 |
+| `explore`, re-measured 7 Sep | 233 | **34** |
 | `terrain`, before | 178 | **166** |
 | `terrain`, now | 178 | **60** |
+| `terrain`, re-measured 7 Sep | 180 | **62** |
+
+The 7 Sep rows are the same check after the cut to two modes, and they are two points of noise
+away from the originals — which is the result worth having, since it says the removal changed
+nothing about how either surviving mode repaints. Measure the canvas with an **element
+screenshot**, not `drawImage` on the live canvas: MapLibre runs without `preserveDrawingBuffer`,
+so reading its canvas from a separate task returns a black frame and every row above comes out 0.
 
 Nothing in the route work caused it — terrain mode simply never had content worth looking at
 before, so nobody saw it. The fix is to detach and re-attach the terrain, **and it has to wait for
@@ -1219,8 +1358,9 @@ as the words before it, even where that leaves a long line.
 **Verified in Chrome against the production build.** Ten chips in two rows; terrain opens on
 Belumut having fetched exactly one route file; picking another swaps the line and the readout;
 re-picking two already-seen routes fetches nothing; mode and route both survive a reload; a dropped
-GPX still draws and unchecks the picker; Clear empties the map and persists as "no route"; the
-picker is keyboard-reachable as one `radiogroup` and Enter selects; the light↔dark round trip
+GPX still draws and unchecks the picker, and Clear empties the map and persists as "no route"
+(**both removed 7 Sep 2026** — this records what was verified at the time, not what the page does
+now); the picker is keyboard-reachable as one `radiogroup` and Enter selects; the light↔dark round trip
 repaints the draped terrain; 390px gives 10/10 clickable chips, 0 horizontal overflow, and a panel
 inside the frame at 29% of its height. Console clean apart from transient
 `ERR_CONNECTION_RESET`s on Mapterhorn tiles, which the engine's error handler reports correctly.
