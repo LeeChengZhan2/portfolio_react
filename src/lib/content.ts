@@ -169,3 +169,86 @@ export function tripDays(data: TripDates): number | null {
   const ms = Date.UTC(b.y, b.m!, b.d!) - Date.UTC(a.y, a.m!, a.d!);
   return Math.round(ms / 86_400_000) + 1;
 }
+
+/** A comparable 'yyyy-mm-dd' from parts. */
+const iso = (y: number, m: number, d: number): string =>
+  `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+/** The first day a partial date could mean: '2024' -> '2024-01-01'. */
+function firstDay(value: string): string {
+  const p = parse(value);
+  return iso(p.y, (p.m ?? 0) + 1, p.d ?? 1);
+}
+
+/**
+ * And the last: '2024' -> '2024-12-31', '2024-10' -> '2024-10-31'.
+ *
+ * Day 0 of the following month is the last day of this one, which is how the
+ * length of February is read off the calendar rather than out of a table.
+ */
+function lastDay(value: string): string {
+  const p = parse(value);
+  if (p.precision === 'day') return iso(p.y, p.m! + 1, p.d!);
+  if (p.precision === 'year') return iso(p.y, 12, 31);
+  return iso(p.y, p.m! + 1, new Date(Date.UTC(p.y, p.m! + 1, 0)).getUTCDate());
+}
+
+/**
+ * Which recorded routes were walked on which trip, worked out from the dates.
+ *
+ * Three of the ten routes fall inside the Chengdu trip and one inside Phuket,
+ * and until this existed the site knew that nowhere: `src/content/trips/` and
+ * `src/data/trails.json` are two lists that never mention each other, and the
+ * only place the relationship surfaced was a card on the MapLibre earth that
+ * happened to name both. The travel-preview interaction mock-up carried a
+ * hardcoded table of exactly these four pairings as part of its argument; this
+ * is that argument taken up.
+ *
+ * DERIVED, NEVER DECLARED, and that is the whole point. A `trip` field on a
+ * route would be a second source of truth for something both files already
+ * state: a route carries the day it was walked and a trip carries the days it
+ * covered, so the pairing is a fact about the dates. Adding a route needs no
+ * edit here, and correcting a trip's dates re-pairs its routes with it.
+ *
+ * Containment is evaluated at the TRIP's own precision, because that is the
+ * only side that can be approximate — every route has a day, three of the
+ * trips have only a month. So 'Oct 2024' covers the whole of October rather
+ * than one arbitrary day in it, which is the honest reading of what the
+ * frontmatter says.
+ *
+ * A route inside two trips THROWS, and it is a build-time failure on purpose.
+ * Nobody is on two trips at once, so it means two trips overlap in the content
+ * — real data to fix, and the alternative is a route silently nesting under
+ * whichever trip happened to sort first.
+ *
+ * Every trip gets an entry, including the five with no route in them. A caller
+ * rendering an index wants "Tokyo, no routes" rather than a missing key.
+ */
+export function walkedOn<T extends { id: string; date: string }>(
+  trips: readonly { id: string; data: TripDates }[],
+  routes: readonly T[],
+): Map<string, T[]> {
+  const ranges = trips
+    .filter((trip) => trip.data.start)
+    .map((trip) => ({
+      id: trip.id,
+      from: firstDay(trip.data.start!),
+      to: lastDay(trip.data.end ?? trip.data.start!),
+    }));
+
+  const byTrip = new Map<string, T[]>(trips.map((trip) => [trip.id, []]));
+
+  for (const route of routes) {
+    const inside = ranges.filter((range) => route.date >= range.from && route.date <= range.to);
+    if (inside.length > 1) {
+      throw new Error(
+        `walkedOn: the ${route.id} route falls inside ${inside.length} trips ` +
+          `(${inside.map((range) => range.id).join(', ')}). Two trips overlap, so ` +
+          'the nesting is ambiguous — correct the dates in src/content/trips/.',
+      );
+    }
+    if (inside[0]) byTrip.get(inside[0].id)!.push(route);
+  }
+
+  return byTrip;
+}

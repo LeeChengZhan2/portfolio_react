@@ -1,6 +1,37 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
+   THE PROSE DOCS ARE NOT A SOURCE OF UTILITIES.
+
+   Tailwind v4 has no content array — it detects sources automatically and scans
+   every non-ignored file in the project, markdown included. That makes
+   CLAUDE.md a BUILD INPUT: any Tailwind class name written in it is extracted
+   as a real candidate and its definition emitted into the shared stylesheet
+   that all 25 pages load.
+
+   Measured, and it is not theoretical. Six utilities were deliberately rewritten
+   as plain declarations to keep a throwaway preview section from costing the
+   whole site 0.21 KB gz — and every one of them came straight back the moment
+   the change was written up, because the write-up named them. All six were then
+   absent from src/ and present in the built sheet, appearing exactly once each,
+   in CLAUDE.md.
+
+   So the docs are excluded. The consequence worth knowing: prose here and in
+   AGENTS.md, README.md and docs/ can discuss class names freely without
+   shipping bytes — which is what makes it possible to write down "do not use
+   this utility" at all. Component markup and styles are unaffected; those are
+   still scanned, as they must be.
+
+   Paths are relative to this file. src/content/ is deliberately NOT excluded:
+   it is prose too, but it is prose the site renders, and a `@source not` there
+   would silently drop a utility a content author had legitimately used.
+--------------------------------------------------------------------------- */
+@source not "../../CLAUDE.md";
+@source not "../../AGENTS.md";
+@source not "../../README.md";
+@source not "../../docs";
+
+/* ---------------------------------------------------------------------------
    Theme
    Tailwind v4 has no tailwind.config.js — the theme lives here and every token
    below is emitted as both a CSS variable and a utility class. `--color-kleinblue`

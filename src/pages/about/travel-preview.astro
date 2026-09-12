@@ -3,10 +3,12 @@ import { getEntry, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import TravelContent from '../../components/astro/TravelContent.astro';
 import GlobeStage from '../../components/astro/GlobeStage.astro';
+import trails from '../../data/trails.json';
 import MapGlobeStage from '../../components/astro/MapGlobeStage.astro';
+import MapUxPreview from '../../components/astro/MapUxPreview.astro';
 import type { GlobeTrip } from '../../scripts/globe/engine';
 import type { MapTrip } from '../../scripts/mapglobe/engine';
-import { getSections, getTrips, tripYear } from '../../lib/content';
+import { getSections, getTrips, tripYear, walkedOn as walkedOnTrips } from '../../lib/content';
 
 /**
  * /about/travel with a 3D earth under the timeline — six stylised looks behind
@@ -70,6 +72,22 @@ const globeTrips: GlobeTrip[] = trips.map((trip) => ({
  * are), and the field went with it rather than being left as data nothing reads.
  */
 const mapTrips: MapTrip[] = globeTrips;
+
+/**
+ * Which recorded routes were walked on which trip, from the dates alone.
+ *
+ * Derived here rather than inside MapGlobeStage because this is the page that
+ * has the trip entries: `MapTrip` deliberately carries no dates — it is what
+ * the map needs about a trip — and the pairing is a fact about the content
+ * collection. Three walks fall inside Chengdu and one inside Phuket; `walkedOn`
+ * throws at build time if a route ever falls inside two trips at once.
+ *
+ * `Object.fromEntries` because the value crosses into the page as JSON, and a
+ * Map does not survive that.
+ */
+const walkedOn: Record<string, string[]> = Object.fromEntries(
+  [...walkedOnTrips(trips, trails)].map(([id, routes]) => [id, routes.map((route) => route.id)]),
+);
 ---
 
 <BaseLayout
@@ -105,7 +123,8 @@ const mapTrips: MapTrip[] = globeTrips;
     </p>
 
     <GlobeStage slot="after-timeline" trips={globeTrips} />
-    <MapGlobeStage slot="after-timeline" trips={mapTrips} />
+    <MapGlobeStage slot="after-timeline" trips={mapTrips} walkedOn={walkedOn} />
+    <MapUxPreview slot="after-timeline" trips={mapTrips} />
 
     <Content slot="essay" />
   </TravelContent>
@@ -115,6 +134,7 @@ const mapTrips: MapTrip[] = globeTrips;
   import '../../scripts/trips-view';
   import '../../scripts/globe';
   import '../../scripts/mapglobe';
+  import '../../scripts/map-ux-preview';
 </script>
 
 <style>

@@ -158,7 +158,9 @@ building-data standard on `cloud-data-platform`.
 New PDF CV — `public/assets/documents/` still holds only the Mar 2023 `.docx`, which now
 describes a role two jobs out of date, and `Footer.astro` still links it as "Download CV".
 
-**Open decisions, not code.** Site-wide `noindex` until launch (`BaseLayout` supports it per
+**Open decisions, not code.** Which of the three navigation models the MapLibre earth should
+use — see "The interaction mock-up" below, which is on `/about/travel-preview` and is where that
+question now lives rather than in this file. Site-wide `noindex` until launch (`BaseLayout` supports it per
 page, defaults false, and canonicals point at the unregistered `leechengzhan.com`). Carousel
 pause control — reduced motion and keyboard focus are handled, but a visible pause button is
 still the letter of WCAG 2.2.2; it adds visible UI, so it waits on design direction
@@ -326,6 +328,41 @@ is a real jump; 1→3 is nearly free.
 the build fails with *"Cannot apply unknown utility class"*. `#styles` is a `package.json`
 subpath import pointing at `src/styles/global.css`, so the path never breaks when files move.
 Every component style block that uses `@apply` already has it — copy an existing one.
+
+### This file is a build input (10 Sep 2026)
+
+**Tailwind v4 has no content array — it detects sources automatically and scans every
+non-ignored file in the project, markdown included. So a Tailwind class name written in
+CLAUDE.md is extracted as a real candidate and its definition is emitted into the shared
+stylesheet all 25 pages load.**
+
+Found the hard way, and the way it surfaced is the whole point. Six utilities were rewritten as
+plain declarations to stop a throwaway preview section costing the site 0.21 KB gz — and every
+one of them came straight back on the next build, because the write-up documenting the change
+named them. The evidence was unambiguous once it was looked at properly: all six were absent
+from `src/` and present in the built sheet, appearing exactly once each, in this file. A first
+attempt at a fix removed one of them from a *code comment* and changed nothing, which is what
+finally pointed at the prose.
+
+`src/styles/global.css` now excludes the prose docs:
+
+```css
+@source not "../../CLAUDE.md";
+@source not "../../AGENTS.md";
+@source not "../../README.md";
+@source not "../../docs";
+```
+
+**`src/content/` is deliberately NOT excluded.** It is prose too, but it is prose the site
+renders, so a class a content author legitimately used would be silently dropped.
+
+Two consequences worth keeping in mind:
+
+- **This file can now discuss class names freely.** That is what makes it possible to write
+  "do not use this utility" down at all — before the exclusion, saying so shipped it.
+- **A section like the one above that quotes a measured byte count for a utility is only true
+  while the docs stay excluded.** If those `@source not` lines ever go, every class name in
+  this file starts shipping again.
 
 ## Theming contract
 
@@ -633,18 +670,23 @@ route and the link to it.
 
 It exists because of the section immediately above this one. The relief look cannot grow into a
 trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
-do both look like on this page". **Two modes, one `Map` object** — there were four until
-7 Sep 2026; see "Two tabs, not four" below.
+do both look like on this page". **Three modes, one `Map` object** — two from 7 Sep 2026, when
+four were cut to two, and a third added on 9 Sep; see "Two tabs, not four" and "The All tab"
+below.
 
 - **Trips** (`explore`) — the globe with a filter row. It starts at country boundaries and the
   177 country names alone, both local files, so entering it makes no third-party request at all;
   city names and dots, relief, named peaks and rivers and lakes are added a chip at a time, and
   each is fetched only when it is switched on. The eight footprints are on the map whatever the
   filter says. See "The explore mode" below.
-- **Trails** (`terrain`) — real elevation with a hillshade, carrying **the author's ten recorded
-  routes** behind a picker: seven hikes and three half marathons. Added 4 Sep 2026 at the
-  author's request; see "The route picker" below. Dropping a `.gpx` on the frame was removed on
-  7 Sep 2026, along with the parser behind it — see "Dropping a GPX was removed".
+- **All** (`combined`) — both of the above on one globe, each behind its own chip, over the same
+  five layer filters. Added 9 Sep 2026 at the author's request; see "The All tab" below.
+- **Trails** (`terrain`) — **two views, not one** (9 Sep 2026). It opens on a pitched *overview* of all
+  ten recorded routes, grouped into the three places they were walked and named on cards the way
+  the trips are; clicking a card drops to that single route on real elevation with a hillshade.
+  Seven hikes and three half marathons, all the author's own. Added 4 Sep 2026 at the author's
+  request; see "The route picker" and "The trails overview" below. Dropping a `.gpx` on the frame
+  was removed on 7 Sep 2026, along with the parser behind it — see "Dropping a GPX was removed".
 
 ### Two tabs, not four (7 Sep 2026)
 
@@ -687,7 +729,9 @@ arrival; **zero third-party hosts contacted** on arrival, with MapLibre fetching
 filter chips, and the Peaks chip fetching only `atlas-peaks.json`; legend shown in Trips and
 hidden in Trails; switching to Trails loading exactly one route file, reading back
 "Belumut · Johor, Malaysia · 25 Jul 2026 · 14.5 km · 1,127 m ascent" and reaching
-`tiles.mapterhorn.com` only then; ten route chips; the globe returning intact; both dead stored
+`tiles.mapterhorn.com` only then (**that pair changed on 9 Sep 2026** — Trails opens on the
+overview now, so it loads all ten and reads back "All routes"; this records what was verified at
+the time); ten route chips; the globe returning intact; both dead stored
 ids (`places`, `atlas`) falling back to Trips; 390px with 0 horizontal overflow, the switcher on
 one line and both chips clickable; the light↔dark round trip repainting both modes (233→34→233 and
 180→62→180); prose containing none of the three old names and no glued words from the Astro
@@ -827,6 +871,9 @@ Things that look like shortcuts and are not:
   and six of the eight cities sit inside one 2,000 km square — the default view stacked five cards
   on top of each other. Nearest to frame centre wins its space. A label that cannot be read must
   not be clickable either. Same rule the three.js engine follows; 7 of 8 show at 1400px.
+  **Since 10 Sep 2026 this is the losing half of the story for the atlas ranks only.** A CARD that
+  loses its space is now drawn on the winner instead of being dropped — see "Cards merge instead
+  of disappearing" below, which is the same pass and the same boxes.
 - **The atlas labels' halo is `--color-bg`, not `--color-band`** (3 Sep 2026). The frame is
   painted in `band`, which is the ground palette.ts steps every one of the globe's own colours off
   — sea 0.10 toward `fg`, land 0.20 — so a band-coloured halo is a tenth of the ramp away from
@@ -1205,8 +1252,11 @@ the collision rule rather than of these layers, and it is the same rule the thre
 ### The route picker (4 Sep 2026)
 
 Terrain mode used to be a ridge in Taiwan nobody walked, waiting for a file to be dropped on it.
-It now opens on a real route and carries ten, picked from a panel in the corner of the frame:
-seven hikes and three half marathons, all the author's own.
+It now carries ten real routes, picked from a panel in the corner of the frame: seven hikes and
+three half marathons, all the author's own. (It opened *inside* one of them until 9 Sep 2026;
+it now opens on the overview of all ten and the panel is no longer the only way in. See "The
+trails overview" below — everything in this section still describes the single-route view the
+picker leads to.)
 
 | | | |
 |---|---|---|
@@ -1262,15 +1312,15 @@ Things that look like shortcuts and are not:
 - **There is no bounding box in the manifest.** The camera is framed from the geometry it just
   drew. An extent carried alongside would be a second source of truth for where a route is: one
   that could disagree with the line on the map, and would be believed.
-- **A third storage key, `mapglobe-trail`.** Same reasoning as the layers key. An empty string
-  used to be a real answer here — the reader had pressed Clear, or dropped a GPX, neither of which
-  is an id the next page load could honour — and it was told apart from "nothing stored" by
-  comparing rather than by falsiness. **Both writers are gone (7 Sep 2026)**, so nothing stores one
-  any more and the explicit `''` branch went with them; a stale one left by an earlier visit
-  matches no route and falls through to the default, which is the same path a deleted route takes.
-  Verified in Chrome by planting one.
-- **The default route is `trails[0]`, so the build script's sort is what picks it.** Hikes before
-  runs, newest first. No separate "default" flag that could drift out of step with the ordering.
+- **A third storage key, `mapglobe-trail`.** Same reasoning as the layers key. **An empty string
+  is a real answer again (9 Sep 2026) and means the overview** — every route on the map, none
+  picked. It meant something else once, "Clear was pressed", and that reading died with the
+  button on 7 Sep 2026; for two days nothing wrote one at all. Nothing had to be added to handle
+  a stale one: an id that matches no route falls through to the same place, which is now the
+  overview rather than the first route. Verified in Chrome by planting both.
+- **There is no default route any more.** `trails[0]` was it until 9 Sep 2026, and picking a
+  default is exactly what the overview exists not to do. The build script's sort — hikes before
+  runs, newest first — is now only the order the picker reads down.
 - **The opening route is drawn BEFORE the first `applyMode`, not after.** `applyMode` reads
   `trackBounds` to decide where the camera goes, so in this order the map arrives already framed
   on the route; the other way round it frames the Taiwan placeholder and jumps once the geometry
@@ -1278,11 +1328,11 @@ Things that look like shortcuts and are not:
   yet — hence `ensureTerrainSource()` moved inside it, so the function that attaches terrain owns
   its source and the order cannot come apart again. That bug shipped for one build and said so out
   loud: *cannot load terrain, because there exists no source with ID: dem*.
-- **Terrain mode remembers.** Going out to the globe and back returns to the route rather than to
-  TERRAIN_HOME, because `applyMode` prefers `trackBounds` when there is one. TERRAIN_HOME is now
-  reached only on a failure — an empty manifest, or an opening route that will not load — since
-  Clear, which was the one way to ask for it deliberately, was removed on 7 Sep 2026. It is not
-  dead code; it is the null-`trackBounds` fallback.
+- **Terrain mode remembers.** Going out to the globe and back returns to whichever of its two
+  views was up — the route, or the overview — because `applyMode` reads `focused` first and then
+  `trackBounds`. TERRAIN_HOME is reached on a failure and nothing else: a route that was asked
+  for and would not load. It is not dead code; it is the null-`trackBounds` fallback, and since
+  9 Sep 2026 "no route picked" is a view of its own rather than a fall through to it.
 - **Track layers are hidden in every globe mode.** A 14 km walk at globe zoom is a sub-pixel speck
   of accent somewhere in Johor. It answers no question the globe is being asked, and it competes
   with the footprints that do.
@@ -1355,8 +1405,11 @@ as the words before it, even where that leaves a long line.
 | `/about/travel-preview` CSS | 3.21 | **3.29** KB gz |
 | site-wide CSS and JS | — | unchanged |
 
-**Verified in Chrome against the production build.** Ten chips in two rows; terrain opens on
-Belumut having fetched exactly one route file; picking another swaps the line and the readout;
+**Verified in Chrome against the production build.** (4 Sep 2026, when terrain opened inside a
+route. The overview replaced that opening on 9 Sep; everything below still holds of the picker
+itself, which is unchanged apart from the "All routes" chip at the top of its group.) Ten chips in
+two rows; terrain opens on Belumut having fetched exactly one route file; picking another swaps
+the line and the readout;
 re-picking two already-seen routes fetches nothing; mode and route both survive a reload; a dropped
 GPX still draws and unchecks the picker, and Clear empties the map and persists as "no route"
 (**both removed 7 Sep 2026** — this records what was verified at the time, not what the page does
@@ -1372,6 +1425,237 @@ seconds of settling, and it is invisible on the seven hikes. The unselected chip
 already recorded above as 2.31:1 in Classic and a known fault in the original palette; that strains
 harder here, where the chips are ten proper names rather than five common words, but the style is
 shared with the explore filters and changing it is a design decision rather than a fix.
+
+### The trails overview (9 Sep 2026)
+
+The author's complaint was that Trails is a single-route view: it opened *inside* one walk, and
+the only sign that there were nine others was a row of chips. The trips half puts its collection
+on the map and lets you click into one, and this half did not. So terrain mode is now **two
+views** — an overview of everything, and the single route it always had — and `focused` in
+engine.ts is the one variable that says which. `applyMode`, `applyLayers`, `retier` and
+`declutter` all branch on it and nothing else has to know.
+
+**The overview draws every route and names them in three groups.** Six of the ten are inside one
+corner of Johor, three are legs of one trek up the Changping valley, and one is in Phuket — so a
+card per route is not a thing the map can show at the zoom that holds all ten. The cards read
+"Johor · 6 routes", "Changping Valley · 3 routes", "Cape Krathing · 3.8 km". Click a
+group and the camera zooms into it, where the group is replaced by its members; click a route and
+it flies down to the ridge. A group of one is just the route, so Phuket is one click, not two.
+
+**The grouping is measured in pixels, not kilometres, and the reason is the frame.** The question
+is not whether two routes are near each other but whether their two cards would be the same mark
+on this screen, and that depends on how big the map is: `cameraForBounds` is asked for the
+overview camera first, and the routes are clustered at that zoom. A kilometre threshold got it
+wrong in both directions — 40 km split Johor into a northern pair and a southern four, two marks
+seven pixels apart. Single-linkage rather than a radius, because six routes strung 20 km apart
+across 76 km of Johor are one place to anyone reading the map.
+
+**A group breaks open at the zoom where its two FURTHEST members are 150px apart**, and its
+members carry that same number as their `minZoom`, so there is no zoom at which both a group and
+its routes are on the map, and none where neither is. Measured on the tightest pair instead, it
+would never open at all: two of the Changping routes start 370 m apart and one pair is the same
+path walked in both directions. Those pairs still collide after the break — since 10 Sep 2026
+they are drawn as one card naming both rather than one of them being dropped —
+and the picker below the frame is what guarantees every route is reachable.
+
+**With one cap: 120 km, whatever the pixels say.** At 390px the whole collection sits at a zoom
+where Phuket is eighty pixels from Johor, so the two grouped and the card read **"Johor · 7
+routes"** over a group spanning two countries — a group is named after a place, so it has to be
+one. The name itself is taken from the members' own `place` field, most common first and ties to
+the shorter, which is what puts "Johor" and "Johor Bahru" under "Johor" without a table of area
+names that a new route could fall outside of.
+
+**The label anchor is the START of each walk, not the middle of its extent.** Muluozi–Lamasi and
+Lamasi–Muluozi are the same path in opposite directions: their extents share a centre to within
+200 m, and their starts are 9 km apart. The start is also already the mark this map draws for
+"a route begins here", so the card lands on something the reader can see.
+
+**All ten geometries are fetched on entering the mode**, where it used to fetch exactly one. They
+are local files — 46 KB on disk, 11 KB over the wire — the overview is what they are for, and
+having them in hand makes picking a route instant. A route that will not load is nine routes, not
+a broken mode. Everything else about the fetching is unchanged: `loadTrail` still caches per id,
+so nothing is ever downloaded twice, and arriving on the page still contacts nobody.
+
+**The overview shades relief unasked**, at the same gentle strength the Relief chip uses on the
+globe. This is the mode that fetches elevation and the reader came here for terrain; the routes
+are the only marks on this map whose surroundings are the point.
+
+Things that look like shortcuts and are not:
+
+- **A route card carries `data-mapglobe-trail`, the same attribute the picker's chips carry.**
+  The page's delegated click handler picks it up without the engine knowing anything about the
+  panel, so the two ways into a route cannot drift apart. `markTrails` is therefore scoped to
+  `[role='radio']` — writing `aria-checked` onto a card floating over a mountain would tell a
+  screen reader it is one option in the picker below the frame.
+- **"All routes" is a member of the picker's radiogroup, not a button beside it.** "Show me all
+  of them" is one of the answers to "which route", and a radiogroup with nothing checked would
+  describe a map that is showing something less well than one where the overview is checked.
+- **The projection swap moved to the END of the fly** (`attachTerrainWhenSettled`). It used to be
+  set at the top of the terrain branch, which was invisible while the mode began with a fly from
+  a globe nobody was looking at. The overview *is* a globe the reader is looking at, and swapping
+  the projection under it pops the whole map flat for the length of the fly. Set on arrival at
+  z12+, where MapLibre's globe has already handed over to mercator on its own, it is invisible.
+  The requirement was only ever "mercator before `setTerrain`".
+- **`declutter` now reserves the control panel and the attribution before it places anything.**
+  The panel floats over the map, so a card that lands under it is not merely hard to read — it is
+  a button the reader cannot press, sitting under a button they can. This fixes the same
+  pre-existing bug on the globe half.
+- **And `framePadding` flies the camera clear of the panel**, which is the other half of that: a
+  fit that centres six routes centres two of them under the panel, and hiding them is correct but
+  leaves four cards where six routes are. It costs a fifth of a zoom level on a desktop frame.
+  **It is skipped when it would leave less than 45% of the frame** — at 390px the panel is 324px
+  of a 342px map, and fitting into the strip beside it is worse than landing partly under it.
+- **The attribution's strip is reserved as a constant, not measured.** The pill is EMPTY when the
+  fit is computed: its text is Mapterhorn's and arrives with the DEM TileJSON a second later. So
+  it measures 0×0, is skipped as "not on screen", and the card in that corner is then decluttered
+  away when the notice appears beneath it. That cost a card at 390px until the strip became a
+  constant. Only its HEIGHT is padded around — clearing it vertically clears it whatever its
+  width, which is a third of the frame on a phone.
+- **A group card outranks a route card in a collision** (priority 0 against 1). They meet at
+  exactly one moment — the overview of a small frame — and there a card standing for six routes
+  says more than one standing for a single route two hundred miles away.
+
+**What it costs**, page-scoped entirely:
+
+| | before | after |
+|---|---|---|
+| eager page script | 2.07 | **2.24** KB gz |
+| MapLibre engine chunk | 244.86 | **246.27** KB gz |
+| `/about/travel-preview` CSS | 3.11 | **3.13** KB gz |
+| site-wide CSS and JS | — | unchanged |
+
+**Verified in Chrome against the production build**, 34 checks plus 11 more on the interaction
+paths, all passing: Trips arrives unchanged and still contacts no third party and fetches no
+route file; Trails opens on three cards with the overview chip checked and no route radio checked;
+all ten routes fetched, and opening a group or picking a route fetches nothing more; the Johor
+group opens into its six routes with nothing under the controls; a card takes focus; the readouts;
+storage round-trips including a planted dead id and a planted empty string, both landing on the
+overview; a route chip pressed while the globe is up switches the mode and flies; route→route;
+out to Trips and back returns to whichever view was up; 390px gives two cards, 11/11 clickable
+chips and 0 horizontal overflow; console clean throughout.
+
+The light↔dark round trip was measured as the mean canvas colour, the same way the table under
+"The route picker" was — an element screenshot, never `drawImage` on the live canvas:
+
+| | light | dark | back |
+|---|---|---|---|
+| `explore` | 233 | 33 | 233 |
+| `terrain`, overview | 207 | 51 | 207 |
+| `terrain`, one route (Cape Krathing) | 201 | 46 | 201 |
+
+The `explore` row is two points from the 233 → 34 recorded on 7 Sep, which is what says the
+method is the same one. The overview is not draped, so it repaints like the globe; the focused
+route still needs the `once('idle')` re-attach documented under "The route picker".
+
+**A thing that looks like a rendering bug and is not:** for a few seconds after entering the
+overview the relief has a hard diagonal edge in a corner, with flat land beyond it. That is the
+DEM tiles still arriving, and it settles. Screenshot it before it does and it looks exactly like
+the Mapterhorn seam recorded above, which is a different thing.
+
+**Known and left alone.** At 390px the panel is 39% of the frame's height with eleven chips, and
+the Changping card sits under it — the phone shows two of the three groups, and the third is a
+chip away. And `declutter`'s "nearest to the middle of the frame wins" means which two, exactly,
+depends on where the camera settles.
+
+### The All tab, and the angle Trails opens at (9 Sep 2026)
+
+Two changes the same day as the overview above, both the author's, and the second
+is a correction to the first.
+
+**A third tab, "All" (`combined`), puts both halves on one globe.** The eight visited footprints
+and the ten recorded routes, each behind its own chip, over the same five layer filters `explore`
+has. `MAP_CONTENT` is that filter — two members, `trips` and `trails`, both on by default, under a
+fourth storage key `mapglobe-content`.
+
+| | | |
+|---|---|---|
+| **Trips** (`explore`) | the globe | footprints, always; five layer chips |
+| **Trails** (`terrain`) | pitched terrain | every route, then one; eleven route chips |
+| **All** (`combined`) | the globe | both, behind two chips; the same five layer chips |
+
+- **It is deliberately a superset of `explore`**, which is worth saying out loud because that is
+  exactly the redundancy the 7 Sep cut removed: `places` and `atlas` were positions on `explore`'s
+  own dial. `All` with Trails off *is* `explore`. The difference is which way round it runs — this
+  one is the general case, so if the row ever needs shortening again it is the tab that can absorb
+  its neighbour rather than the one to cut.
+- **The content chips ride in the SAME panel as the layer chips**, as a `Show` row above `Layers`,
+  hidden by CSS outside `combined` rather than living in a third panel. The layer chips are
+  literally the same elements in both globe modes, and a second panel would be a second set of
+  them to keep in step. This is the two-group `display: contents` case the panel grid was kept for
+  — the note in the markup has said so since the relief ladder was removed.
+- **A route card in `All` hands over to Trails**; a group card zooms where it stands. Clicking a
+  route means "show me this one", which is a pitched terrain view and therefore a mode change;
+  clicking a group means "show me these", which the globe can do without going anywhere.
+- **`fitAngle()` is why a group card can be in two modes at once.** The same card is clickable in
+  `terrain` and in `combined`, and its fit carries terrain mode's pitch and bearing in the first
+  and nothing at all in the second — flying a globe to a pitched camera tilts the whole earth.
+- **`MAP_CONTENT`'s members are called `trips` and `trails`**, which modes.ts says a MODE id could
+  not be. The collision does not bite because these name the content rather than a view of it:
+  `MapContent` is exactly "a trip or a trail". A mode called `trips` would have meant "the view
+  that happens to show them", beside a `MapTrip` type and a `trips` variable holding them.
+- **Trip cards outrank route cards** (priority 0, then a group at 1, a route at 2). They share a
+  map only here, and half these routes were walked ON one of these trips — the trip is what the
+  page is about and the route is a detail of it. What it decides changed on 10 Sep 2026 and the
+  ordering did not: at the home view Changping and Cape Krathing used to lose their cards to
+  Chengdu and Bangkok, and now share them — "Chengdu & Changping Valley", "Bangkok · Phuket ·
+  Cape Krathing" — because the higher-priority card is the one that absorbs rather than the one
+  that wins. Johor, which has no trip near it, keeps its own card either way.
+
+**And Trails now opens pitched.** `TRAILS_VIEW` — pitch 62, bearing -22, the numbers the
+single-route view has used since it shipped — is applied to the overview fit and to a group fit.
+The overview shipped flat and top-down for a day and the author's note was that the relief no
+longer read: a hillshade seen square-on is a pattern, and tilting it is what makes a range look
+like a range before you have clicked into anything. The two views are now the same angle at two
+scales, and the overview is a tilted globe with the horizon in it.
+
+- **The overview stays on the GLOBE, with no terrain attached**, and it was mercator with terrain
+  for one build. The swap has to happen somewhere and there is nowhere good for it at z5: at the
+  start of the fly it flattens a globe the reader is looking at, and at the end — which is
+  invisible for a route, because z13 is past where MapLibre's own globe hands over — the camera is
+  stationary and the whole frame unwraps from a sphere into a full-bleed map in a single frame.
+  Screenshotted at 1.69s and 2.05s into the fly: two completely different pictures. So
+  `attachTerrainWhenSettled` kept its `!focused` guard, and only a single route is mercator.
+- **The terrain mesh was buying nothing at that scale anyway**, which is what makes that a free
+  choice rather than a compromise. At 20 km per pixel a mountain is under half a pixel of relief;
+  what draws a range at overview zoom is the hillshade, and it needs neither a mesh nor mercator.
+  The pitched group view at z10 is indistinguishable with the mesh and without it — the two
+  screenshots were compared.
+- **The readout is hidden outside Trails.** It names the route on the map, or what the collection
+  adds up to, and under the two globe tabs it was a line reading "No track loaded" about a map
+  that has no track in it. That was true of `explore` before this and nobody had looked; three
+  tabs made it two-thirds of the page. Errors still surface, because every path that writes one
+  has already switched the mode to `terrain`.
+- **A route card lost its date and kept its distance**, and that is a consequence of the pitch
+  rather than a style change. Pitch compresses the far half of the frame; at 149px a card is wide
+  enough that two routes 12 km apart collide, and Belumut and Kulai were both dropped from a group
+  of six. "14.5 km" is 85px and all six fit. The date is on the card's tooltip, on the picker
+  chip's, and in the readout the moment the route is picked.
+
+**What both cost**, page-scoped as ever — the numbers on the left are the overview's, recorded in
+the section above:
+
+| | overview | + All tab and the pitch |
+|---|---|---|
+| eager page script | 2.24 | **2.39** KB gz |
+| MapLibre engine chunk | 246.27 | **246.34** KB gz |
+| `/about/travel-preview` CSS | 3.13 | **3.18** KB gz |
+| site-wide CSS and JS | — | unchanged |
+
+**Verified in Chrome against the production build**, 25 checks on the new tab plus a re-run of the
+34 above, all passing: three tabs with Trips selected and the content chips absent outside `All`;
+seven chips in `All` with both content chips on; trips and route groups sharing the globe; each
+content chip switching its own half off and storing the choice, including both off (a bare globe)
+and an empty stored string; a group card zooming without leaving `All`; a route card switching to
+Trails and flying; filters surviving a trip to Trails and back; 390px restoring a stored mode and
+content, keeping the three-chip switcher on one line, 7/7 chips clickable and 0 horizontal
+overflow; the pitched overview and the pitched group view screenshotted in both themes; console
+clean throughout. The light↔dark round trip re-measured on the pitched views: overview
+226 → 38 → 226, one route 201 → 46 → 201, `explore` unchanged at 233 → 33. The overview's figures moved from the 207 → 52 recorded above when it went back to the globe, and the reason is the frame rather than the map: a sphere with the ground colour around it is lighter in light and darker in dark than a map that fills every pixel.
+
+**A caution for the next probe.** `.switch` is not unique on that page — the three.js earth above
+has its own look switcher with the same class, and a check for "the switcher is on one line" that
+forgets to scope to `[data-mapglobe]` measures the OTHER one, which has six options and two rows.
+It failed for exactly that reason before it passed.
 
 ### Never statically import a value from a lazily-imported engine
 
@@ -1460,6 +1744,549 @@ only, which removes the pole-enclosing polygon entirely; that is an appearance d
 has not been taken unilaterally.
 
 The page has also not been driven at **390px**.
+
+### Cards merge instead of disappearing (10 Sep 2026)
+
+The author's note was about the `All` tab: Chengdu and the Changping valley are 120 km apart, so
+at the home view their two cards land on top of each other, the trip card wins, and the three
+walks up that valley are simply not on the map. *"When 2 trips/trails or trips and trails
+collapse, the label will include the trip and trails together."* So they do — the two cards are
+now drawn as one reading **"Chengdu & Changping Valley · 1 TRIP · 3 ROUTES"**, and clicking it
+zooms until they separate.
+
+**There is no threshold constant, and that is the design.** Two cards merge exactly when the
+collision pass would otherwise have hidden the second: same boxes, same `LABEL_PAD`, same test,
+decided in the same loop. A number of its own would be a second and slightly different definition
+of "too close", and the two would disagree at the margin — which would show up as a card that is
+hidden and named nowhere, the exact bug this fixes. Measured at the home view in `All` at 1400px:
+**six cards naming eleven things**, against eight cards naming eight before.
+
+Every card carries a `stack` part — a name, what it stands for, and its own extent — so a merge
+can be trips with trips, route groups with route groups, or the case this was built for, a trip
+with a walk taken on it. **The atlas ranks deliberately have none.** They are names of places
+rather than things the page is about, they arrive by the hundred, and "China & Chengdu" is not a
+label anyone wants; those still lose their space the old way.
+
+Things that look like shortcuts and are not:
+
+- **Greedy absorption, NOT single linkage — and linkage was tried first.** The reasoning for it
+  was that three cards in a row should become one card rather than two overlapping ones, and it
+  chained catastrophically: at the home view five of the eight trip cards and a route group are
+  one unbroken run of near-touching boxes across Asia, so the map collapsed to four cards, two of
+  which read "& 4 more". What ships is that a card absorbs what **it** covers and no further,
+  which is a rule the reader can see working, because the absorbing card is the one that was
+  going to win the space anyway. It is also why the pass runs in priority-then-distance order —
+  the same order that used to decide which card disappeared.
+- **Grouped on the members' INDIVIDUAL boxes, never on the merged card's.** A merged card is
+  wider than the card it grew out of, so it can reach a neighbour its winner did not, and folding
+  that neighbour in as well does not converge — it makes the card narrower ("Chengdu +2" is half
+  the width of "Chengdu & Changping Valley"), which un-covers the neighbour, which splits the
+  card, which covers it again. That oscillates at every frame. Grouping only on the inputs makes
+  it a pure function of where the cards are.
+- **A width budget rather than a cap on the number of names**, because they are not the same
+  question: "Bangkok · Phuket · Cape Krathing" is three names and fits, while "Guangzhou &
+  Shenzhen · Taichung & Taipei" is two names and four cities and only just does. The card is
+  built naming everything, measured, and refilled as "Bangkok +2" only if it came out over
+  `MERGE_WIDTH` of the frame — with the full list on its tooltip. Measuring costs nothing extra:
+  the card has to be measured for the collision pass regardless, and neither branch runs unless
+  the membership changed. At 390px the budget is what turns every merged card into "+N".
+- **"&" joins a pair, "·" joins anything else.** Two of these trips are already two cities —
+  "Guangzhou & Shenzhen", "Taichung & Taipei" — and being the widest cards on the map makes them
+  among the likeliest to merge; "Guangzhou & Shenzhen & Taichung & Taipei" is four ampersands
+  joining nothing. So an "&" already inside a name, or a third member, falls the join back to the
+  separator the rest of the page uses.
+- **Clicking a merged card fits its members' combined extent**, capped at `MERGE_MAX_ZOOM`. That
+  is the same thing an area card does and for the same reason: the card says "several things are
+  here", so the one useful response is to separate them. The cap is because that extent can be
+  200 m across — two trailheads would otherwise ask for zoom 18, a street corner on a map whose
+  deepest elevation data is z12.
+- **The cards are pooled and rebuilt only when their membership changes.** `declutter` runs on
+  every `render`, so rebuilding one per frame would put a forced layout in the middle of every
+  frame the map draws. The pool key is the whole identity of the card — its members, winner
+  first — so panning a merged card around the frame writes nothing at all.
+- **A merged card that cannot be placed falls back to its members, one at a time**, so merging
+  can never cost the map a name that not merging would have kept. They overlap each other by
+  definition, so this normally keeps exactly one of them, which is what the pass did before.
+- **`declutter` is also where the control panel gets its reservation**, so a card that clashes
+  with the panel rather than with another card is hidden outright rather than absorbed. There is
+  nothing under there for it to be named on.
+
+**The bug this surfaced, which is worth knowing about any MapLibre HTML marker.** `fillCard` used
+to assign `el.className`, which is fine for an element being built and wrong for one being
+refilled: by then MapLibre has added its own `maplibregl-marker` class, and that is what carries
+`position: absolute`. Assigning over it dropped every merged card into normal flow, and they
+stacked down the frame exactly one card height apart. It presented as "the merged card is
+anchored in the wrong place", and the giveaway was that the offset was `index × 38px`.
+`classList.add` throughout.
+
+**What it costs.** The MapLibre engine chunk went 246.34 → **247.88 KB gz**. The eager page
+script, the page's CSS and everything site-wide are untouched — this is all inside the engine.
+
+**Known and left alone.** In `All` at the home view the widened "Chengdu & Changping Valley" card
+takes the slot Shanghai's card used to have, so Shanghai is the one name not on the map; it comes
+back on any pan or zoom, and it is the trade the width budget exists to bound. It does not happen
+in `Trips`, where nothing widens Chengdu's card.
+
+**Verified in Chrome against the production build**, 22 checks plus a re-run of all 70 above, all
+passing: the merged card and its count line; Chengdu not also on the map separately; every one of
+the eleven trips and route groups named somewhere; zero pairwise overlaps among visible cards at
+1400px and at 390px; clicking a merged card zooming, splitting it and staying in `All`; the
+trails overview still three separate groups; a focused route leaving no card of any kind on the
+map, merged ones included; 390px giving "+N" cards, all of them clickable and no horizontal
+overflow; both themes screenshotted; console clean throughout. The light↔dark round trip is
+unmoved — `explore` 233 → 33 → 233, the overview 226 → 38 → 226, one route 201 → 46 → 201.
+
+### The `All` tab's view switch, and the panel's corner (10 Sep 2026)
+
+Built out of the mock-up below, at the author's request: they liked its two-state
+`Globe | Terrain` control and asked for it in the real `All` tab, with the filter section left
+alone — *"This button should change the view only."* It shipped as two positions, and the tilted
+one drew the objection that produced the version described here: **"can see global but cannot
+show the terrain."**
+
+**The panel moved to BOTTOM-left.** It used to sit in the top corner, which is where every fit
+in this engine aims its subject and where every card hangs — cards are anchored *above* their
+point, so the top of the frame is the busy half. Down here it overlaps the foreground, which
+under all three pitched views is the near hillside: the one part of the frame with nothing on it
+that has to be read. Nothing else needed changing, and that is design rather than luck —
+`framePadding` already branched on which half of the frame a reserved box sits in, and
+`declutter` reserves the panel by measuring its rect. Both follow the panel wherever it is put.
+
+**Four positions, not two.** The objection is exactly right and it is forced by MapLibre rather
+than chosen: **the 3D terrain mesh needs the mercator projection, and at the globe's 20 km per
+pixel a mountain is under half a pixel of relief.** A whole-world view can have shading or it
+can have terrain, never both. So rather than one compromise there are three positions on the
+trade, which the author asked to compare on the page — the same conclusion the light themes and
+the relief ladder reached.
+
+| Label | id | What it frames | Mesh |
+|---|---|---|---|
+| Globe | `globe` | the flat sphere, as it always opened | no |
+| Terrain 1 | `route` | ONE route, whole route in frame, ~z11 | **yes** |
+| Terrain 2 | `region` | the same route's whole mountain region, 6x its extent, ~z8 | **yes** |
+| Terrain 3 | `tilted` | the whole world leaned over, hillshade only | no |
+
+**There is a fifth position now, `survey` / "Terrain 4"** — added later the same day, and it is
+Terrain 2 and Terrain 1 as one view that changes scale by itself, with an index rail down the
+side. See "Terrain 4, and the index rail" below; everything in this section still describes the
+four it shipped with.
+
+**The ids are not the labels**, deliberately, and this is the second place in modes.ts where that
+is true. The pill reads in numbers because that is how the author will refer to them while
+choosing ("keep terrain 2"); the ids say what each frames, because `view === 'region'` is
+readable where `view === 'terrain2'` is not. Renumber the labels freely; leave the ids alone.
+
+**`meshView()`, `tiltView()` and `leaning()` are the only places a view id is tested by name.**
+The interesting distinction is not which of the four is selected but which of two capabilities is
+in play — is the camera leaning, is the mesh attached — and those are what the projection, the
+layers, the shading and the fit all branch on. Spelling `view === 'route' || view === 'region'`
+at each of them is how one of them ends up disagreeing with the others.
+
+**A route picked inside `All` stays inside `All`.** `loadTrail`'s `!meshView()` guard is what does
+it: without that, clicking a route card on a mesh view would fly to the ridge and land the reader
+in the Trails tab, having silently changed their mode, their panel and what is on the map — for a
+click that meant "show me this one, here". `aim()` in index.ts is `pick()` minus the mode change,
+and it writes the same `mapglobe-trail` key, so **a route chosen in either place is the route the
+other one arrives at**. That is also what the mesh views open on: they are the only cameras on
+the page that *require* a route, so unlike terrain mode a default is forced, and the order —
+last-looked-at, then `trails[0]` — is what makes it defensible.
+
+**All three terrain views shade relief and disable the Relief chip**, the two mesh views at the
+harder single-ridge strength. Author's call, put to them as a question: a tilt with no shading is
+a flat map at an awkward angle, and a control called Terrain that showed none would be a lie.
+The stored filter set is untouched and comes back when the view goes flat — the same two-axes
+split as `theme` / `light-theme`. The chip carries a **dashed border rather than a fade**, because
+the usual way to show a disabled control is to lower its contrast, which here would make an
+active layer look inactive.
+
+**`GLOBE_TILT` is 40 degrees / bearing 0, separate from `TRAILS_VIEW`'s 62 / -22.** Reusing the
+constant was tried first, on the reasoning that they are the same picture at two scales. In
+Chrome that was wrong, because pitch is not scale-free: `TRAILS_VIEW` is tuned for z5 and z13,
+and this leans from z2.3. Measured over four candidates, as the share of the frame's height the
+trip cards span:
+
+| | band | cards | |
+|---|---|---|---|
+| 62, -22 | 29% | 5 | trips crushed under the horizon; Australia, with no trips, owns the foreground |
+| 50, -22 | 28% | 5 | Asia collapses into one "+5" card |
+| **40, 0** | **36%** | **5** | **shipped** |
+| 32, 0 | 40% | 6 | best composition, barely reads as tilted |
+
+Bearing 0 where terrain mode turns -22: a rotation earns its place on a ridge, and on a
+hemisphere north-being-up is information. The two mesh views take `TRAILS_VIEW` itself, since
+they are at a ridge's scale.
+
+**`REGION_GROWTH` is 6, applied to the BOUNDS and not as a zoom offset**, so the whole thing stays
+in the one `fitBounds` idiom every other camera here uses and the padding keeps working. Six is
+2^2.6, about two and a half zoom levels out from Terrain 1: a 14 km walk becomes an 84 km box.
+`grow()` clamps latitude to the Web Mercator limit rather than 90 — no route is near a pole, so
+it never fires, but a high-latitude route added later degrades to a wide view instead of a broken
+fit.
+
+**The Trails tab's own single-route fit was widened too** (`TRAIL_GROWTH` 1.6, a little over half
+a zoom level), the third of the three changes asked for together. And **`fitTrack` now uses
+`framePadding()` instead of a bare `min(80, width * 0.1)`** — it was the only fit in the file not
+using it, which meant a route could land under the panel. That is a fix, and it costs
+composition: the subject is no longer centred, because the padding steers it clear of an
+11-chip panel. `fitAngle()` also replaced a literal pitch/bearing pair written out here, which
+was a duplicate of `TRAILS_VIEW` that happened to agree with it.
+
+**What it costs**, page-scoped:
+
+| | before | after |
+|---|---|---|
+| eager page script | 2.72 | **3.00** KB gz |
+| MapLibre engine chunk | 247.89 | **248.29** KB gz |
+| `/about/travel-preview` CSS | 5.37 | **5.46** KB gz |
+| site-wide CSS | 10.16 | **10.09** KB gz — see the Tailwind note, same session |
+
+**Verified in Chrome against the production build** — :4322, not the dev server — 41 checks, all
+passing: the panel in the bottom-left half, on the left, and clear of the attribution in both
+panels; four options reading Globe/Terrain 1-3 on one line with Globe checked; **all six pairs of
+the four views render distinct frames**; each terrain view disabling the relief chip and Globe
+freeing it; Terrain 1 dropping to 3 or fewer visible cards and Terrain 3 bringing the trips back;
+re-aiming from a route card staying in `All`, keeping the view and storing the new route; leaving
+for `Trips` flying home and freeing the chip, and returning restoring the mesh view; the retired
+`terrain` view id falling back to Globe; Trails still opening on its route with 11 chips, no view
+switch and its panel bottom-left; dark; and 390px with 0 horizontal overflow, four clickable
+options and the panel inside the frame. Console clean throughout.
+
+**Known and left alone.** At 390px the panel is **35% of the frame's height** in `All`, against
+13% in `Trips` — inside the range already accepted for the Trails picker at 39%. In the two mesh
+views the *neighbouring* routes keep their cards but not their lines: the cards are the way to
+re-aim, and ten lines at ridge zoom would be nine sub-pixel specks in other countries. And with
+the panel at the bottom of the frame, on a phone it can sit below the fold until the frame is
+scrolled to — which is also what made the first 390px hit-test fail, since `elementFromPoint`
+returns null outside the viewport.
+
+### Terrain 4, and the index rail (10 Sep 2026)
+
+The author's objection to Terrain 2 was not about the picture, it was about being stuck in it:
+*"the view was not big enough to see all trip and route, and if user need to scroll out to see
+and select other trip and route is a very bad user experience."* So two things landed together,
+and they are two halves of one answer — a view that changes scale by itself, and a list that
+makes changing subject free.
+
+**Terrain 4 (`survey`) is one view with two scales.** It arrives framed exactly as Terrain 2
+does — the route's whole mountain region, `REGION_GROWTH` — and tightens to exactly Terrain 1's
+frame when the reader picks a single walk. It always arrives wide: leaving the view and coming
+back starts at the region again rather than resuming halfway in.
+
+**A boolean, not a sixth pill position.** `drilled` in engine.ts is the whole of it, and the
+alternative is what makes it obviously right: a fifth and sixth position on the pill would ask
+the reader to move a control to say what a click on a route already said. `trackFactor` is the
+one place the two scales differ, and it is three lines.
+
+**`MESH_VIEWS` moved into modes.ts** as a list, from an `||` chain inside the engine's
+`meshView()`. Terrain 4 made it three, and two separate files now need the same answer — the
+engine, for the projection and the shading, and index.ts, for whether to show the rail. Two
+copies of that chain is how they end up disagreeing. Membership means exactly two things:
+mercator instead of the globe, and `setTerrain` on arrival. Everything a mesh view does
+*differently* from its neighbours is still decided per view.
+
+**The rail is down the RIGHT**, where every other control on this map is bottom-left, and that
+is deliberate three times over. Two panels on one edge stack into a wall, and on a phone the
+lower one gets pushed off the frame. A nineteen-row list cannot share a corner with a grid of
+chips. And an index reads as a column, so the column it reads as is the side of the frame.
+
+**It is a disclosure, and its default depends on the frame.** Nineteen rows is a third of a
+desktop frame and most of a phone one, so a reader who wants the mountain rather than the list
+has to be able to say so — and `storedIndex()` opens it where there is room and starts it shut
+below 640px, with a stored answer beating both. That is a **sixth storage key**,
+`mapglobe-index`, and it is the first of the six whose default is not a constant.
+
+**The nesting is real, derived, and new to the site.** `walkedOn()` in `src/lib/content.ts`
+pairs a route with a trip when the route's date falls inside the trip's range — three walks
+inside Chengdu, one inside Phuket. Until now the site knew that nowhere: `src/content/trips/`
+and `src/data/trails.json` are two lists that never mention each other, and the only place it
+surfaced was a merged card that happened to name both. The interaction mock-up below carried a
+hardcoded `WALKED_ON` table of exactly these four pairings **as part of its argument**; this is
+that argument taken up.
+
+- **Derived, never declared.** A `trip` field on a route would be a second source of truth for
+  something both files already state. Adding a route needs no edit, and correcting a trip's
+  dates re-pairs its routes with it.
+- **Containment is evaluated at the TRIP's precision**, because that is the only side that can
+  be approximate — every route has a day, three trips have only a month. `Oct 2024` covers the
+  whole of October rather than one arbitrary day in it.
+- **A route inside two trips throws at build time.** Nobody is on two trips at once, so it means
+  two trips overlap in the content — real data to fix, against the alternative of a route
+  silently nesting under whichever trip sorted first.
+
+**A trip is selectable, not just a heading, and that is why `place` exists.** Five of the eight
+trips have no recorded route in them at all, so "show me Tokyo" cannot be expressed as "load
+Tokyo's first route" — a rail listing eight places and letting you click three would be worse
+than one listing none. `place` is mutually exclusive with `focused` by construction:
+`showPlace` clears the route and empties its track, `loadTrail` clears the place. Exactly one
+thing is the subject, so exactly one row is marked and there is never a track drawn for a route
+the reader is not looking at.
+
+**A place is NOT persisted, where a route is.** The stored `mapglobe-trail` answers "which
+route", and a place is how the reader gets *between* routes rather than an answer to that — so
+a reload comes back to the walk they were reading, which is the thing worth returning to. It
+is the one place in this engine where a reader's choice is deliberately forgotten, and it is
+verified: clicking three trip rows leaves the stored route untouched.
+
+**`PLACE_GROWTH` is 1.6 against `REGION_GROWTH`'s 6**, and the difference is what each is
+applied to. Six is right for a 14 km walk, which is a line on a mountain and needs the mountain
+put around it. A trip's box is already region-sized before anything is added: Tokyo's built-up
+footprint is 140 km across, and Chengdu's grows to 130 km once the three Changping walks are
+folded in. The same multiplier would frame a thousand kilometres of China to show one valley.
+
+**A trip's ground is its footprint UNION its walks**, and Chengdu is why. Its footprint is the
+city; its three routes are legs of one trek 100 km west, up the Changping valley. Framing the
+footprint alone puts the reader on the Sichuan basin with the mountains off the edge of the
+frame; framing the walks alone drops the place the trip is named after. `showPlace` waits for
+the route geometry when it is coming, because a fit computed before it lands frames the city
+and never corrects itself.
+
+**Terrain 4 leaves the OTHER routes drawn**, where Terrain 1 and 2 hide them, and that is not an
+inconsistency. Those two hide them because at a single ridge nine sub-pixel specks in other
+countries answer nothing. This view exists to be navigated: at region scale a neighbouring walk
+is genuinely in frame — three of these routes are legs of one trek up the same valley — and a
+line the reader can see beside the one they are on is the cheapest possible answer to the
+objection it was built for. The routes in other countries are not sub-pixel here, they are off
+the edge of the frame, which costs nothing. The focused route still draws its own track over
+the top, so "this one" and "the others" stay two different marks.
+
+**`framePadding` had no right-hand branch at all**, which the rail turned into a real bug, and
+the fix generalised the two special cases that were already there into one rule: **each control
+is cleared on its cheaper axis.** A wide, short box costs less to clear vertically — the
+attribution, 25px tall and a third of the frame wide at 390px, is stepped *over* for ten pixels
+instead of a third of the map. A tall, narrow one costs less to clear horizontally — the rail,
+a fifth of the width and the whole height, is stepped *around*. The old code cleared both axes
+of anything in the top half, which for a full-height rail gives away the entire frame: the fit
+then fails its own 45% test, falls back to plain padding, and every card lands under the rail
+and is decluttered away. Behaviour at 390px is unchanged — the filters panel is wider than it
+is tall there and still falls back, exactly as it did.
+
+Things that look like shortcuts and are not:
+
+- **`.index__list[hidden]` is an explicit rule, and the toggle does not work without it.** The
+  list is `display: flex`, which beats the `hidden` attribute's UA `display: none`, so the
+  collapsed rail renders open. It fails silently — clean build, `astro check` sees nothing.
+  Worth knowing for any element that is both a flex container and toggled by `hidden`.
+- **The rows carry `aria-current`, not `aria-checked`.** The picker below the frame is a
+  radiogroup where one of eleven options is true; this is a list of places where one is where
+  you are. A screen reader saying "selected" of a row in an index describes a control that does
+  not exist. `markTrails` is already scoped to `[role='radio']` for the same reason, so the
+  route rows share `data-mapglobe-trail` with the picker chips and the map's cards — one
+  attribute, one delegated handler, three ways into a route — without any of them taking the
+  wrong state.
+- **Real nested `<ul>`s rather than a flat run of buttons**, because the nesting is the content.
+  A screen reader gets "Chengdu, list of 3 items" instead of eleven siblings.
+- **The scroll is on the LIST, not on the rail**, so the toggle stays put while the rows move
+  under it. A header that scrolls away is a header the reader cannot use to shut the thing.
+- **The current row is scrolled into view, at `block: 'nearest'`.** The rail is not always where
+  the click came from: a route picked from its CARD on the map marks a row that can be nineteen
+  rows down a scrolling list, and a mark nobody can see is not a mark. `nearest` is what stops a
+  row already on screen from moving — scrolling the list under the reader on every map click
+  would be worse than not scrolling it at all.
+- **The trip-less group is named after where it is, not after what it is not.** Six of the ten
+  routes fall inside no trip, all within an hour of home, which is exactly why they are not
+  trips. `areaName` reads "Johor" off the members' own `place` fields — most common wins, ties
+  to the shorter, which is what puts five in "Johor" and one in "Johor Bahru" under "Johor".
+  It is a **second copy** of `areaName` in engine.ts, deliberately: that module is only reached
+  through a dynamic import, and a static value import from it hoists MapLibre into the eager
+  bundle. Frontmatter runs on the server and would probably be exempt, and "probably" is not
+  worth finding out for six lines. Keep them in step.
+- **`fg-meta` and above throughout the rail, never `fg-faint`.** It is 2.31:1 on a chip in
+  Classic, a known fault in the original palette, and it is already straining on the routes
+  panel's ten proper nouns; nineteen rows of them is where it would stop being legible.
+- **`max-height` rather than a bottom anchor.** A rail stretched to the full height of the frame
+  with eight rows in it is mostly empty, and it would reserve that emptiness from the camera fit
+  as well.
+- **No rail on Terrain 3.** That view keeps every trip in frame — it is the one terrain view
+  with nothing to reach for.
+- **The view pill wraps BETWEEN options, never inside one.** Five labels do not fit on one line
+  at 390px, and left to itself each one broke into "TERRAIN" over "4" — five two-line options,
+  no shorter than two rows and much harder to read. `flex-wrap` on the pill and
+  `white-space: nowrap` on each option gives "Globe / Terrain 1-3" on one row and "Terrain 4" on
+  the next, with every label intact; the shared outline is what still says it is one control.
+  One line at every width from 640px up.
+
+**Measuring "Terrain 4's arrival IS Terrain 2's camera" took three attempts, and the two
+failures are worth more than the result.** The claim is about scale, and there is no handle on
+the map from outside.
+
+1. **DEM tile depth saturates.** A 62-degree pitched terrain view asks for z12 tiles in its near
+   field whatever its centre is at, so the deepest z requested is 12 at either scale.
+2. **The pixel gap between two route cards does not exist at region scale.** The two Changping
+   legs start 9 km apart, which looked ideal — but their group's break zoom is ~10.1, so at
+   region scale they are drawn as one area card and there is nothing to measure between.
+3. **Where every card lands, relative to the frame.** Two views framing the same ground at the
+   same scale put every card they share on the same pixel. That is sharper than any proxy, and
+   it is the actual claim.
+
+Read that way the answer is exact: the shared card sits at **x = 479** in Terrain 2, in Terrain
+4 on arrival, and in Terrain 4 re-entered — and Terrain 4 drilled matches Terrain 1 at
+**x = 434 and 587** for both of its cards.
+
+**What it costs**, page-scoped except for 40 bytes:
+
+| | before | after |
+|---|---|---|
+| eager page script | 3.00 | **3.29** KB gz |
+| MapLibre engine chunk | 248.29 | **248.54** KB gz |
+| `/about/travel-preview` CSS | 5.46 | **5.89** KB gz |
+| site-wide CSS (`BaseLayout.css`, 25 pages) | 10.09 | **10.13** KB gz |
+
+The 0.04 KB site-wide is `@apply` utilities the rail uses and nothing else does — the trade the
+mock-up section records, taken again for the same reason: this section is going to be deleted.
+
+**Verified in Chrome against the production build** — :4322, not the dev server — 74 checks,
+all passing, plus a re-run of the 41 on the four-view work and the 77 on the mock-up with no
+regression: five options reading Globe/Terrain 1-4 on one line with Globe checked; **all ten
+pairs of the five views render distinct frames**; the rail shown in the three mesh views and in
+neither flat one, on the right, inside the frame, at a fifth of the width; eight trip rows and
+ten route rows with three nested under Chengdu, one under Phuket and six under Johor, and
+exactly four routes claimed by a trip; drilling from a rail row staying in `All`, keeping the
+view, marking exactly one row and storing the route; a trip row marking itself, un-marking every
+route and leaving the stored route alone; a trip with no routes framing anyway; the camera
+identities above; re-entering the view and a round trip out to `Trips` both returning to the
+region; the disclosure shutting, hiding its list, keeping its own button, storing the choice and
+coming back shut; dark, with the rail's ink following the theme; the retired `terrain` view id
+still falling back to Globe; Trails untouched at eleven chips with no rail and no view switch;
+and 390px with the rail starting shut, opening inside the frame at 44% of the width and 50% of
+the height, clear of the filters panel, hit-testable and working. Console clean throughout.
+
+**Known and left alone.** The same view frames **17-61px** differently in the VERTICAL depending
+on how it was entered — `fitBounds` at a 62-degree pitch resolves a centre that depends on the
+camera it starts from, and the very first fit of all is computed before the panels are
+measurable at all. Horizontal position agrees to the pixel across all three entries, which is
+what says this is the fit's starting point rather than its scale, and 61px of an 880px frame is
+not a picture anyone would call different. It is pre-existing — Terrain 1 and 2 have always had
+it — and it is why the camera checks above assert x and report y. Also: at 390px the opened rail
+is 44% of the width, which is more than the 20% it takes on a desktop frame and is why it starts
+shut there; and the rail sits over the top-right, where cards hang above their anchors, so a
+card in that corner is reserved away rather than merged — there is nothing under a control for
+it to be named on.
+
+## The interaction mock-up (`/about/travel-preview`, 10 Sep 2026)
+
+A **third** section on the preview page, and the only one that is not an earth. The author's
+complaint about the MapLibre section was not about how it looks but about how it is driven —
+*"only TRAILS and ALL is needed because ALL have included the trips information"* — so this is
+three proposals for the navigation, drawn as chrome over four schematic SVGs.
+`MapUxPreview.astro` plus `src/scripts/map-ux-preview.ts`. Throwaway like the rest of the route.
+
+**The diagnosis, which is what the section argues.** Six of the seven faults below are the same
+fault wearing different clothes: **the tab row describes an axis the data does not have.** There
+is one map and four depths — the world, the routes, an area, a route.
+
+1. **Two of the three tabs are the same map.** `All` with its Trails chip off *is* `Trips` — the
+   row asks the reader to choose between a set and a subset, and what separates them is a chip
+   inside one of the two. This is the redundancy the author spotted.
+2. **Depth is spelled as a mode.** World → area → route is a zoom, driven by a control whose
+   whole meaning is "switch to a different thing".
+3. **The row and the map disagree about who is steering.** A route card moves the selected tab
+   under the reader; a group card does not. Two identical-looking cards do two different things.
+4. **The panel changes identity in place** — same corner, same styling, five independent toggles
+   in one tab and an eleven-item single choice in another, with nothing marking the swap.
+5. **The route picker is an index dressed as a filter** — eleven proper nouns in `fg-faint`,
+   already recorded above as 2.31:1 in Classic.
+6. **There is no way back.** From a route at z13 the exits are the tab row and a chip in a
+   scrolling list. The map itself offers none, and the map is where the reader is looking.
+7. **The readout exists in one tab out of three**, so two thirds of the time nothing says what is
+   on screen or what was just clicked.
+
+**The three proposals**, one at a time behind a switcher, over the same four schematics:
+
+| | Navigation | Keeps |
+|---|---|---|
+| **Drill down** (recommended) | no tabs; a breadcrumb `Earth › Johor › Pulai`, and the map is the only control | removes a whole level — the world already shows the three route groups the Trails overview exists to show |
+| **Map & index** | a permanent rail: trips newest first, each with the routes walked on it **nested underneath** | the only one that shows a relationship the site records nowhere |
+| **Two views** | the author's own instinct tidied: drop `Trips`, keep `All` and `Trails`, make the switch two-state and give Terrain the breadcrumb | the one control that says "the routes, alone" |
+
+**Three changes are worth making whichever model wins**, and they are cheap: the readout under
+the frame at every depth, the layer chips behind a button instead of permanently over the map,
+and a way back that lives on the map rather than beside it. Between them they answer four of the
+seven faults without touching the tab row.
+
+**The nesting in proposal 2 is a real fact the site knows nowhere.** Three walks fall inside the
+Chengdu trip and one inside Phuket — visible by putting the dates side by side, and recorded in
+no code: `visited.json` and `trails.json` are two flat lists that never mention each other, and
+the only place it currently surfaces is a merged card that happens to name both. `WALKED_ON` in
+the component is a hardcoded table **on purpose, as part of the argument**.
+
+**That argument was taken up the same day.** `walkedOn()` in `src/lib/content.ts` now derives
+the pairing from a route's date falling inside a trip's range, throws at build time if a route
+ever falls inside two trips, and the `All` tab's index rail renders it. So the table here is a
+mock-up of something that exists — leave it as it is while the section does, since the point it
+illustrates is the navigation model rather than the data.
+
+Things that look like shortcuts and are not:
+
+- **It is a diagram, not a fourth map, and the schematics are deliberately abstract.** Three
+  working earths to compare three navigation models would take a week and would put the
+  rendering back in front of the question the section exists to ask. Nobody should be judging
+  the coastline here.
+- **The colours are derived exactly as `palette.ts` derives them** — sea 10%, land 20%, coast
+  50% of the way from the frame's `band` ground toward `--color-fg`. So there is no dark block
+  in the file and there must not be one: the ramp inverts on its own because the colour it walks
+  toward is the light one in dark. Verified in Chrome, both themes.
+- **`var()` DOES NOT WORK IN AN SVG PRESENTATION ATTRIBUTE**, and this cost a round. A
+  presentation attribute is meant to behave as a CSS declaration, but `fill="var(--uxp-sea)"` is
+  not substituted in Chrome: the value fails to parse and the shape falls back to the initial
+  `fill`, which is **black**. It fails silently — clean build, `astro check` sees nothing, and
+  the only symptom is a globe that renders as a black disc in *both* themes, which is the tell.
+  Measured: `getComputedStyle(circle).fill` returned `rgb(0, 0, 0)` in light and dark alike.
+  Every colour in all four schematics is a real CSS class instead.
+- **The schematic and its cards share ONE aspect-locked box**, and which dimension binds it
+  flips at 640px — width leads on a phone, height leads on a desktop. Get it the wrong way round
+  and the SVG letterboxes inside a box that is no longer its own shape, at which point every
+  card, positioned in percentages of the box, slides off the dot it names. It is the same
+  problem MapLibre solves with `project()`.
+- **Cards sit ON their anchor, not centred over it.** Centred, a card covers the very mark that
+  says where the place is.
+- **Four of the eight world cards are dropped below 640px.** A card is a fixed pixel width
+  whatever the box is, so eight that sit clear on a 682px schematic are a pile on a 358px one —
+  the same arithmetic the real engine answers with decluttering. The two merged cards are never
+  dropped; they carry the most information per pixel and they are what the section argues about.
+- **The breadcrumb separator is a `::before` on each crumb**, not a span between them. Which
+  crumbs show depends on the proposal *and* the depth — `drill` never shows "All routes",
+  because that level does not exist in it — and a separator that was its own element would
+  survive its crumb being hidden and leave a stray chevron at the head of the trail.
+- **Route lines are not drawn on the globe.** They were, as two-segment ticks, and at that scale
+  they read as stray UI glyphs floating over the Pacific rather than as walks. The footprints
+  say where the page has been; lines start at the area depth where they are long enough to be
+  lines.
+
+**`@apply` INSIDE A SCOPED ASTRO BLOCK STILL EMITS THE UTILITY INTO THE SHARED SHEET.** Worth
+knowing for every component, not just this one: a utility nothing else on the site references
+lands in `BaseLayout.css`, which is on all 25 pages, even though the rule using it is
+page-scoped. Measured here — six utilities used by this file alone cost **0.21 KB gz
+site-wide**; written out as plain CSS declarations they cost nothing. About eighteen cheaper
+ones are still left as `@apply`, a deliberate trade, since converting all of them would make
+this file stylistically unlike every other component in the repo for a section that is going to
+be deleted. **For a permanent component, convert them** — and see the note below before writing
+the class name down anywhere.
+
+| | before | after |
+|---|---|---|
+| eager page script | 2.32 | **2.72** KB gz |
+| `/about/travel-preview` CSS | 3.14 | **5.37** KB gz |
+| site-wide CSS (`BaseLayout.css`, all 25 pages) | 9.94 | **10.08** KB gz |
+| MapLibre and three.js engines | — | unchanged |
+
+**Verified in Chrome against the production build** — :4322, not the dev server — 77 checks, all
+passing: the section opens on Drill down at the world with eight cards, one schematic and one
+readout; the box holds 4:3 at both widths; clicking a card descends and the breadcrumb grows,
+with no chevron before the first crumb and `aria-current` on the last; a crumb flies home; the
+Layers sheet opens, holds five chips and closes on Escape; the route sheet lists all ten and a
+row navigates; the rail nests three routes under Chengdu and one under Phuket, marks the current
+row, and never sits under the map; the twin's two-state switch collapses four depths correctly
+and drops below the breadcrumb at depth; zero pairwise card overlaps at 1400px and at 390px; four
+of eight cards kept at 390px, all clickable, none outside the frame; the rail becomes a bottom
+sheet at 390px; 0 horizontal overflow at both widths; the schematic repaints between themes
+(`oklab(0.89…)` → `oklab(0.28…)`); the MapLibre section above still reaches `ready` with its
+three tabs on one line; console clean throughout.
+
+**The Astro whitespace trap caught three more**, all in this file's prose and all invisible in
+the source and in a passing build — "nowhere.Three", "andTrails", "changes.Risk". Note it bites
+in **both** directions: a closing tag ending a line glues to the next line's text just as an
+opening tag starting a line glues to the previous line's. They were found by reading the
+*rendered* text, not the source, which is the only way to find them.
 
 ## Reveal animation contract
 

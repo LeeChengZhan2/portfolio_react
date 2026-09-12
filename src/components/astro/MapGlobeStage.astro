@@ -15,11 +15,16 @@
  *             water are added a chip at a time and each is fetched only when it
  *             is asked for. The eight footprints are drawn whatever the filters
  *             say — they are the point of the page, not a layer.
- *   terrain — "Trails". One ridge at 20 m per pixel with a recorded route drawn
- *             on it, picked from the author's own GPX exports, which are
- *             simplified and measured at build time by scripts/build-trails.mjs.
- *             Dropping a .gpx on the frame was removed 7 Sep 2026 — the routes
- *             are built in now, so the page had nothing left to ask for.
+ *   terrain — "Trails". TWO VIEWS, not one (9 Sep 2026). It opens on an
+ *             overview of every recorded route, each area named on a card the
+ *             way the trips are; clicking a card drops to that one route on a
+ *             ridge at 20 m per pixel. It used to open inside a single route
+ *             with the other nine reachable only from a chip, which put the
+ *             collection behind a control instead of on the map.
+ *             The routes are the author's own GPX exports, simplified and
+ *             measured at build time by scripts/build-trails.mjs. Dropping a
+ *             .gpx on the frame was removed 7 Sep 2026 — the routes are built
+ *             in now, so the page had nothing left to ask for.
  *
  * TWO MODES, AND THERE WERE FOUR UNTIL 7 SEP 2026. `places` — the bare stylised
  * globe — and `atlas` — the same globe frozen at boundaries, names and relief —
@@ -58,13 +63,35 @@ import trails from '../../data/trails.json';
 /* Values, not just types — but this is frontmatter, which runs at build time
    only, so importing them here adds nothing to what the browser downloads. The
    client reaches the same module through the <script> at the foot of this file. */
-import { DEFAULT_LAYERS, MAP_LAYERS, type MapLayer } from '../../scripts/mapglobe/modes';
+import {
+  DEFAULT_CONTENT,
+  DEFAULT_LAYERS,
+  DEFAULT_VIEW,
+  MAP_CONTENT,
+  MAP_LAYERS,
+  MAP_VIEWS,
+  type MapContent,
+  type MapLayer,
+  type MapView,
+} from '../../scripts/mapglobe/modes';
 
 interface Props {
   trips: MapTrip[];
+  /**
+   * Which recorded routes were walked on each trip, keyed by trip id.
+   *
+   * Derived by `walkedOn` in src/lib/content.ts from a route's date falling
+   * inside a trip's range, and passed down rather than worked out here because
+   * `MapTrip` deliberately carries no dates — it is what the MAP needs about a
+   * trip, and the pairing is a fact about the content collection.
+   *
+   * Three walks fall inside the Chengdu trip and one inside Phuket. The index
+   * rail is the first thing on the site to say so out loud.
+   */
+  walkedOn: Record<string, string[]>;
 }
 
-const { trips } = Astro.props;
+const { trips, walkedOn } = Astro.props;
 
 /**
  * The two modes, in switcher order — the globe first, because it is what the
@@ -91,9 +118,78 @@ const MODES = [
   {
     id: 'terrain',
     name: 'Trails',
-    hint: 'Recorded routes on real elevation, pitched. Fetches DEM tiles when you switch to it.',
+    hint:
+      'Every recorded route at once, then one at a time on real elevation. ' +
+      'Fetches DEM tiles when you switch to it.',
+  },
+  {
+    id: 'combined',
+    name: 'All',
+    hint:
+      'Both halves on one globe — the places visited and the routes walked, ' +
+      'each behind its own chip, over the same five layers. Tilt it with the ' +
+      'View switch.',
   },
 ] as const;
+
+/**
+ * The `All` tab's two content chips.
+ *
+ * A `Record<MapContent, …>` for the same reason `LAYER_COPY` is one: adding a
+ * member to MAP_CONTENT and forgetting its chip should be a build error, not a
+ * filter nobody can reach.
+ */
+const CONTENT_COPY: Record<MapContent, { name: string; hint: string }> = {
+  trips: { name: 'Trips', hint: 'The eight visited places, picked out in the accent.' },
+  trails: {
+    name: 'Trails',
+    hint: 'The ten recorded routes, grouped by area. Click one to fly to it.',
+  },
+};
+
+/**
+ * The `All` tab's view switch.
+ *
+ * A `Record<MapView, …>` for the same reason LAYER_COPY and CONTENT_COPY are:
+ * adding a view and forgetting its label should be a build error rather than a
+ * control nobody can reach.
+ *
+ * The hint on `terrain` says relief comes with it, because that is the one
+ * thing about this control a reader cannot predict from its label — everything
+ * else it does is visible the moment it is pressed.
+ */
+const VIEW_COPY: Record<MapView, { name: string; hint: string }> = {
+  globe: {
+    name: 'Globe',
+    hint: 'The flat sphere. What this tab has always opened as — no tilt, no terrain.',
+  },
+  route: {
+    name: 'Terrain 1',
+    hint:
+      'One route, the whole of it in frame, on real 3D terrain. Click any route ' +
+      'card to re-aim it — you stay in this tab.',
+  },
+  region: {
+    name: 'Terrain 2',
+    hint:
+      'The same route with its whole mountain region around it — six times the ' +
+      'extent, so the ranges are the subject and the walk is a thread through them.',
+  },
+  tilted: {
+    name: 'Terrain 3',
+    hint:
+      'The whole world, leaned over and shaded. The only terrain view that keeps ' +
+      'every trip in frame — and the only one with no real 3D relief, because the ' +
+      'mesh cannot be attached at this scale.',
+  },
+  survey: {
+    name: 'Terrain 4',
+    hint:
+      'Terrain 2 to start with, dropping to Terrain 1 when you pick a single ' +
+      'route — and the index down the side reaches every trip and every route ' +
+      'from either scale, so you never have to zoom out to change subject.',
+  },
+};
 
 /**
  * The chip copy, keyed by layer id.
@@ -115,9 +211,13 @@ const LAYER_COPY: Record<MapLayer, { name: string; hint: string }> = {
  * The routes, split into the two rows the picker shows.
  *
  * Order inside each row is the manifest's own — hikes before runs, newest
- * first — and `routes[0]` is what terrain mode opens on, so the build script's
- * sort is the only place that ordering is decided. A kind with no routes drops
- * its row entirely rather than rendering an empty one.
+ * first — so the build script's sort is the only place that ordering is
+ * decided. A kind with no routes drops its row entirely rather than rendering
+ * an empty one.
+ *
+ * `routes[0]` used to be the route terrain mode opened on. Since 9 Sep 2026 it
+ * opens on the overview of all of them and no route is special, so the ordering
+ * is now only what the reader reads down.
  */
 /* The assertion is the seam between a generated file and a checked one:
    TypeScript reads `kind` out of JSON as `string` and cannot know that
@@ -140,6 +240,82 @@ const routeHint = (route: MapTrail): string =>
   ]
     .filter(Boolean)
     .join(' · ');
+
+/* ---- the index rail ------------------------------------------------------ *
+ * Every trip and every route as one list, with the routes walked on a trip
+ * nested under it.
+ *
+ * THIS IS NAVIGATION, NOT A FILTER, and that is why it is a list of proper
+ * nouns rather than a row of chips. It exists because of one objection to
+ * Terrain 2 (10 Sep 2026): at the scale that puts a mountain range in frame,
+ * everything else the page has to show is off it, so changing subject meant
+ * zooming out to find another card and zooming back in — which is the map
+ * being used as a menu. The rail is the menu, so the map does not have to be.
+ *
+ * The nesting is the relationship the site records nowhere else. It was a
+ * hardcoded table in the interaction mock-up below, offered as an argument;
+ * `walkedOn` in src/lib/content.ts derives it from the dates now, and this is
+ * the first thing to render it.
+ * -------------------------------------------------------------------------- */
+
+interface IndexGroup {
+  /** Null for the one group that is not a trip — see below. */
+  trip: MapTrip | null;
+  name: string;
+  routes: MapTrail[];
+}
+
+/**
+ * What to call a group of routes, from what its members say about themselves.
+ *
+ * `place` is "Johor, Malaysia" or "Changping Valley, Chuanxi, China", so the
+ * first segment is the area; most common wins and a tie goes to the shorter,
+ * which puts five routes in "Johor" and one in "Johor Bahru" under "Johor".
+ *
+ * A SECOND COPY of `areaName` in engine.ts, deliberately. That module is
+ * reached only through a dynamic import, and a static value import from it
+ * hoists MapLibre into the eager bundle — the INEFFECTIVE_DYNAMIC_IMPORT trap
+ * CLAUDE.md records, which cost this page 138 KB once already. Frontmatter runs
+ * on the server and would probably be exempt, and "probably" is not worth
+ * finding out for six lines. Keep them in step.
+ */
+function areaName(places: string[]): string {
+  const counts = new Map<string, number>();
+  for (const place of places) {
+    const head = place.split(',')[0]!.trim();
+    counts.set(head, (counts.get(head) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0]![0];
+}
+
+const routeById = new Map(routes.map((route) => [route.id, route]));
+const nested = new Set<string>();
+
+/* Every trip gets a row, including the five with no walk in them — the rail is
+   an index of the page, and "Tokyo, no routes" is a fact about the trip rather
+   than a reason to leave it out. Trips arrive newest first from getTrips(). */
+const tripGroups: IndexGroup[] = trips.map((trip) => {
+  const own = (walkedOn[trip.id] ?? [])
+    .map((id) => routeById.get(id))
+    .filter((route): route is MapTrail => Boolean(route));
+  for (const route of own) nested.add(route.id);
+  return { trip, name: trip.label, routes: own };
+});
+
+/* And one group for the routes that fall inside no trip at all — six of the
+   ten, all within an hour of home, which is exactly why they are not trips.
+   Named after where they are rather than after what they are not: "Johor" is
+   what a reader is looking for, and "No trip" is a fact about the other list. */
+const loose = routes.filter((route) => !nested.has(route.id));
+const indexGroups: IndexGroup[] = loose.length
+  ? [...tripGroups, { trip: null, name: areaName(loose.map((route) => route.place)), routes: loose }]
+  : tripGroups;
+
+/** A trip row's second line: the year, and what was walked there. */
+const placeMeta = (group: IndexGroup): string =>
+  group.routes.length === 0
+    ? (group.trip?.when ?? '')
+    : `${group.trip?.when ?? ''} · ${group.routes.length} route${group.routes.length > 1 ? 's' : ''}`;
 ---
 
 <section class="mapglobe" data-mapglobe aria-labelledby="mapglobe-heading">
@@ -149,17 +325,35 @@ const routeHint = (route: MapTrail): string =>
     <p class="mapglobe__intro">
       The same eight footprints and the same coastline file as the earth above, drawn by a map
       engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
-      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the two
-      modes above the frame. <strong>Trips</strong> is the globe with a filter row over it, and it
+      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the three
+      tabs above the frame. <strong>Trips</strong> is the globe with a filter row over it, and it
       starts quiet &mdash; country boundaries and country names, nothing else. Add city names,
       shaded relief, named peaks or rivers and lakes a chip at a time; each layer is only
       downloaded once you ask for it, and the eight footprints stay picked out in the page&rsquo;s
-      own accent whatever you switch on or off. <strong>Trails</strong> drops to a single route on
-      a real elevation surface, and carries {routes.length} of them &mdash; every hike and half
-      marathon recorded so far. Pick one from the panel and the camera flies to it; the filled dot
-      is where it started and the ring is where it ended. Each route is drawn from a simplified
-      line, but every figure beside it &mdash; distance, ascent, the elevation range &mdash; is
-      measured from the full recording, so tightening the one can never quietly shorten the other.
+      own accent whatever you switch on or off. <strong>Trails</strong> opens on
+      all {routes.length} of them at once &mdash; every hike and half marathon recorded so far
+      &mdash; grouped into the places they were walked, because six are inside one corner of
+      Johor. It is pitched and lit like the single-route view it leads to, so the relief reads
+      before you have clicked anything. Click an area to
+      zoom into it and then a route to drop onto it, or pick one straight from the panel; the
+      camera flies down to real elevation, and the filled dot is where the walk started while the
+      ring is where it ended. Each route is drawn from a simplified line, but every figure beside
+      it &mdash; distance, ascent, the elevation range &mdash; is measured from the full recording,
+      so tightening the one can never quietly shorten the other. <strong>All</strong> puts both
+      halves on one globe &mdash; every place visited and every route walked, each behind its own
+      chip, over the same five layers &mdash; so the routes can be read in the context of the
+      trips they were walked on. Three of them were, which is why two cards that would land on
+      top of each other are drawn as one naming both &mdash; click it and the map zooms until
+      they come apart. It is also the one tab with a <strong>View</strong> switch, and its four
+      terrain positions are four answers to one trade: the 3D mesh needs a flat projection, and
+      at the globe&rsquo;s 20&nbsp;km per pixel a mountain is under half a pixel of relief, so a
+      whole-world view can have shading or it can have terrain and never both. <strong
+      >Terrain 3</strong> keeps every trip in frame and settles for shading. <strong
+      >Terrain 1</strong> and <strong>2</strong> put one walk on real elevation, framed either
+      tight or with its whole mountain region around it. And <strong>Terrain 4</strong> opens
+      wide like the second and drops to the first the moment you pick a single route, with an
+      index down the side reaching every trip and every route from either scale &mdash; so
+      changing subject never means zooming out to find something and back in again.
     </p>
     {/* MIND THE LINE BREAKS in the paragraph above, and in the note at the foot
         of this file. Astro drops the whitespace between a text node and an
@@ -218,7 +412,67 @@ const routeHint = (route: MapTrail): string =>
       and they are hidden without JS — a control that cannot control is worse
       than no control.
     */}
-    <div class="panel filters">
+    <div class="panel filters" data-mapglobe-reserve>
+      {/*
+        The `All` tab's own row, and it sits ABOVE the layers rather than beside
+        them because it is a different kind of question: these two chips are the
+        page's own content — where the author went and what they walked — and
+        the five below are the world they sit on. It renders in both globe modes
+        and is hidden by CSS outside `combined`, rather than being a third panel:
+        the layer chips underneath are literally the same chips in both tabs, and
+        a second panel would be a second set of them to keep in step.
+      */}
+      {/*
+        THE VIEW SWITCH, and it is first in the panel because it is the only
+        control here that changes nothing about what is drawn (10 Sep 2026,
+        author's request). The two below it are filters — they add and remove
+        things from the map. This one moves the camera and shades the ground,
+        over whatever those two have left on it.
+
+        A SEGMENTED PILL, not two chips, and that is the whole reason it looks
+        different from everything else in this panel. The chips either side of
+        it are independent toggles, and a row of five outlines with two filled
+        says "any of these, in any combination". These two are an either/or: one
+        control with two positions, which is what a pill draws. Same grammar as
+        the tab row above the frame, at panel scale.
+
+        `role="radiogroup"` for the same reason the route picker has one —
+        exactly one of them is true at a time — and it is `combined`-only, so
+        the group is hidden by CSS outside that tab exactly as the Show row is.
+      */}
+      <div class="panel__group panel__group--combined">
+        <span class="panel__legend" id="mapglobe-view-label">View</span>
+        <div class="panel__seg" role="radiogroup" aria-labelledby="mapglobe-view-label">
+          {MAP_VIEWS.map((item) => (
+            <button
+              type="button"
+              class="panel__seg-opt"
+              role="radio"
+              aria-checked={item === DEFAULT_VIEW}
+              title={VIEW_COPY[item].hint}
+              data-mapglobe-view={item}
+            >
+              {VIEW_COPY[item].name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div class="panel__group panel__group--combined">
+        <span class="panel__legend" id="mapglobe-content-label">Show</span>
+        <div class="panel__row" role="group" aria-labelledby="mapglobe-content-label">
+          {MAP_CONTENT.map((item) => (
+            <button
+              type="button"
+              class="panel__opt"
+              aria-pressed={DEFAULT_CONTENT.includes(item)}
+              title={CONTENT_COPY[item].hint}
+              data-mapglobe-content={item}
+            >
+              {CONTENT_COPY[item].name}
+            </button>
+          ))}
+        </div>
+      </div>
       {/*
         The group is `display: contents`, so its label and its chips are direct
         children of the panel's grid rather than of the group. That is the whole
@@ -237,6 +491,7 @@ const routeHint = (route: MapTrail): string =>
               class="panel__opt"
               aria-pressed={DEFAULT_LAYERS.includes(layer)}
               title={LAYER_COPY[layer].hint}
+              data-mapglobe-hint={LAYER_COPY[layer].hint}
               data-mapglobe-layer={layer}
             >
               {LAYER_COPY[layer].name}
@@ -249,21 +504,53 @@ const routeHint = (route: MapTrail): string =>
     {/*
       The route picker, the same panel in the same corner for terrain mode.
 
-      ONE radiogroup across both rows, not one per row. Exactly one route is on
-      the map at a time, so two independent groups would be a lie about what the
-      controls do; the `Hikes` / `Runs` legends are plain text inside it, and
-      each chip's tooltip carries the place, the date and the distance that a
-      one-word chip cannot.
+      ONE radiogroup across all three rows, not one per row. Exactly one thing
+      is on the map at a time — the overview or a single route — so separate
+      groups would be a lie about what the controls do; the `Show`, `Hikes` and
+      `Runs` legends are plain text inside it, and each chip's tooltip carries
+      the place, the date and the distance a one-word chip cannot.
 
       Radio rather than the toggle chips next door, for the same reason: those
-      five layers are independent and these ten are one choice.
+      five layers are independent and these eleven are one choice.
 
-      `aria-checked` ships on the first route and the script corrects it from
-      storage on load, exactly as the mode switcher does — a static build cannot
-      know which route the visitor last looked at.
+      It is no longer the only way into a route, and that is the point of the
+      9 Sep 2026 change: the overview draws a card on every route, and clicking
+      one does exactly what clicking a chip here does. This is the exhaustive
+      list — every route, always reachable, including the two that sit on top of
+      each other on the map because they start in the same car park.
+
+      `aria-checked` ships on the overview chip and the script corrects all
+      eleven from storage on load, exactly as the mode switcher does — a static
+      build cannot know which route the visitor last looked at.
     */}
     {routes.length > 0 && (
-      <div class="panel routes" role="radiogroup" aria-label="Recorded route">
+      <div class="panel routes" role="radiogroup" aria-label="Recorded route" data-mapglobe-reserve>
+        {/*
+          The way back out, and the state the mode opens in. It belongs in this
+          group rather than beside it: "show me all of them" is one of the
+          answers to "which route", not a different question, and a radiogroup
+          where nothing is checked would be a worse description of a map that is
+          showing something.
+
+          It ships checked because the overview is the default now — the route
+          chips below ship unchecked for the same reason, and the script
+          corrects all eleven from storage on load.
+        */}
+        <div class="panel__group">
+          <span class="panel__legend">Show</span>
+          <div class="panel__row">
+            <button
+              type="button"
+              class="panel__opt"
+              role="radio"
+              aria-checked="true"
+              title="Every route at once, grouped by the place it was walked."
+              data-mapglobe-overview
+            >
+              All routes
+            </button>
+          </div>
+        </div>
         {KINDS.map(
           (kind) =>
             routes.some((route) => route.kind === kind.id) && (
@@ -277,7 +564,7 @@ const routeHint = (route: MapTrail): string =>
                         type="button"
                         class="panel__opt"
                         role="radio"
-                        aria-checked={route.id === routes[0]!.id}
+                        aria-checked="false"
                         title={routeHint(route)}
                         data-mapglobe-trail={route.id}
                       >
@@ -288,6 +575,95 @@ const routeHint = (route: MapTrail): string =>
               </div>
             ),
         )}
+      </div>
+    )}
+
+    {/*
+      THE INDEX RAIL, and it belongs to the `All` tab's three mesh views alone
+      (10 Sep 2026, author's request).
+
+      It answers a specific objection to Terrain 2: at the scale that puts a
+      mountain range in frame, everything else the page has to show is off it,
+      so changing subject meant zooming out to hunt for another card and zooming
+      back in. That is the map being used as a menu. This is the menu.
+
+      Down the RIGHT, where every other control on this map is bottom-left.
+      Two panels on one edge would stack into a wall — and on a phone the lower
+      of the two would be pushed off the frame — while a list this tall cannot
+      share the bottom corner with a grid of chips anyway. It is also the shape
+      the thing wants: an index reads as a column, and the column it reads as
+      is the side of the frame.
+
+      A DISCLOSURE, not a fixture. Nineteen rows is a third of a desktop frame
+      and most of a phone one, and a reader who wants the mountain rather than
+      the list has to be able to say so. It opens by default where there is
+      room and starts shut below 640px; the choice is remembered under
+      `mapglobe-index`. See index.ts.
+
+      Real nested lists rather than a flat run of buttons, because the nesting
+      is the content: three of these walks were taken on the Chengdu trip and
+      one on the Phuket trip, and `walkedOn` derives that from the dates. A
+      screen reader gets "Chengdu, list of 3 items" instead of eleven siblings.
+
+      The route rows carry `data-mapglobe-trail` — the same attribute the picker
+      chips and the map's own cards carry, so the page's one delegated handler
+      serves all three and they cannot drift apart. The trip rows carry
+      `data-mapglobe-place`, which nothing else does: framing a place is what
+      this rail added.
+    */}
+    {indexGroups.length > 0 && (
+      <div class="index" data-mapglobe-index data-mapglobe-reserve>
+        <button
+          type="button"
+          class="index__toggle"
+          aria-expanded="true"
+          aria-controls="mapglobe-index-list"
+          title="Every trip and every route, so changing subject never means zooming out."
+          data-mapglobe-index-toggle
+        >
+          <span>Index</span>
+          <span class="index__mark" aria-hidden="true">&#9662;</span>
+        </button>
+        <ul class="index__list" id="mapglobe-index-list">
+          {indexGroups.map((group) => (
+            <li class="index__group">
+              {group.trip ? (
+                <button
+                  type="button"
+                  class="index__row index__row--place"
+                  title={`${group.name} — the ground it sits on${
+                    group.routes.length
+                      ? `, with the ${group.routes.length} walk${group.routes.length > 1 ? 's' : ''} taken there`
+                      : ''
+                  }.`}
+                  data-mapglobe-place={group.trip.id}
+                >
+                  <span class="index__name">{group.name}</span>
+                  <span class="index__meta">{placeMeta(group)}</span>
+                </button>
+              ) : (
+                <p class="index__legend">{group.name}</p>
+              )}
+              {group.routes.length > 0 && (
+                <ul class="index__nest">
+                  {group.routes.map((route) => (
+                    <li>
+                      <button
+                        type="button"
+                        class="index__row index__row--route"
+                        title={routeHint(route)}
+                        data-mapglobe-trail={route.id}
+                      >
+                        <span class="index__name">{route.label}</span>
+                        <span class="index__meta">{route.km.toFixed(1)} km</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
     )}
 
@@ -341,6 +717,19 @@ const routeHint = (route: MapTrail): string =>
       request. Under 4 KB for all ten, and it saves the script a round trip
       before it can draw the one terrain mode opens on. */}
   <script id="mapglobe-trails" type="application/json" set:html={JSON.stringify(routes)} is:inline />
+
+  {/* And which routes were walked on which trip — four pairings, about 200
+      bytes. The engine needs it to know what a trip's terrain view has to
+      frame: Chengdu's three walks are 100 km from the city footprint, so
+      fitting the footprint alone leaves the mountains off the frame. Passed as
+      data rather than recomputed in the browser, because the dates it is
+      derived from are in the content collection and never reach the client. */}
+  <script
+    id="mapglobe-walked-on"
+    type="application/json"
+    set:html={JSON.stringify(walkedOn)}
+    is:inline
+  />
 </section>
 
 <style>
@@ -413,9 +802,22 @@ const routeHint = (route: MapTrail): string =>
      a chip is a chip, and the routes panel appearing in a different corner or a
      different size from the filters panel would read as a different kind of
      thing when it is the same kind of thing. */
+  /* BOTTOM-left, not top-left (10 Sep 2026, author's request). The panel used
+     to sit in the top corner, where it covered the part of the frame the camera
+     is aimed at: every fit in this engine frames its subject near the middle
+     and hangs each card ABOVE its anchor, so the top-left corner is where the
+     labels go. Down here it overlaps the foreground instead — which under the
+     pitched views is the near hillside, the one part of the frame with nothing
+     on it that has to be read.
+
+     Nothing else needed changing for the move, and that is worth knowing rather
+     than luck: `framePadding` already branched on which half of the frame a
+     reserved box sits in, and `declutter` reserves the panel by measuring its
+     rect. Both follow the panel wherever it is put. */
   :global(html.js) [data-mode='explore'][data-state='ready'] .filters,
+  :global(html.js) [data-mode='combined'][data-state='ready'] .filters,
   :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
-    @apply absolute top-3 left-3 z-10 grid items-baseline gap-x-2.5 gap-y-1.5;
+    @apply absolute bottom-3 left-3 z-10 grid items-baseline gap-x-2.5 gap-y-1.5;
     @apply rounded-lg border border-line p-2.5;
     grid-template-columns: auto 1fr;
     max-width: min(32rem, calc(100% - 1.5rem));
@@ -439,12 +841,72 @@ const routeHint = (route: MapTrail): string =>
     display: contents;
   }
 
+  /* `display: none` rather than a second panel, and it has to beat the
+     `contents` above it — same specificity, so it comes after. `none` on a
+     `contents` box removes the subtree, which `contents` alone cannot do.
+
+     Named for the TAB, not for one of the groups it hides. It gated the Show
+     row alone until the View switch joined it (10 Sep 2026), and both belong to
+     `combined` for the same reason: `explore` draws only trips and only flat,
+     so neither control has a second position there. */
+  .panel__group--combined {
+    display: none;
+  }
+
+  [data-mode='combined'] .panel__group--combined {
+    display: contents;
+  }
+
   .panel__row {
     @apply flex flex-wrap gap-1;
   }
 
   .panel__legend {
     @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  /* The view switch: one control with two positions, drawn as a pill, against
+     the independent toggles either side of it drawn as separate outlines. The
+     shape is the signal — see the note in the markup — and it is deliberately
+     the same shape as the tab row above the frame, scaled to the panel.
+
+     `fit-content` so the pill is as wide as its two words rather than
+     stretching across the panel's second column, which would make it look like
+     a row of chips that had merged.
+
+     WRITTEN OUT RATHER THAN AS THE EQUIVALENT TAILWIND UTILITY, and there are
+     two separate reasons, the second of which is a trap. First: `@apply` inside
+     a scoped Astro block still emits the utility's definition into the SHARED
+     stylesheet, on all 25 pages, even though the rule using it is page-scoped —
+     so a utility nothing else on the site references costs every page. Second,
+     and this is the part that wasted a measurement: Tailwind v4 scans source
+     TEXT, so naming that utility in a comment is enough to emit it. The comment
+     explaining the removal kept it alive. Do not write the class name here. */
+  /* WRAPS BETWEEN OPTIONS, NEVER INSIDE ONE (10 Sep 2026, when Terrain 4 made
+     it five). At 390px five labels do not fit on one line, and left to itself
+     each one broke into "TERRAIN" over "4" — five two-line options, which is no
+     shorter than two rows and much harder to read. Wrapping between them keeps
+     every label intact; the shared outline is what still says it is one
+     control. One line at every width from 640px up. */
+  .panel__seg {
+    @apply flex flex-wrap gap-0.5 rounded-full border border-line p-0.5;
+    width: fit-content;
+  }
+
+  .panel__seg-opt {
+    @apply cursor-pointer rounded-full px-2 py-0.5 whitespace-nowrap transition-colors;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-faint uppercase;
+    @apply hover:text-accent;
+  }
+
+  /* Filled, like a selected chip — the two controls disagree about their shape
+     and must agree about what "on" looks like. */
+  .panel__seg-opt[aria-checked='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .panel__seg-opt:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
   }
 
   .panel__opt {
@@ -466,6 +928,156 @@ const routeHint = (route: MapTrail): string =>
     @apply outline-2 outline-offset-2 outline-accent;
   }
 
+  /* The Relief chip while the `All` tab's Terrain view is up. It reads as on,
+     because the relief IS on, and it cannot be pressed, because the view owns
+     it — see markLayers in index.ts for why disabling beats leaving a toggle
+     that changes the stored set and nothing on the map.
+
+     A dashed border rather than a fade: the chip has to keep reading as ON, and
+     the usual way to show a disabled control is to lower its contrast, which
+     here would make an active layer look inactive. Dashed says "not yours to
+     press" without saying "off". `cursor: default` and no hover, so nothing
+     about it invites the click. */
+  .panel__opt:disabled {
+    @apply border-dashed border-line-strong bg-surface-2 text-fg;
+    cursor: default;
+  }
+
+  .panel__opt:disabled:hover {
+    @apply text-fg;
+  }
+
+  /* ---- the index rail ---------------------------------------------------- *
+     Same materials as the panels — the translucent `bg` wash, the hairline, the
+     blur, the mono micro-caps — because it is the same kind of thing sitting on
+     the same map. What differs is the shape, and the shape is the signal: the
+     panels are grids of chips that change what is drawn, this is a column of
+     proper nouns that changes where the camera is.
+
+     Inert without JS and only once the map is drawn, the same two gates every
+     control here is behind. `data-mesh-view` is written by index.ts and is true
+     for exactly the three views that attach the terrain mesh — the ones where
+     the frame holds one place and the rest of the collection is off it.
+
+     `max-height` rather than `bottom: 0.75rem`: a rail stretched to the full
+     height of the frame with eight rows in it is mostly empty, and it would
+     reserve that emptiness from the camera fit as well. As tall as its content,
+     up to the frame.
+     ---------------------------------------------------------------------- */
+  .index {
+    @apply hidden;
+  }
+
+  :global(html.js) [data-mesh-view='true'][data-state='ready'] .index {
+    @apply absolute top-3 right-3 z-10 flex flex-col;
+    @apply rounded-lg border border-line p-1.5;
+    width: 11.5rem;
+    max-height: calc(100% - 1.5rem);
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .index__toggle {
+    @apply flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded px-1.5 py-1;
+    @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  .index__toggle:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* Points down at an open list and along at a shut one, which is the one
+     convention a disclosure triangle has. */
+  .index__mark {
+    @apply text-[0.7rem] leading-none transition-transform;
+  }
+
+  .index__toggle[aria-expanded='false'] .index__mark {
+    transform: rotate(-90deg);
+  }
+
+  /* The scroll lives on the LIST, not on the rail, so the toggle stays put
+     while the rows move under it — a header that scrolls away is a header the
+     reader cannot use to shut the thing. `overscroll-behavior` stops a flick
+     that runs off the end from carrying on into the page, the same as the
+     routes panel. */
+  .index__list {
+    @apply mt-0.5 flex flex-col gap-0.5 overflow-y-auto;
+    overscroll-behavior: contain;
+  }
+
+  /* `display: flex` above beats the `hidden` attribute's UA `display: none`, so
+     the collapsed rail would render open. This is the line that makes the
+     toggle work at all, and it fails silently without it. */
+  .index__list[hidden] {
+    display: none;
+  }
+
+  .index__group,
+  .index__nest li {
+    @apply flex flex-col;
+  }
+
+  /* A rule down the left of the nested routes, which is what says they belong
+     to the trip above rather than merely following it. Cheaper than an indent
+     alone at this width: 11.5rem does not have many pixels to give away. */
+  .index__nest {
+    @apply ml-2 flex flex-col border-l border-line pl-1;
+  }
+
+  .index__row {
+    @apply flex w-full cursor-pointer flex-col items-start rounded px-1.5 py-1 text-left;
+    @apply transition-colors;
+  }
+
+  .index__row:hover {
+    @apply bg-surface-2;
+  }
+
+  .index__row:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* `fg-meta` and above throughout, never `fg-faint` — it is 2.31:1 on a chip
+     in Classic, a known fault in the original palette, and it is already
+     straining on the routes panel's ten proper nouns. Nineteen rows of them is
+     where it would stop being legible. */
+  .index__name {
+    @apply text-[0.68rem] leading-tight font-medium text-fg-body;
+  }
+
+  .index__meta {
+    @apply font-mono text-[0.55rem] tracking-[0.06em] text-fg-meta uppercase;
+  }
+
+  /* A trip outranks the walks nested under it by weight and one colour step —
+     the same relationship the trip cards and the route cards have on the map
+     itself, for the same reason: the trip is what the page is about and the
+     route is a detail of it. */
+  .index__row--place .index__name {
+    @apply text-[0.72rem] font-semibold text-fg;
+  }
+
+  /* The one group that is not a trip. A label rather than a button, because
+     there is no place to fly to: it is the six routes that fall inside no trip
+     at all, and each of them is its own row. */
+  .index__legend {
+    @apply px-1.5 py-1 font-mono text-[0.58rem] tracking-[0.12em] text-fg-meta uppercase;
+  }
+
+  /* `aria-current`, NOT `aria-checked`. These are not options in the route
+     picker's radiogroup — see markTrails in index.ts, which is scoped to
+     `[role='radio']` for exactly this reason — they are places in an index, and
+     the one the camera is on is the current one. */
+  .index__row[aria-current='true'] {
+    @apply bg-surface-2;
+  }
+
+  .index__row[aria-current='true'] .index__name {
+    @apply text-accent;
+  }
+
   /* The frame is short on a phone, so the panel gives back everything it can:
      tighter padding, smaller type, and the label column collapses — 45px of
      fixed width is worth more as a chip than as the word "Layers" when the
@@ -473,14 +1085,28 @@ const routeHint = (route: MapTrail): string =>
      still aligned, just vertically. */
   @media (max-width: 639px) {
     :global(html.js) [data-mode='explore'][data-state='ready'] .filters,
+    :global(html.js) [data-mode='combined'][data-state='ready'] .filters,
     :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
-      @apply top-2 left-2 gap-x-0 gap-y-1 p-2;
+      @apply bottom-2 left-2 gap-x-0 gap-y-1 p-2;
       grid-template-columns: 1fr;
       max-width: calc(100% - 1rem);
     }
 
     :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {
       max-height: calc(100% - 1rem);
+    }
+
+    /* Narrower and shorter, and it starts SHUT here — see storedIndex in
+       index.ts. Half the height rather than all of it, so the rail and the
+       filters panel below it are never the whole frame between them. */
+    :global(html.js) [data-mesh-view='true'][data-state='ready'] .index {
+      @apply top-2 right-2 p-1;
+      width: 9.5rem;
+      max-height: 50%;
+    }
+
+    .index__name {
+      @apply text-[0.64rem];
     }
 
     .panel__legend {
@@ -535,8 +1161,23 @@ const routeHint = (route: MapTrail): string =>
     backdrop-filter: blur(4px);
   }
 
+  /* The same card as a control. Trip cards are links; the trails overview
+     builds its route and area cards as <button>, and two of Tailwind v4's
+     preflight defaults have to be undone for them: a button centres its text,
+     and in v4 it no longer takes `cursor: pointer` on its own. */
+  .mapglobe__frame :global(button.mapglobe__label) {
+    @apply cursor-pointer text-left;
+  }
+
   .mapglobe__frame :global(.mapglobe__label:hover) {
     @apply border-accent;
+  }
+
+  /* These are the only labels on the map that can be tabbed to — a hidden one
+     is `visibility: hidden`, which takes it out of the tab order with it, so
+     the ring can never appear on a card the reader cannot see. */
+  .mapglobe__frame :global(.mapglobe__label:focus-visible) {
+    @apply outline-2 outline-offset-2 outline-accent;
   }
 
   .mapglobe__frame :global(.mapglobe__label-name) {
@@ -719,8 +1360,18 @@ const routeHint = (route: MapTrail): string =>
      used to hold the readout at one end and the buttons at the other is now
      just a margin. Kept as its own rule rather than folded into the readout:
      the readout is styled as text, this is where the block sits. */
+  /* The readout is Trails' own line — it names the route on the map, or what the
+     collection adds up to — so it is hidden in the two globe tabs rather than
+     sitting under them saying "No track loaded" about a map with no track in
+     it. Hidden without JS too, for the same reason the legend is: nothing can
+     ever write to it then. Errors are still seen, because every path that
+     writes one has already switched the mode to `terrain`. */
   .mapglobe__foot {
-    @apply mt-3;
+    @apply hidden;
+  }
+
+  [data-mode='terrain'] .mapglobe__foot {
+    @apply mt-3 block;
   }
 
   /* Matches the frame's breakout so the readout and the buttons sit at its
@@ -755,7 +1406,8 @@ const routeHint = (route: MapTrail): string =>
     @apply hidden;
   }
 
-  [data-mode='explore'] .mapglobe__legend {
+  [data-mode='explore'] .mapglobe__legend,
+  [data-mode='combined'] .mapglobe__legend {
     @apply mt-3 block max-w-2xl text-sm text-fg-meta;
   }
 

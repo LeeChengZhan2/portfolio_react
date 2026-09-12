@@ -1,0 +1,1414 @@
+---
+/**
+ * A THIRD section on /about/travel-preview, and the only one that is not an
+ * earth: three proposals for how the MapLibre section above should be
+ * navigated, drawn as chrome over four schematic SVGs.
+ *
+ * WHY IT IS A DIAGRAM AND NOT A MAP. The question on the table is not how the
+ * world should be rendered — the two sections above exist to settle that — it
+ * is what the reader has to do to get from "eight places" to "this ridge, on
+ * the day I walked it". Building three working earths to compare three
+ * navigation models would take a week and would put the rendering back in
+ * front of the question. Four SVGs and a state machine take an afternoon and
+ * put nothing in front of it. The schematics are deliberately abstract for the
+ * same reason: nobody should be judging the coastline here.
+ *
+ * WHAT IS WRONG WITH THE SECTION ABOVE, which is what this is answering:
+ *
+ *   1. Two of its three tabs are the same map. `All` with its Trails chip off
+ *      IS `Trips`, so the row asks the reader to choose between a set and a
+ *      subset of it, and the thing that separates them is a chip that lives
+ *      inside one of the two.
+ *   2. Depth is spelled as a mode. World, then an area, then one route is a
+ *      ZOOM, and it is being driven by a control whose whole meaning is
+ *      "switch to a different thing".
+ *   3. The row and the map disagree about who is steering. Clicking a route
+ *      card moves the selected tab under the reader; clicking a group card
+ *      does not. Two cards that look identical do two different kinds of thing.
+ *   4. The panel changes identity in place — same corner, same styling, five
+ *      independent toggles in one tab and an eleven-item single choice in
+ *      another, with nothing marking the swap.
+ *   5. The route picker is an index dressed as a filter: eleven proper nouns,
+ *      in `fg-faint`, which this repo already measures at 2.31:1 in Classic.
+ *   6. There is no way back. From a route at z13 the exits are the tab row and
+ *      a chip in a scrolling list; the map itself offers none.
+ *   7. The readout exists in one tab out of three, so two thirds of the time
+ *      nothing says what is on screen or what was just clicked.
+ *
+ * Throwaway, like everything else on this route. When a model is chosen this
+ * file, its script and the whole preview page go.
+ */
+import type { MapTrail, MapTrip } from '../../scripts/mapglobe/engine';
+/* The real manifest, read at build time. Every figure printed in the mock-up is
+   summed from it rather than typed in, so a route added to the manifest moves
+   the numbers in the diagram too — the same discipline the section above keeps
+   between its readout and scripts/build-trails.mjs. A mock-up quoting stale
+   figures is a mock-up nobody trusts the rest of. */
+import trails from '../../data/trails.json';
+
+interface Props {
+  trips: MapTrip[];
+}
+
+const { trips } = Astro.props;
+const routes = trails as MapTrail[];
+
+const km = (list: MapTrail[]): string =>
+  list.reduce((total, route) => total + route.km, 0).toFixed(1);
+const ascent = (list: MapTrail[]): string =>
+  list.reduce((total, route) => total + (route.ascent ?? 0), 0).toLocaleString();
+
+/**
+ * Which trip each route was walked on.
+ *
+ * Hardcoded, and it is the one piece of data in this file that is not derived —
+ * which is itself part of the argument. The relationship is real: the three
+ * Changping legs fall inside the Chengdu trip and Cape Krathing inside Phuket,
+ * as anyone can see by putting the dates side by side. NOTHING IN THE SITE
+ * KNOWS IT. The trips and trails.json are two flat lists that never mention
+ * each other, so the only place a reader can currently discover it is a merged
+ * card on the globe that happens to name both.
+ *
+ * The index proposal below is the one that makes it visible, and if that
+ * proposal wins, this table is the thing that has to stop being a table: the
+ * real version derives it from a route's date falling inside a trip's range,
+ * which is a lib/content.ts function and a build-time check, not a map.
+ */
+const WALKED_ON: Record<string, string> = {
+  'muluozi-lamasi-changping-valley-chuanxi-china-hike': 'chengdu',
+  'muluozi-wuguishi-changping-valley-chuanxi-china-hike': 'chengdu',
+  'lamasi-muluozi-changping-valley-chuanxi-china-hike': 'chengdu',
+  'cape-krating-phuket-thailand-evening-hike': 'phuket',
+};
+
+const johor = routes.filter((route) => route.place.includes('Johor'));
+const changping = routes.filter((route) => route.place.includes('Changping'));
+
+/**
+ * The rail's contents for the index proposal: every trip, newest first, with
+ * the routes walked on it underneath, then the routes that belong to no trip.
+ *
+ * `trips` arrives in the page's own order, which getTrips() has already sorted
+ * newest first — the same order the timeline above the earths reads down.
+ * Re-sorting here would be a second opinion about chronology.
+ */
+const rail = trips.map((trip) => ({
+  trip,
+  walks: routes.filter((route) => WALKED_ON[route.id] === trip.id),
+}));
+
+/**
+ * The three proposals, in switcher order — cheapest change last.
+ *
+ * `drill` first because it is the recommendation, and the row is read left to
+ * right. `twin` last because it is the one that keeps the most of what is
+ * already built, which makes it the fallback rather than the opening bid.
+ */
+const PROPOSALS = [
+  {
+    id: 'drill',
+    name: 'Drill down',
+    hint: 'No tabs at all. One map, and a breadcrumb that says how deep you are.',
+  },
+  {
+    id: 'index',
+    name: 'Map & index',
+    hint: 'One map with a permanent contents list beside it. The list is the navigation.',
+  },
+  {
+    id: 'twin',
+    name: 'Two views',
+    hint: 'Your own instinct, tidied: drop Trips, keep All and Trails, add a way back.',
+  },
+] as const;
+
+/* The five world layers, exactly as the section above names them — the mock-up
+   is not proposing to change what they draw, only where the control for them
+   lives, so re-labelling them here would be noise in the comparison. */
+const LAYERS = ['Countries', 'Cities', 'Relief', 'Peaks', 'Rivers & lakes'];
+
+/**
+ * The cards on the world diagram, positioned as a percentage of the schematic's
+ * own box rather than of the frame.
+ *
+ * That distinction is load-bearing: the SVG is letterboxed inside a wide frame,
+ * so a card placed against the frame drifts off its dot the moment the viewport
+ * changes shape. The schematic and the cards share one aspect-locked box, which
+ * is the same problem MapLibre solves with project() and the same answer.
+ *
+ * The two merged names are the ones the engine actually produces today — see
+ * "Cards merge instead of disappearing" in CLAUDE.md — because the mock-up is
+ * arguing about navigation, not about decluttering, and quietly un-merging them
+ * would be arguing about both.
+ *
+ * `drop` marks the four that come off below 640px. A card is a fixed number of
+ * PIXELS wide whatever the box is, so eight of them that sit clear of each
+ * other on a 682px schematic are a pile on a 358px one — which is the same
+ * arithmetic the real engine answers with decluttering, and dropping the four
+ * plainest names is the same answer at mock-up scale. The two merged cards are
+ * never dropped: they carry the most information per pixel on the map, and
+ * they are the ones this section is arguing about.
+ */
+const WORLD_CARDS = [
+  { name: 'Tokyo', sub: '2026', x: 70, y: 30, drop: true },
+  { name: 'Chengdu & Changping Valley', sub: '1 trip · 3 routes', x: 38, y: 32, drop: false },
+  { name: 'Shanghai', sub: '2024', x: 60, y: 36, drop: true },
+  { name: 'Guangzhou & Shenzhen', sub: '2024', x: 48, y: 48, drop: false },
+  { name: 'Taichung & Taipei', sub: '2025', x: 69, y: 48, drop: true },
+  { name: 'Bangkok · Phuket · Cape Krathing', sub: '2 trips · 1 route', x: 40, y: 64, drop: false },
+  { name: 'Johor', sub: '6 routes', x: 47, y: 80, drop: false },
+  { name: 'Bali', sub: '2025', x: 62, y: 71, drop: true },
+];
+
+/* The three groups the current Trails overview draws — the level that only the
+   twin proposal has, and the level the other two argue is redundant. */
+const ROUTE_CARDS = [
+  { name: 'Johor', sub: `${johor.length} routes`, x: 32, y: 80 },
+  { name: 'Changping Valley', sub: `${changping.length} routes`, x: 64, y: 50 },
+  { name: 'Cape Krathing', sub: '3.8 km', x: 77, y: 86 },
+];
+
+/* Six routes in one corner of Johor. Positions match the polylines drawn in the
+   area schematic below — move one and move the other. */
+const AREA_CARDS = [
+  { name: 'Belumut', sub: '14.5 km', x: 76, y: 22 },
+  { name: 'Lambak', sub: '5.4 km', x: 62, y: 42 },
+  { name: 'Pulai', sub: '10.2 km', x: 30, y: 54 },
+  { name: 'Kulai', sub: '21.3 km', x: 45, y: 68 },
+  { name: 'Dato Onn', sub: '21.2 km', x: 27, y: 78 },
+  { name: 'Iskandar City', sub: '20.7 km', x: 20, y: 90 },
+];
+---
+
+<section class="uxp" data-uxp data-proposal="drill" data-level="world" data-panel="none" aria-labelledby="uxp-heading">
+  <div class="uxp__head">
+    <p class="uxp__eyebrow">The interaction &middot; three proposals</p>
+    <h2 id="uxp-heading" class="uxp__title">Not three tabs &mdash; one map, four depths</h2>
+    <p class="uxp__intro">
+      Everything above this line is about how the earth should <em>look</em>. This is about what
+      you have to do to get from &ldquo;eight places&rdquo; to &ldquo;this ridge, on the day I
+      walked it&rdquo;, and it is a separate question with a separate answer. The diagrams below
+      are deliberately schematic &mdash; there is no MapLibre in this section and no geometry, so
+      that nothing here can be judged on its coastline. What is real is the chrome: every
+      breadcrumb, chip, rail and card is drawn at the size and in the colours it would ship at,
+      and all of them are clickable. Pick a proposal, then click into the map.
+    </p>
+  </div>
+
+  {/* MIND THE LINE BREAKS, as in MapGlobeStage: Astro drops the whitespace
+      between a text node and an inline tag that opens the next line, so an
+      opening <strong> must stay on the same line as the words before it. */}
+  <details class="uxp__why">
+    <summary class="uxp__why-summary">Why the three tabs do not work &mdash; seven specifics</summary>
+    <ol class="uxp__why-list">
+      <li>
+        <strong>Two of the three tabs are the same map.</strong> <code>All</code> with its Trails
+        chip switched off <em>is</em> <code>Trips</code>. The row asks you to choose between a set
+        and a subset of it, and the only thing separating them is a chip that lives inside one of
+        the two.
+      </li>
+      <li>
+        <strong>Depth is spelled as a mode.</strong> World, then an area, then one route is a
+        zoom. It is being driven by a control whose entire meaning is &ldquo;switch to a different
+        thing&rdquo;.
+      </li>
+      <li>
+        <strong>The row and the map disagree about who is steering.</strong> Clicking a route card
+        moves the selected tab under you; clicking a group card does not. Two cards that look
+        identical do two different kinds of thing.
+      </li>
+      <li>
+        <strong>The panel changes identity in place.</strong> Same corner, same styling: five
+        independent toggles in one tab, an eleven-item single choice in another. Nothing marks the
+        swap, so the control you learnt is not the control that is there.
+      </li>
+      <li>
+        <strong>The route picker is an index dressed as a filter.</strong> Eleven proper nouns
+        most readers have never heard, set in <code>fg-faint</code> &mdash; which this repo
+        already measures at 2.31:1 in Classic and files as a known fault.
+      </li>
+      <li>
+        <strong>There is no way back.</strong> From a route at z13 the exits are the tab row and a
+        chip in a scrolling list. The map itself offers none, and the map is where you are looking.
+      </li>
+      <li>
+        <strong>The readout exists in one tab out of three.</strong> So two thirds of the time
+        nothing says what is on screen, what you just clicked, or what it adds up to.
+      </li>
+    </ol>
+    <p class="uxp__why-note">
+      Six of the seven are the same fault wearing different clothes: <strong>the tab row is
+      describing an axis the data does not have.</strong> There is one map and four depths &mdash;
+      the world, the routes, an area, a route &mdash; and every proposal below is a different
+      answer to &ldquo;what should move you between them&rdquo;.
+    </p>
+  </details>
+
+  <div class="uxp__switch" role="radiogroup" aria-label="Proposal">
+    {PROPOSALS.map((proposal) => (
+      <button
+        type="button"
+        class="uxp__switch-opt"
+        role="radio"
+        aria-checked={proposal.id === 'drill'}
+        title={proposal.hint}
+        data-uxp-proposal={proposal.id}
+      >
+        {proposal.name}
+      </button>
+    ))}
+  </div>
+
+  <div class="uxp__frame">
+    {/*
+      The schematics and the cards share ONE aspect-locked box, and that is not
+      an implementation detail. An SVG set to fill a wide frame is letterboxed,
+      so a card positioned against the frame slides off the dot it names as soon
+      as the viewport changes shape. Locking both to the same 4:3 box is the
+      cheap equivalent of what MapLibre's project() does for a real marker.
+    */}
+    <div class="uxp__map">
+      {/* ---- the world, everything on it ---- */}
+      <svg class="uxp__svg" data-uxp-for="world" viewBox="0 0 400 300" aria-hidden="true">
+        <defs>
+          <clipPath id="uxp-sphere"><circle cx="200" cy="150" r="128" /></clipPath>
+        </defs>
+        <circle class="uxp-sea" cx="200" cy="150" r="128" />
+        <g clip-path="url(#uxp-sphere)">
+          <g class="uxp-land">
+            <path d="M 104 92 C 118 70, 152 58, 190 62 C 224 66, 254 76, 264 92 C 270 102, 262 110, 250 114 C 240 117, 236 126, 224 130 C 214 133, 206 128, 196 130 C 186 132, 182 142, 172 142 C 160 142, 152 134, 140 130 C 124 125, 96 110, 104 92 Z" />
+            <path d="M 140 132 C 150 132, 160 136, 162 146 C 164 158, 154 172, 148 176 C 142 172, 134 158, 134 146 C 134 138, 136 133, 140 132 Z" />
+            <path d="M 182 140 C 190 140, 196 146, 196 156 C 196 168, 190 180, 186 186 C 182 180, 176 166, 176 154 C 176 146, 178 141, 182 140 Z" />
+            <path d="M 268 84 C 274 88, 280 100, 284 112 C 286 120, 282 124, 278 120 C 272 112, 266 96, 264 88 C 263 84, 265 82, 268 84 Z" />
+            <path d="M 196 184 C 214 178, 240 182, 248 192 C 252 198, 244 204, 230 206 C 212 208, 194 202, 192 194 C 191 189, 193 185, 196 184 Z" />
+            <path d="M 250 216 C 268 210, 296 214, 304 228 C 310 239, 296 252, 278 252 C 260 252, 246 242, 244 230 C 243 222, 246 217, 250 216 Z" />
+          </g>
+          <g class="uxp-grat" stroke-width="0.5" fill="none" opacity="0.3">
+            <ellipse cx="200" cy="150" rx="43" ry="128" />
+            <ellipse cx="200" cy="150" rx="86" ry="128" />
+            <ellipse cx="200" cy="150" rx="128" ry="44" />
+            <ellipse cx="200" cy="150" rx="128" ry="86" />
+            <line x1="72" y1="150" x2="328" y2="150" />
+            <line x1="200" y1="22" x2="200" y2="278" />
+          </g>
+        </g>
+        <circle class="uxp-rim" cx="200" cy="150" r="128" fill="none" stroke-width="0.75" opacity="0.45" />
+        {/* The eight footprints, at full accent — the only thing on this globe
+            that is about the site rather than about the world. */}
+        <g class="uxp-mark">
+          <circle cx="280" cy="90" r="3.6" />
+          <circle cx="152" cy="96" r="3.6" />
+          <circle cx="240" cy="108" r="3.6" />
+          <circle cx="192" cy="144" r="3.6" />
+          <circle cx="276" cy="144" r="3.6" />
+          <circle cx="160" cy="192" r="3.6" />
+          <circle cx="188" cy="240" r="3.6" />
+          <circle cx="248" cy="213" r="3.6" />
+        </g>
+        {/* No route lines here, deliberately. A 14 km walk at this scale is a
+            sub-pixel speck; drawn as a mark it reads as a stray glyph rather
+            than as a walk, which is exactly how it looked when it was tried.
+            The footprints say where the page has been and the cards name the
+            route groups — the lines start at the area depth, where they are
+            long enough to be lines. */}
+      </svg>
+
+      {/* ---- the ten routes, grouped: the level only the twin has ---- */}
+      <svg class="uxp__svg" data-uxp-for="routes" viewBox="0 0 400 300" aria-hidden="true">
+        <rect class="uxp-sea" width="400" height="300" />
+        <path d="M 0 120 C 60 104, 120 118, 176 108 C 232 98, 286 116, 340 106 C 366 101, 386 108, 400 104 L 400 300 L 0 300 Z" class="uxp-land" />
+        <path d="M 0 172 C 52 150, 104 178, 156 156 C 208 134, 258 172, 310 154 C 344 142, 376 158, 400 150 L 400 300 L 0 300 Z" class="uxp-ridge" />
+        <path d="M 0 232 C 64 210, 128 240, 192 220 C 256 200, 312 236, 368 220 C 384 215, 394 220, 400 218 L 400 300 L 0 300 Z" class="uxp-ridge2" />
+        <g class="uxp-track" fill="none" stroke-width="2" stroke-linecap="round">
+          <path d="M 96 250 c 12 -8, 24 4, 34 -6 c 10 -8, 22 2, 30 -8" />
+          <path d="M 226 156 c 10 -10, 22 2, 32 -8 c 8 -8, 18 0, 26 -6" />
+          <path d="M 296 262 c 8 -6, 18 2, 24 -6" />
+        </g>
+      </svg>
+
+      {/* ---- one area: six routes in a corner of Johor ---- */}
+      <svg class="uxp__svg" data-uxp-for="area" viewBox="0 0 400 300" aria-hidden="true">
+        <rect class="uxp-sea" width="400" height="300" />
+        <path d="M -10 -10 L 410 -10 L 410 140 C 380 160, 348 166, 318 182 C 290 196, 274 220, 244 232 C 212 245, 174 240, 144 252 C 116 263, 94 284, 58 292 C 34 297, 8 300, -10 300 Z" class="uxp-land" />
+        <path d="M 410 140 C 380 160, 348 166, 318 182 C 290 196, 274 220, 244 232 C 212 245, 174 240, 144 252 C 116 263, 94 284, 58 292 C 34 297, 8 300, -10 300" class="uxp-rim" fill="none" stroke-width="1" opacity="0.5" />
+        {/* Six routes. Each starts at a filled dot and ends at a ring — the same
+            grammar the real terrain view uses, and the only thing that tells a
+            loop from an out-and-back. */}
+        <g class="uxp-track" fill="none" stroke-width="2" stroke-linecap="round">
+          <path d="M 288 82 c 10 -12, 26 -4, 32 -16 c 6 -12, 20 -10, 28 -20" />
+          <path d="M 236 138 c 8 -10, 20 -2, 26 -12" />
+          <path d="M 172 210 c 14 -6, 20 -20, 34 -24 c 12 -4, 18 -14, 30 -16" />
+          <path d="M 116 184 c 10 -10, 24 -2, 32 -12 c 6 -8, 16 -8, 22 -14" />
+          <path d="M 96 240 c 16 -4, 22 -18, 38 -22 c 12 -4, 16 -14, 28 -16" />
+          <path d="M 62 278 c 14 -6, 18 -18, 32 -24 c 12 -6, 16 -16, 28 -20" />
+        </g>
+        <g class="uxp-mark">
+          <circle cx="288" cy="82" r="3.4" /><circle cx="236" cy="138" r="3.4" />
+          <circle cx="172" cy="210" r="3.4" /><circle cx="116" cy="184" r="3.4" />
+          <circle cx="96" cy="240" r="3.4" /><circle cx="62" cy="278" r="3.4" />
+        </g>
+      </svg>
+
+      {/* ---- one route, on real elevation ---- */}
+      <svg class="uxp__svg" data-uxp-for="route" viewBox="0 0 400 300" aria-hidden="true">
+        <rect class="uxp-sea" width="400" height="300" />
+        <path d="M 0 96 C 54 62, 104 96, 158 70 C 212 44, 262 82, 316 62 C 350 49, 378 66, 400 58 L 400 300 L 0 300 Z" class="uxp-land" />
+        <path d="M 0 158 C 46 124, 98 162, 148 132 C 198 102, 250 146, 300 122 C 340 103, 374 126, 400 116 L 400 300 L 0 300 Z" class="uxp-ridge" />
+        <path d="M 0 232 C 56 196, 116 244, 176 210 C 236 176, 292 228, 348 202 C 372 191, 388 202, 400 198 L 400 300 L 0 300 Z" class="uxp-ridge2" />
+        <path d="M 66 268 c 24 -14, 34 -40, 60 -52 c 26 -12, 38 -36, 66 -46 c 26 -10, 40 -30, 66 -38 c 20 -6, 32 -18, 48 -22" class="uxp-track" fill="none" stroke-width="2.6" stroke-linecap="round" />
+        <circle class="uxp-start" cx="66" cy="268" r="5" stroke-width="1.6" />
+        <circle class="uxp-end" cx="306" cy="110" r="4.6" fill="none" stroke-width="2.6" />
+      </svg>
+
+      {/*
+        The cards. One set per depth, shown by the same `data-level` every other
+        rule keys off — so a card is never in the DOM at a depth it does not
+        belong to, and a card the reader cannot see can never be tabbed to.
+
+        Every one of them is a real button that goes somewhere, which is the
+        claim all three proposals share and the one thing they must all
+        demonstrate: on the map, the thing you want to look at is the control
+        for looking at it.
+      */}
+      <div class="uxp__cards" data-uxp-cards="world">
+        {WORLD_CARDS.map((card) => (
+          <button
+            type="button"
+            class="uxp__card"
+            style={`--x:${card.x}%;--y:${card.y}%`}
+            data-uxp-level="area"
+            data-uxp-drop={card.drop ? '' : undefined}
+          >
+            <span class="uxp__card-name">{card.name}</span>
+            <span class="uxp__card-sub">{card.sub}</span>
+          </button>
+        ))}
+      </div>
+
+      <div class="uxp__cards" data-uxp-cards="routes">
+        {ROUTE_CARDS.map((card) => (
+          <button
+            type="button"
+            class="uxp__card"
+            style={`--x:${card.x}%;--y:${card.y}%`}
+            data-uxp-level="area"
+          >
+            <span class="uxp__card-name">{card.name}</span>
+            <span class="uxp__card-sub">{card.sub}</span>
+          </button>
+        ))}
+      </div>
+
+      <div class="uxp__cards" data-uxp-cards="area">
+        {AREA_CARDS.map((card) => (
+          <button
+            type="button"
+            class="uxp__card"
+            style={`--x:${card.x}%;--y:${card.y}%`}
+            data-uxp-level="route"
+          >
+            <span class="uxp__card-name">{card.name}</span>
+            <span class="uxp__card-sub">{card.sub}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/*
+      ---- proposal 1: the breadcrumb ----
+
+      It replaces the tab row entirely and does two jobs the row cannot: it says
+      how deep you are, and every crumb is the way back out of that depth. The
+      current section has neither, which is fault 2 and fault 6 answered by one
+      control that is smaller than the thing it replaces.
+
+      The crumbs are buttons in a nav, not a radiogroup. A breadcrumb is not a
+      choice between peers — "Earth" and "Pulai" are not two options, they are
+      two depths — and marking them `role="radio"` would say they were.
+    */}
+    {/*
+      THE SEPARATOR IS A ::before ON EACH CRUMB, not a span between them, and
+      that is the whole reason this is addressable. Which crumbs are on screen
+      depends on both the proposal and the depth — `drill` never shows "All
+      routes" because that level does not exist in it — and a separator that
+      was its own element would survive its crumb being hidden and leave a
+      stray chevron at the head of the trail. Attached to the crumb it goes
+      when the crumb goes, and the two rules that suppress it on whichever
+      crumb is first for a given proposal are the only exceptions.
+    */}
+    <nav class="uxp__crumbs" aria-label="Map depth" data-uxp-chrome="drill twin">
+      <button type="button" class="uxp__crumb" data-uxp-crumb="world" data-uxp-level="world">Earth</button>
+      <button type="button" class="uxp__crumb" data-uxp-crumb="routes" data-uxp-level="routes">All routes</button>
+      <button type="button" class="uxp__crumb" data-uxp-crumb="area" data-uxp-level="area">Johor</button>
+      <button type="button" class="uxp__crumb" data-uxp-crumb="route" data-uxp-level="route">Pulai</button>
+    </nav>
+
+    {/*
+      ---- proposal 3: the two-view switch ----
+
+      Two states over a four-state machine: `Globe` is the world, `Terrain` is
+      everything below it. That collapse IS the proposal — one switch, two
+      views — and the breadcrumb above carries the depth inside Terrain, which
+      is the piece the current Trails tab is missing.
+    */}
+    <div class="uxp__views" role="radiogroup" aria-label="View" data-uxp-chrome="twin">
+      <button type="button" class="uxp__view" role="radio" aria-checked="true" data-uxp-view="globe" data-uxp-level="world">Globe</button>
+      <button type="button" class="uxp__view" role="radio" aria-checked="false" data-uxp-view="terrain" data-uxp-level="routes">Terrain</button>
+    </div>
+
+    {/*
+      ---- the layers, in every proposal, behind one button ----
+
+      The five world layers are a SETTINGS question, not a navigation one, and
+      the current panel gives them the same visual weight and the same corner as
+      the thing the page is actually about. Behind a button they cost the frame
+      nothing until they are wanted, and the corner is free for the control that
+      tells you where you are.
+    */}
+    <div class="uxp__tools">
+      <button
+        type="button"
+        class="uxp__tool"
+        aria-expanded="false"
+        aria-haspopup="true"
+        data-uxp-panel="layers"
+      >Layers</button>
+      <button
+        type="button"
+        class="uxp__tool"
+        aria-expanded="false"
+        aria-haspopup="true"
+        data-uxp-panel="list"
+        data-uxp-chrome="drill twin"
+      >All routes</button>
+    </div>
+
+    <div class="uxp__sheet uxp__sheet--layers" data-uxp-sheet="layers">
+      <p class="uxp__sheet-title">World layers</p>
+      {LAYERS.map((layer, i) => (
+        <button type="button" class="uxp__chip" aria-pressed={i === 0}>{layer}</button>
+      ))}
+      <p class="uxp__sheet-foot">Each one is downloaded the first time you switch it on.</p>
+    </div>
+
+    {/*
+      The exhaustive list, on demand.
+
+      It is the current route picker, unchanged in content and moved out of the
+      way: eleven names is an index, and an index belongs behind a button rather
+      than permanently over a third of a phone's map. Two of these routes start
+      in the same car park and land on top of each other on the map, so a list
+      that names every one of them has to exist somewhere — this is where.
+    */}
+    <div class="uxp__sheet uxp__sheet--list" data-uxp-sheet="list">
+      <p class="uxp__sheet-title">Every recorded route</p>
+      <ul class="uxp__list">
+        {routes.map((route) => (
+          <li>
+            <button type="button" class="uxp__list-row" data-uxp-level="route">
+              <span class="uxp__list-name">{route.label}</span>
+              <span class="uxp__list-meta">{route.km.toFixed(1)} km</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    {/*
+      ---- proposal 2: the rail ----
+
+      The whole navigation, permanently visible, and the only one of the three
+      that can show a route UNDER the trip it was walked on. That relationship
+      is real and the site currently knows it nowhere: three of these walks
+      happened on the Chengdu trip and one on the Phuket trip, and the only
+      place a reader can find that out today is a merged card that happens to
+      name both.
+
+      On a phone it becomes a sheet across the bottom of the frame rather than a
+      column beside it — a 390px frame cannot give up a third of its width, and
+      a list is the one control that reads perfectly well short and scrolling.
+    */}
+    <aside class="uxp__rail" data-uxp-chrome="index" aria-label="Trips and routes">
+      <p class="uxp__rail-title">Trips &amp; routes</p>
+      <ul class="uxp__rail-list">
+        {rail.map(({ trip, walks }) => (
+          <li class="uxp__rail-group">
+            <button type="button" class="uxp__rail-row" data-uxp-level="area" data-uxp-row="area">
+              <span class="uxp__rail-name">{trip.label}</span>
+              <span class="uxp__rail-meta">{trip.when}</span>
+            </button>
+            {walks.length > 0 && (
+              <ul class="uxp__rail-sub">
+                {walks.map((walk) => (
+                  <li>
+                    <button type="button" class="uxp__rail-row uxp__rail-row--walk" data-uxp-level="route" data-uxp-row="route">
+                      <span class="uxp__rail-name">{walk.label}</span>
+                      <span class="uxp__rail-meta">{walk.km.toFixed(1)} km</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+        <li class="uxp__rail-group">
+          <p class="uxp__rail-legend">Walked from home</p>
+          <button type="button" class="uxp__rail-row" data-uxp-level="area" data-uxp-row="area">
+            <span class="uxp__rail-name">Johor</span>
+            <span class="uxp__rail-meta">{johor.length} routes</span>
+          </button>
+          <ul class="uxp__rail-sub">
+            {johor.map((walk) => (
+              <li>
+                <button type="button" class="uxp__rail-row uxp__rail-row--walk" data-uxp-level="route" data-uxp-row="route">
+                  <span class="uxp__rail-name">{walk.label}</span>
+                  <span class="uxp__rail-meta">{walk.km.toFixed(1)} km</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </li>
+      </ul>
+    </aside>
+
+    {/* Every control in this frame is inert without JS, and so is every card —
+        which leaves a diagram of a navigation model that cannot be navigated.
+        Saying so is better than a globe with nothing on it and no explanation.
+        The argument itself survives: the fault list above is a <details>, and
+        the three proposals' notes are prose. */}
+    <p class="uxp__nojs">The diagrams need JavaScript. The proposals are written out below.</p>
+  </div>
+
+  {/*
+    One readout, at every depth, in every proposal — which is fault 7. It is
+    the cheapest of all these changes and probably the largest single
+    improvement: a line under the frame that always says what is on the map and
+    what it adds up to. The current section has it in one tab out of three.
+  */}
+  <div class="uxp__foot">
+    <p class="uxp__readout" data-uxp-read="world">
+      <strong>Earth</strong> &middot; {trips.length} trips &middot; {routes.length} routes
+      &middot; {km(routes)} km walked &middot; {ascent(routes)} m climbed
+    </p>
+    <p class="uxp__readout" data-uxp-read="routes">
+      <strong>All routes</strong> &middot; {routes.length} recorded &middot; {km(routes)} km
+      &middot; {ascent(routes)} m ascent &middot; pick an area to zoom into it
+    </p>
+    <p class="uxp__readout" data-uxp-read="area">
+      <strong>Johor</strong> &middot; {johor.length} routes &middot; {km(johor)} km
+      &middot; {ascent(johor)} m ascent &middot; no trip &mdash; these are from home
+    </p>
+    <p class="uxp__readout" data-uxp-read="route">
+      <strong>Pulai</strong> &middot; Johor, Malaysia &middot; 9 Aug 2025 &middot; 10.2 km
+      &middot; 557 m ascent &middot; 41&ndash;622 m
+    </p>
+  </div>
+
+  {/* One note per proposal, shown with its chrome. Each says what it buys, what
+      it costs and what it would take to build, because those are the three
+      things a choice between them turns on. */}
+  <div class="uxp__notes">
+    <div class="uxp__note" data-uxp-note="drill">
+      <h3 class="uxp__note-title">1 &middot; Drill down &mdash; the recommendation</h3>
+      <p>
+        <strong>There are no tabs.</strong> One map, opening on the world with everything on it,
+        and the only navigation is the map itself: click a card to go a level deeper, click a
+        crumb to come back out. Pitch, terrain and the DEM tiles arrive on their own at the depth
+        where they start to mean something, which is exactly what the engine already does &mdash;
+        it is just doing it because you picked a tab instead of because you went somewhere.
+      </p>
+      <p>
+        <strong>It removes a whole level, not just a tab.</strong> The current Trails overview
+        exists to show ten routes grouped into three areas; the world already shows those three
+        areas, beside the trips they were walked on. So <code>Earth &rsaquo; Johor &rsaquo;
+        Pulai</code> is three steps where the section above needs a tab, an overview, a group and
+        a route &mdash; and the tab is the step that carries no information.
+      </p>
+      <p class="uxp__cost">
+        <strong>Cost:</strong> the engine already has all of it. <code>applyMode</code> becomes <code>applyDepth</code>,
+        the three <code>MAP_MODES</code> collapse to one, and the
+        breadcrumb is a strip of buttons writing the depth the camera flies to. The two storage
+        keys for mode and route become one for depth. <strong>Risk:</strong> a reader who wants
+        the bare globe with no routes on it has to switch the Trails layer off rather than pick a
+        tab &mdash; one extra click, once.
+      </p>
+    </div>
+
+    <div class="uxp__note" data-uxp-note="index">
+      <h3 class="uxp__note-title">2 &middot; Map &amp; index &mdash; the one that says the most</h3>
+      <p>
+        The map keeps the drill-down, and a permanent list beside it is the navigation. The list
+        is a table of contents rather than a filter: trips newest first, each with the routes
+        walked on it <em>underneath it</em>. Hover a row to pick it out on the map, click it to
+        fly there. Nothing is hidden behind a mode, and the whole collection can be read without
+        touching the map at all &mdash; which is what someone arriving from the timeline above
+        actually wants to do first.
+      </p>
+      <p>
+        <strong>It is the only proposal that shows a fact the site currently knows nowhere.</strong> Three
+        of these walks happened on the Chengdu trip and one on the Phuket trip. Today the
+        trips and the routes are two flat lists that never mention each other, and the only place
+        that relationship surfaces is a merged card that happens to name both. Nested in a rail
+        it is simply visible &mdash; and once it is visible, a trip page showing its own routes is
+        the obvious next thing.
+      </p>
+      <p class="uxp__cost">
+        <strong>Cost:</strong> the rail is markup and one hover handler, but the nesting needs a
+        real derivation &mdash; a route&rsquo;s date falling inside a trip&rsquo;s range, in <code>lib/content.ts</code>,
+        with a build-time check so a mis-dated route is a failed
+        build rather than a wrong tree. <strong>Risk:</strong> on a phone the rail becomes a
+        bottom sheet, which is the one place this proposal is more complicated than the first.
+      </p>
+    </div>
+
+    <div class="uxp__note" data-uxp-note="twin">
+      <h3 class="uxp__note-title">3 &middot; Two views &mdash; your own instinct, tidied</h3>
+      <p>
+        Exactly what you asked for: <code>Trips</code> goes, <code>All</code> and <code>Trails</code> stay. But two changes make
+        the difference between it and what is
+        there now. The switch is <strong>two states, not a three-way radiogroup</strong> &mdash;
+        Globe or Terrain, a genuine either/or rather than a set beside its own subset. And
+        Terrain gets <strong>the breadcrumb</strong>, so its three depths have a way back that is
+        not a chip in a scrolling list.
+      </p>
+      <p>
+        It keeps the one thing the other two give up: a single control that says
+        &ldquo;show me the routes and nothing else&rdquo;. If that view is one you actually use,
+        this is the proposal &mdash; the drill-down can only get there by switching a layer off.
+      </p>
+      <p class="uxp__cost">
+        <strong>Cost:</strong> the smallest by a wide margin. Delete the <code>explore</code>
+        mode and its tab, rename <code>combined</code>, add a breadcrumb, move the layer chips
+        behind a button. Nothing about the camera or the data changes. <strong>Risk:</strong> it keeps
+        the redundant level &mdash; the Terrain overview still
+        shows three area cards that the globe was already showing.
+      </p>
+    </div>
+  </div>
+
+  <div class="uxp__verdict">
+    <p>
+      <strong>What I would do.</strong> Proposal 1 for the navigation and the rail from proposal 2
+      when there is room for it &mdash; they are not really alternatives, since the rail is a
+      second way into the same depths rather than a different set of them. Proposal 3 is the right
+      answer only if &ldquo;the routes, alone&rdquo; is a view you reach for often enough to spend
+      a permanent control on.
+    </p>
+    <p>
+      <strong>Three of these are worth doing whichever model wins</strong>, and they are cheap:
+      the readout under the frame at every depth, the layer chips behind a button instead of
+      permanently over the map, and a way back that lives on the map rather than beside it.
+      Between them they answer four of the seven faults without touching the tab row at all.
+    </p>
+  </div>
+</section>
+
+<style>
+  @reference "#styles";
+
+  /*
+    THE SCHEMATIC'S COLOURS ARE DERIVED, NOT CHOSEN — the same contract
+    src/scripts/globe/palette.ts holds the two real earths to, restated here in
+    CSS because this section has no engine to run it in.
+
+    Each one steps a fixed PERCEPTUAL distance in OKLab from the ground the
+    frame is painted in toward `--color-fg`: sea 10%, land 20%, coastline 50%,
+    exactly the numbers palette.ts uses. Two consequences worth knowing before
+    touching them. The ramp inverts on its own in dark, because the colour it
+    walks toward is the light one there — so there is no dark block in this
+    file and there must not be one. And it steps off `band`, which is what the
+    frame is painted in: drop this diagram onto a plain section and the sea
+    would match its own surround and the globe would read as a hole.
+
+    The two ridge steps are this section's own and have no counterpart in
+    palette.ts, because neither real engine draws a pitched hillside in flat
+    colour — MapLibre shades a DEM and three.js uses a normal map. They sit
+    between land and coast so a stack of them reads as receding.
+  */
+  .uxp {
+    --uxp-sea: color-mix(in oklab, var(--color-fg) 10%, var(--color-band));
+    --uxp-land: color-mix(in oklab, var(--color-fg) 20%, var(--color-band));
+    --uxp-ridge: color-mix(in oklab, var(--color-fg) 28%, var(--color-band));
+    --uxp-ridge-2: color-mix(in oklab, var(--color-fg) 36%, var(--color-band));
+    --uxp-coast: color-mix(in oklab, var(--color-fg) 50%, var(--color-band));
+    @apply mt-20 border-t border-line pt-12;
+  }
+
+  .uxp__head {
+    @apply mb-6 flex flex-col gap-3;
+  }
+
+  .uxp__eyebrow {
+    @apply font-mono text-[0.7rem] tracking-[0.14em] text-fg-meta uppercase;
+  }
+
+  .uxp__title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .uxp__intro {
+    @apply max-w-2xl leading-relaxed text-fg-body;
+  }
+
+  /* The fault list is a <details> because it is the ARGUMENT, and the reader
+     who already agrees should be able to get to the proposals without scrolling
+     past seven paragraphs of it. Open it and it is the case; closed it is one
+     line. Works with no JS, which is why it is a details and not a toggle. */
+  .uxp__why {
+    @apply mb-6 max-w-2xl rounded-lg border border-line bg-surface-2 px-4 py-3;
+  }
+
+  .uxp__why-summary {
+    @apply cursor-pointer font-mono text-[0.7rem] tracking-[0.1em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  .uxp__why-summary:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .uxp__why-list {
+    @apply mt-3 flex flex-col gap-2 pl-5 text-sm leading-relaxed text-fg-body;
+    list-style: decimal;
+  }
+
+  .uxp__why-list strong {
+    @apply font-medium text-fg;
+  }
+
+  .uxp__why-note {
+    @apply mt-3 border-t border-line pt-3 text-sm leading-relaxed text-fg-body;
+  }
+
+  .uxp__why-note strong {
+    @apply font-medium text-fg;
+  }
+
+  .uxp code,
+  .uxp__why code {
+    @apply rounded border border-line bg-bg px-1 font-mono text-[0.8em] text-fg;
+  }
+
+  /* Inert without JS, and an inert control is worse than no control — the same
+     `html.js` gate MapGlobeStage, GlobeStage and ThemePicker all sit behind.
+     Styled to match the switcher on the section above, deliberately: this row
+     picks a DESIGN rather than a map mode, but it is the same kind of control
+     and it should not announce itself as a different one. */
+  .uxp__switch {
+    @apply hidden;
+  }
+
+  :global(html.js) .uxp__switch {
+    @apply mb-4 flex flex-wrap gap-0.5 rounded-full border border-line p-0.5;
+  }
+
+  .uxp__switch-opt {
+    @apply rounded-full px-3 py-1.5 transition-colors;
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.1em] text-fg-meta;
+    @apply hover:text-accent;
+  }
+
+  .uxp__switch-opt[aria-checked='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .uxp__switch-opt:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* ---- the frame ---------------------------------------------------------- */
+  /*
+    Same breakout as both earths above — left/transform rather than
+    `margin-inline: calc(50% - 50vw)`, because 100vw includes the scrollbar and
+    the usual full-bleed trick overflows by its width.
+
+    Shorter than they are on purpose. This is a diagram of chrome, not a map,
+    and giving it the same 56rem the earths get would say it wanted to be
+    looked at as one.
+  */
+  .uxp__frame {
+    @apply relative flex items-center justify-center overflow-hidden;
+    @apply rounded-xl border border-line bg-band;
+  }
+
+  @media (min-width: 640px) {
+    .uxp__frame {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 62rem);
+      height: min(70vh, 32rem);
+      transform: translateX(-50%);
+    }
+  }
+
+  /*
+    ONE ASPECT-LOCKED BOX FOR THE SCHEMATIC AND ITS CARDS, and the two
+    breakpoints exist because which dimension is the binding one flips.
+
+    On a phone the frame is narrower than 4:3, so width leads and the frame's
+    own height follows the box. On a desktop the frame is far wider than 4:3, so
+    height leads and the box is centred in what is left. Get it the wrong way
+    round in either direction and the SVG letterboxes inside a box that is no
+    longer its own shape — at which point every card, positioned in percentages
+    of the BOX, slides off the dot it is naming.
+  */
+  .uxp__map {
+    @apply relative w-full;
+    aspect-ratio: 4 / 3;
+  }
+
+  @media (min-width: 640px) {
+    .uxp__map {
+      @apply h-full w-auto;
+    }
+  }
+
+  .uxp__nojs {
+    @apply absolute inset-0 z-30 flex items-center justify-center px-6 text-center;
+    @apply font-mono text-xs tracking-[0.12em] text-fg-faint uppercase;
+    background: var(--color-band);
+  }
+
+  :global(html.js) .uxp__nojs {
+    @apply hidden;
+  }
+
+  /*
+    THE SCHEMATIC'S FILLS ARE CLASSES, NOT PRESENTATION ATTRIBUTES, and that is
+    not a matter of taste — it is the difference between a themed diagram and a
+    black one.
+
+    `fill="var(--uxp-sea)"` on an SVG element does not work in Chrome. A
+    presentation attribute is meant to behave as a CSS declaration, but `var()`
+    inside one is not substituted, so the value fails to parse and every shape
+    falls back to the initial `fill`, which is black. It fails silently: the
+    build is clean, `astro check` sees nothing, and the only symptom is a globe
+    that renders as a black disc in both themes. Measured before the fix —
+    `getComputedStyle(circle).fill` returned `rgb(0, 0, 0)` in light AND dark,
+    which is the tell, since a themed value would at least have differed.
+
+    In a real rule the same custom property resolves normally. So every colour
+    in all four schematics is one of the classes below.
+  */
+  .uxp-sea {
+    fill: var(--uxp-sea);
+  }
+
+  .uxp-land {
+    fill: var(--uxp-land);
+    /* The fill alone is 20% off the ground, which is a tenth of the ramp and
+       reads as nothing without an edge. Both real earths draw a coastline over
+       the same fill; this is that coastline, at the same `coast` step. */
+    stroke: var(--uxp-coast);
+    stroke-width: 0.6;
+    stroke-opacity: 0.45;
+  }
+
+  .uxp-ridge {
+    fill: var(--uxp-ridge);
+  }
+
+  .uxp-ridge2 {
+    fill: var(--uxp-ridge-2);
+  }
+
+  .uxp-grat,
+  .uxp-rim {
+    stroke: var(--uxp-coast);
+  }
+
+  /* The routes and the footprints, at full accent — the only thing in these
+     diagrams that is about the site rather than about the world, exactly as on
+     both real earths. */
+  .uxp-mark {
+    fill: var(--color-accent);
+  }
+
+  .uxp-track,
+  .uxp-end {
+    stroke: var(--color-accent);
+  }
+
+  /* Filled dot for the start, ring for the end. Without the pair a loop and an
+     out-and-back are the same picture, and three of these routes are one half
+     of an out-and-back. */
+  .uxp-start {
+    fill: var(--color-accent);
+    stroke: var(--uxp-ridge-2);
+  }
+
+  .uxp__svg {
+    @apply absolute inset-0 hidden h-full w-full;
+  }
+
+  [data-level='world'] .uxp__svg[data-uxp-for='world'],
+  [data-level='routes'] .uxp__svg[data-uxp-for='routes'],
+  [data-level='area'] .uxp__svg[data-uxp-for='area'],
+  [data-level='route'] .uxp__svg[data-uxp-for='route'] {
+    @apply block;
+  }
+
+  /* ---- the cards ---------------------------------------------------------- */
+  /*
+    Hidden at every depth but their own, with `display: none` rather than
+    `visibility` or an opacity — a card the reader cannot see must not be
+    tabbable either, which is the same rule the real engine follows for a
+    decluttered label. A route depth has no cards at all: there is one thing on
+    the map and the readout has already named it.
+  */
+  .uxp__cards {
+    @apply hidden;
+  }
+
+  :global(html.js) [data-level='world'] .uxp__cards[data-uxp-cards='world'],
+  :global(html.js) [data-level='routes'] .uxp__cards[data-uxp-cards='routes'],
+  :global(html.js) [data-level='area'] .uxp__cards[data-uxp-cards='area'] {
+    @apply absolute inset-0 block;
+  }
+
+  /*
+    Positioned in percentages of the box above, and SITTING ON their anchor
+    rather than centred over it — `-100%` minus a hair, so the accent dot stays
+    visible just below the card it belongs to. Centred, the card covers the very
+    mark it is naming, which is the one thing on the diagram that says where the
+    place actually is.
+
+    `max-width` in the box's own terms so the widest merged name — "Bangkok ·
+    Phuket · Cape Krathing", which is the real string the engine produces —
+    wraps rather than reaching outside the frame.
+  */
+  .uxp__card {
+    @apply absolute flex flex-col rounded border border-line-strong px-1.5 py-0.5;
+    @apply cursor-pointer text-left leading-tight transition-colors;
+    left: var(--x);
+    top: var(--y);
+    transform: translate(-50%, calc(-100% - 6px));
+    max-width: 34%;
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    backdrop-filter: blur(4px);
+  }
+
+  /* See the note on `drop` in the frontmatter: a card is a fixed pixel width
+     whatever the schematic is, so the four plainest names come off below 640px
+     rather than piling up. `display: none` so a card nobody can read is not
+     tabbable either — the same rule the real engine's declutter follows. */
+  @media (max-width: 639px) {
+    .uxp__card {
+      @apply px-1;
+      max-width: 46%;
+    }
+
+    .uxp__card[data-uxp-drop] {
+      @apply hidden;
+    }
+  }
+
+  .uxp__card:hover {
+    @apply border-accent;
+  }
+
+  .uxp__card:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .uxp__card-name {
+    @apply text-[0.7rem] font-semibold text-fg;
+  }
+
+  @media (max-width: 639px) {
+    .uxp__card-name {
+      @apply text-[0.6rem];
+    }
+
+    .uxp__card-sub {
+      @apply text-[0.5rem];
+    }
+  }
+
+  .uxp__card:hover .uxp__card-name {
+    @apply text-accent;
+  }
+
+  .uxp__card-sub {
+    @apply font-mono text-[0.6rem] tracking-[0.1em] text-fg-meta uppercase;
+  }
+
+  /* ---- chrome, one set per proposal --------------------------------------- */
+  /*
+    Everything carrying `data-uxp-chrome` is off by default and switched on by
+    the proposal that owns it. The show rules name their own display value
+    rather than reverting, because these are four different kinds of box and
+    there is no single value that is right for all of them.
+
+    Specificity does the work: the hide is one attribute (0,1,0) and every show
+    rule is an attribute plus a class (0,2,0).
+  */
+  [data-uxp-chrome] {
+    @apply hidden;
+  }
+
+  .uxp__crumbs {
+    @apply absolute top-3 left-3 z-10 flex-wrap items-center gap-x-1 gap-y-1;
+    @apply rounded-lg border border-line px-2 py-1.5;
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  :global(html.js) [data-proposal='drill'] .uxp__crumbs,
+  :global(html.js) [data-proposal='twin'] .uxp__crumbs {
+    @apply flex;
+  }
+
+  /* The twin's Globe view has no depth below it, so there is nothing for a
+     breadcrumb to say there. Three attributes beats the two above it. */
+  :global(html.js) [data-proposal='twin'][data-level='world'] .uxp__crumbs {
+    @apply hidden;
+  }
+
+  .uxp__crumb {
+    @apply hidden cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  /* The separator, attached to the crumb rather than sitting between crumbs —
+     see the note in the markup. It is decorative and must not be read out or
+     copied, which `content` in a pseudo-element gets for free. */
+  .uxp__crumb::before {
+    content: '\203A';
+    @apply mr-1 text-fg-faint;
+  }
+
+  /* Whichever crumb is FIRST for a given proposal has nothing to its left. */
+  [data-proposal='drill'] .uxp__crumb[data-uxp-crumb='world']::before,
+  [data-proposal='twin'] .uxp__crumb[data-uxp-crumb='routes']::before {
+    content: none;
+  }
+
+  /* Which crumbs are on the trail, per proposal and depth. `drill` never shows
+     "All routes" because that level does not exist in it — which is the whole
+     of what the proposal claims, expressed as four missing selectors. */
+  [data-proposal='drill'] .uxp__crumb[data-uxp-crumb='world'],
+  [data-proposal='drill'][data-level='area'] .uxp__crumb[data-uxp-crumb='area'],
+  [data-proposal='drill'][data-level='route'] .uxp__crumb[data-uxp-crumb='area'],
+  [data-proposal='drill'][data-level='route'] .uxp__crumb[data-uxp-crumb='route'],
+  [data-proposal='twin'] .uxp__crumb[data-uxp-crumb='routes'],
+  [data-proposal='twin'][data-level='area'] .uxp__crumb[data-uxp-crumb='area'],
+  [data-proposal='twin'][data-level='route'] .uxp__crumb[data-uxp-crumb='area'],
+  [data-proposal='twin'][data-level='route'] .uxp__crumb[data-uxp-crumb='route'] {
+    @apply inline-flex;
+  }
+
+  /* Where you are, rather than somewhere you can go. The script writes
+     `aria-current` on the same element for the half of this that is not
+     visual. */
+  .uxp__crumb[aria-current] {
+    @apply bg-surface-2 text-fg hover:text-fg;
+    cursor: default;
+  }
+
+  .uxp__crumb:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* The twin's two-state switch, in the same corner the breadcrumb uses at
+     depth — they never appear together, because Globe has no depth and Terrain
+     always has some. */
+  .uxp__views {
+    @apply absolute top-3 left-3 z-10 gap-0.5 rounded-full border border-line p-0.5;
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  :global(html.js) [data-proposal='twin'] .uxp__views {
+    @apply flex;
+  }
+
+  /* Below the world depth the switch drops under the breadcrumb rather than
+     fighting it for the corner. */
+  [data-proposal='twin']:not([data-level='world']) .uxp__views {
+    top: 3.1rem;
+  }
+
+  .uxp__view {
+    @apply rounded-full px-2.5 py-1 transition-colors;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  .uxp__view[aria-checked='true'] {
+    @apply bg-surface-2 text-fg;
+  }
+
+  .uxp__view:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* ---- the tools, and their sheets ---------------------------------------- */
+  .uxp__tools {
+    @apply hidden;
+  }
+
+  :global(html.js) .uxp__tools {
+    @apply absolute top-3 right-3 z-10 flex gap-1;
+  }
+
+  .uxp__tool {
+    @apply cursor-pointer rounded-full border border-line px-2.5 py-1 transition-colors;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  :global(html.js) [data-proposal='drill'] .uxp__tool[data-uxp-panel='list'],
+  :global(html.js) [data-proposal='twin'] .uxp__tool[data-uxp-panel='list'] {
+    @apply inline-flex;
+  }
+
+  .uxp__tool[aria-expanded='true'] {
+    @apply border-line-strong bg-surface-2 text-fg;
+  }
+
+  .uxp__tool:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* Both sheets hang under the tools in the same corner, and only one can be
+     open — which is what makes a single `data-panel` value the right state for
+     them rather than a flag each. */
+  .uxp__sheet {
+    @apply absolute top-12 right-3 z-20 hidden flex-col gap-1.5;
+    @apply rounded-lg border border-line p-3;
+    max-width: calc(100% - 1.5rem);
+    background: color-mix(in oklab, var(--color-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  :global(html.js) [data-panel='layers'] .uxp__sheet--layers,
+  :global(html.js) [data-panel='list'] .uxp__sheet--list {
+    @apply flex;
+  }
+
+  .uxp__sheet-title {
+    @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .uxp__sheet-foot {
+    @apply mt-1 max-w-[16rem] text-[0.68rem] leading-snug text-fg-meta;
+  }
+
+  .uxp__chip {
+    @apply cursor-pointer rounded-full border border-line px-2 py-0.5 transition-colors;
+    width: fit-content;
+    @apply font-mono text-[0.62rem] tracking-[0.08em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  .uxp__chip[aria-pressed='true'] {
+    @apply border-line-strong bg-surface-2 text-fg;
+  }
+
+  .uxp__chip:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  /* Eleven rows is taller than a phone frame, so the sheet caps and scrolls.
+     `overscroll-behavior` stops a flick that runs off the end of the list from
+     carrying on into the page — the same guard the route picker above uses. */
+  .uxp__list {
+    @apply flex flex-col;
+    max-height: 14rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .uxp__list-row {
+    @apply flex w-full cursor-pointer items-baseline justify-between gap-6 rounded px-1.5 py-1;
+    @apply text-left transition-colors hover:bg-surface-2;
+  }
+
+  .uxp__list-row:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .uxp__list-name {
+    @apply text-xs text-fg-body;
+  }
+
+  .uxp__list-row:hover .uxp__list-name {
+    @apply text-accent;
+  }
+
+  .uxp__list-meta {
+    @apply font-mono text-[0.6rem] text-fg-meta;
+  }
+
+  /* ---- the rail ------------------------------------------------------------ */
+  /*
+    A column beside the map on a desktop, a sheet across the bottom of the frame
+    on a phone. The frame pads itself out of the rail's way in both directions —
+    the rail is positioned rather than laid out, so padding on the frame moves
+    the MAP without moving the rail, which is exactly what is wanted: the
+    schematic centres in what is left rather than sitting under the list.
+  */
+  .uxp__rail {
+    @apply absolute z-10 flex-col overflow-y-auto border-line;
+    background: color-mix(in oklab, var(--color-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    overscroll-behavior: contain;
+    inset: auto 0 0 0;
+    height: 14rem;
+    @apply border-t px-3 py-2.5;
+  }
+
+  :global(html.js) [data-proposal='index'] .uxp__rail {
+    @apply flex;
+  }
+
+  [data-proposal='index'] .uxp__frame {
+    padding-bottom: 14rem;
+  }
+
+  @media (min-width: 640px) {
+    .uxp__rail {
+      inset: 0 0 0 auto;
+      width: 17rem;
+      height: auto;
+      @apply border-t-0 border-l;
+    }
+
+    [data-proposal='index'] .uxp__frame {
+      padding-right: 17rem;
+      padding-bottom: 0;
+    }
+  }
+
+  .uxp__rail-title {
+    @apply mb-1.5 font-mono text-[0.58rem] tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .uxp__rail-list {
+    @apply flex flex-col gap-0.5;
+  }
+
+  .uxp__rail-group + .uxp__rail-group {
+    @apply mt-1;
+  }
+
+  .uxp__rail-legend {
+    @apply mt-2 mb-1 border-t border-line pt-2;
+    @apply font-mono text-[0.55rem] tracking-[0.12em] text-fg-faint uppercase;
+  }
+
+  .uxp__rail-row {
+    @apply flex w-full cursor-pointer items-baseline justify-between gap-3 rounded px-1.5 py-1;
+    @apply text-left transition-colors hover:bg-surface-2;
+  }
+
+  .uxp__rail-row:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .uxp__rail-name {
+    @apply text-xs font-medium text-fg;
+  }
+
+  .uxp__rail-row:hover .uxp__rail-name {
+    @apply text-accent;
+  }
+
+  .uxp__rail-meta {
+    @apply shrink-0 font-mono text-[0.58rem] tracking-[0.06em] text-fg-meta uppercase;
+  }
+
+  /* A route sits UNDER the trip it was walked on, indented off a hairline —
+     which is the one fact this proposal exists to show and the one the site
+     currently records nowhere. The rule is the indent: without it the nesting
+     is four pixels of padding and reads as an accident. */
+  .uxp__rail-sub {
+    @apply mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-line pl-2;
+  }
+
+  .uxp__rail-row--walk .uxp__rail-name {
+    @apply font-normal text-fg-body;
+  }
+
+  /* ---- readout ------------------------------------------------------------- */
+  /*
+    ONE LINE, AT EVERY DEPTH, IN EVERY PROPOSAL — which is fault 7 and the
+    cheapest thing on this page to fix. Four paragraphs in the markup, one shown
+    at a time, so the copy for each depth is written where it can be read rather
+    than assembled in script.
+  */
+  .uxp__foot {
+    @apply mt-3;
+  }
+
+  @media (min-width: 640px) {
+    .uxp__foot,
+    .uxp__notes,
+    .uxp__verdict {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 62rem);
+      transform: translateX(-50%);
+    }
+  }
+
+  .uxp__readout {
+    @apply hidden font-mono text-xs text-fg-meta;
+  }
+
+  .uxp__readout strong {
+    @apply font-semibold text-fg;
+  }
+
+  [data-level='world'] .uxp__readout[data-uxp-read='world'],
+  [data-level='routes'] .uxp__readout[data-uxp-read='routes'],
+  [data-level='area'] .uxp__readout[data-uxp-read='area'],
+  [data-level='route'] .uxp__readout[data-uxp-read='route'] {
+    @apply block;
+  }
+
+  /* ---- the notes ----------------------------------------------------------- */
+  .uxp__notes {
+    @apply mt-6;
+  }
+
+  .uxp__note {
+    @apply hidden max-w-2xl flex-col gap-3 text-sm leading-relaxed text-fg-body;
+  }
+
+  [data-proposal='drill'] .uxp__note[data-uxp-note='drill'],
+  [data-proposal='index'] .uxp__note[data-uxp-note='index'],
+  [data-proposal='twin'] .uxp__note[data-uxp-note='twin'] {
+    @apply flex;
+  }
+
+  .uxp__note-title {
+    @apply text-base font-semibold tracking-tight text-fg;
+  }
+
+  .uxp__note strong {
+    @apply font-medium text-fg;
+  }
+
+  .uxp__cost {
+    @apply border-line pl-3 text-fg-meta;
+    border-left-width: 2px;
+  }
+
+  .uxp__cost strong {
+    @apply text-fg-body;
+  }
+
+  .uxp__verdict {
+    @apply mt-6 flex max-w-2xl flex-col gap-3 border-t border-line pt-4;
+    @apply text-sm leading-relaxed text-fg-body;
+  }
+
+  .uxp__verdict strong {
+    @apply font-medium text-fg;
+  }
+</style>
