@@ -18,12 +18,27 @@
  * `import type` from `engine.ts` is fine. Values are not. Keep it that way.
  */
 
-/* Order matters: this is the order the switcher renders in, and it runs from
-   the cheapest mode to the most expensive. `explore` is a globe with a filter
-   row over it — it opens on boundaries and country names, both local files, and
-   makes no third-party request at all until the Relief chip is pressed.
-   `terrain` drops to one recorded route on a real elevation surface, which
-   cannot avoid DEM tiles and is the reason it is a separate mode.
+/* Order matters: this is the order the switcher renders in.
+
+   `combined` IS FIRST AND IS THE DEFAULT (14 Sep 2026, author's request), and
+   the reason is the relationship recorded at the foot of this comment: it is
+   the general case and `explore` is a position on its dial. A reader arriving
+   on the tab that shows everything can take things off it; one arriving on
+   `explore` has to know that another tab exists before they can find out what
+   the page has. The row used to run cheapest-first instead, which is a real
+   consideration and is now the second one — and it costs less than it looks
+   like it should: `combined` opens flat, on the same two local layer files
+   `explore` does, and adds ten local route files of 11 KB gzipped between them.
+   The property that matters is intact, and it is the one the note at the foot
+   of MapGlobeStage.astro claims: arriving on this page still contacts no third
+   party at all. `terrain` stays last — it reaches straight for DEM tiles and is
+   the only mode that cannot preserve that.
+
+   `explore` is a globe with a filter row over it — it opens on boundaries and
+   country names, both local files, and makes no third-party request at all
+   until the Relief chip is pressed. `terrain` drops to one recorded route on a
+   real elevation surface, which cannot avoid DEM tiles and is the reason it is
+   a separate mode.
 
    TWO MODES, AND THERE WERE FOUR UNTIL 7 SEP 2026. `places` (the bare stylised
    globe, no names) and `atlas` (the same globe fixed at boundaries, names and
@@ -50,8 +65,26 @@
    general case and `explore` is a position on its dial, so if the tab row ever
    needs shortening again this is the tab that can absorb its neighbour rather
    than the one to cut. */
-export const MAP_MODES = ['explore', 'terrain', 'combined'] as const;
+export const MAP_MODES = ['combined', 'explore', 'terrain'] as const;
 export type MapMode = (typeof MAP_MODES)[number];
+
+/**
+ * The tab the page opens on — `combined`, the one that shows everything
+ * (14 Sep 2026, author's request; it was `explore` before that).
+ *
+ * HERE RATHER THAN IN index.ts, where it lived until the value changed. The
+ * markup has to ship one tab already marked, because a static build cannot know
+ * what the visitor stored, and MapGlobeStage.astro was doing that from a
+ * hardcoded `'explore'` of its own — two copies of one answer, a file apart,
+ * with nothing to make them move together. Every other default on this section
+ * is already in this file for exactly that reason.
+ *
+ * A mode stored before 7 Sep 2026 can be `places` or `atlas`, neither of which
+ * exists now. Nothing special handles that and nothing needs to: `isMode` in
+ * index.ts checks the stored string against MAP_MODES and a miss falls through
+ * to here — the same treatment a retired view id gets from DEFAULT_VIEW.
+ */
+export const DEFAULT_MODE: MapMode = 'combined';
 
 /**
  * What the `combined` mode draws, as two chips.
@@ -73,82 +106,80 @@ export type MapContent = (typeof MAP_CONTENT)[number];
 export const DEFAULT_CONTENT: readonly MapContent[] = ['trips', 'trails'];
 
 /**
- * How the `All` tab is looking at what it draws — FOUR positions on one pill
- * (10 Sep 2026, author's request, revised the same day).
+ * How the `All` tab is looking at what it draws — TWO positions on one pill
+ * (14 Sep 2026, author's request; there were four for four days).
  *
  * A CAMERA, NOT A MODE, and that distinction is why this is a separate axis
- * rather than four more tabs. A mode changes what is on the map — `terrain`
+ * rather than two more tabs. A mode changes what is on the map — `terrain`
  * swaps the trips for one route and the filters for a route picker. These
  * change how the same content is looked at.
  *
- * It shipped as two, `globe` and one tilted view, and the tilted one drew the
- * author's real objection: *"can see global but cannot show the terrain."* That
- * is exactly true and it is forced by MapLibre rather than chosen — the 3D
- * terrain MESH needs the mercator projection, and at the globe's 20 km per
- * pixel a mountain is under half a pixel of relief, so a whole-world view can
- * have shading or it can have terrain, never both. The answer is not one
- * compromise but three positions on the trade, which the author asked to
- * compare on the page rather than in the abstract:
- *
  *   globe    flat sphere. No tilt, no mesh; relief only if the chip asks.
- *   route    ONE route, whole route in frame, mercator + real mesh. ~z11.
- *            "Terrain 1". The look of the single-route Trails view.
- *   region   the same route's whole mountain region, mercator + real mesh.
- *            "Terrain 2". Six times the route's own extent, so the walk is
- *            small and the ranges around it are the subject.
- *   tilted   the whole world, leaned over, hillshade and NO mesh. "Terrain 3",
- *            and it is what the two-position version shipped as.
- *   survey   "Terrain 4", and the only one of the four with TWO scales. It
- *            arrives framed like `region` and drills to `route` when the
- *            reader picks a single walk, so the sequence a reader actually
- *            wants — the ranges, then the walk in them — is one view rather
- *            than two positions on a pill they have to know to move. It is
- *            also the view the index rail belongs to: at either scale most of
- *            the collection is off-frame, and zooming out to reach it is the
- *            thing the rail exists to make unnecessary.
+ *   survey   "Terrain". Mercator, a real 3D mesh, and TWO SCALES: it arrives
+ *            on a route's whole mountain region and drops to the walk itself
+ *            when the reader picks one, so the sequence they actually want —
+ *            the ranges, then the walk in them — is one view rather than two
+ *            positions on a pill they have to know to move. It is also the
+ *            view the index rail belongs to: at either scale most of the
+ *            collection is off-frame, and zooming out to reach it is the thing
+ *            the rail exists to make unnecessary.
  *
- * THE IDS ARE NOT THE LABELS, deliberately, and this is the second place in
- * this file where that is true — see MAP_MODES above. The pill reads Globe,
- * Terrain 1, Terrain 2, Terrain 3, because numbers are how the author will
- * refer to them while choosing between them ("keep terrain 2"). The ids say
- * what each one frames, because that is what the code has to reason about, and
- * `view === 'region'` is readable where `view === 'terrain2'` is not. Renumber
- * the labels freely; leave the ids alone.
+ * FOUR TERRAIN POSITIONS WERE CUT TO THIS ONE, and the three that went are not
+ * to be restored without a new reason:
  *
- * `route` and `region` are the two that attach the mesh. Nothing else in the
- * engine should test for them by name — use the predicates in engine.ts, which
- * is the one place that mapping lives.
+ *   route    Terrain 1 — one route, tight. `survey` IS this, drilled in.
+ *   region   Terrain 2 — the route's mountain region. `survey` IS this on
+ *            arrival. Its objection was being stuck at that scale, which is
+ *            what `survey` and the index rail answer.
+ *   tilted   Terrain 3 — the whole world leaned over, hillshade and NO mesh.
+ *            The one real loss, and it was forced rather than chosen: the mesh
+ *            needs mercator, and at the globe's 20 km per pixel a mountain is
+ *            under half a pixel of relief, so a whole-world view can have
+ *            shading or it can have terrain and never both. The pill shipped
+ *            as `globe` + `tilted` for one day and THAT is the pair the author
+ *            rejected — *"can see global but cannot show the terrain."* The
+ *            surviving pair is not that pair: this Terrain has the mesh.
+ *
+ * THE ID IS NOT THE LABEL, deliberately, and this is the second place in this
+ * file where that is true — see MAP_MODES above. The pill reads "Terrain"; the
+ * id says what the view frames, because that is what the code has to reason
+ * about. Renaming the label is free and has happened twice. Leave the id alone:
+ * `terrain` is a MODE id, and `view === 'terrain'` beside `current === 'terrain'`
+ * meaning two different things is how the wrong one gets tested.
  */
-export const MAP_VIEWS = ['globe', 'route', 'region', 'tilted', 'survey'] as const;
+export const MAP_VIEWS = ['globe', 'survey'] as const;
 export type MapView = (typeof MAP_VIEWS)[number];
 
 /**
- * The views that attach the real 3D terrain mesh, as DATA rather than as a
- * condition spelled out in the engine.
+ * The one view that leans the camera, attaches the real 3D terrain mesh and
+ * shades unasked — as DATA rather than as a condition spelled out twice.
  *
- * It was a predicate reading `view === 'route' || view === 'region'` until
- * Terrain 4 arrived and made it three, at which point two separate files needed
- * the same answer: the engine, to decide the projection and the shading, and
- * index.ts, to decide whether to show the index rail. A list here is one place
- * to add the fourth; two copies of an `||` chain is how they end up disagreeing.
+ * Two files need the same answer: the engine, for the projection, the shading
+ * and every fit, and index.ts, for the relief chip and the index rail. It was
+ * a MESH_VIEWS list while there were three of them; a list of one says less
+ * than a constant, and `view !== 'globe'` written in two files is how they end
+ * up disagreeing after the next change.
  *
- * Membership means exactly two things and nothing else: mercator instead of the
- * globe, and `setTerrain` attached on arrival. Everything a mesh view does
- * DIFFERENTLY from its neighbours — how wide it frames, whether it draws the
- * other routes — is decided per view in engine.ts.
+ * Membership means exactly: mercator instead of the globe, `setTerrain` on
+ * arrival, and the hillshade on whether or not the chip asks for it.
  */
-export const MESH_VIEWS: readonly MapView[] = ['route', 'region', 'survey'];
+export const TERRAIN_VIEW: MapView = 'survey';
 
 /**
  * The flat sphere — what `All` has always opened as.
  *
- * The three terrain views are opt-in and remembered, the same way the light
- * themes are: nothing about a first visit changes.
+ * The terrain view is opt-in and remembered, the same way the light themes
+ * are: nothing about a first visit changes.
  *
- * A view stored before this revision can be `terrain`, which no longer exists.
- * Nothing special handles that and nothing needs to: `isView` checks the stored
- * string against MAP_VIEWS and a miss falls through to here — the same
- * treatment the dead `places` and `atlas` mode ids get.
+ * A view stored before a revision can be `terrain`, `route`, `region` or
+ * `tilted`, none of which exists now. Nothing special handles any of them and
+ * nothing needs to: `isView` checks the stored string against MAP_VIEWS and a
+ * miss falls through to here — the same treatment the dead `places` and `atlas`
+ * mode ids get. Note what that means for a reader who left in Terrain 2: they
+ * come back to the Globe rather than to the surviving Terrain. Mapping the
+ * three dead ids onto `survey` was considered and not done — it is one more
+ * branch to carry for the life of a throwaway preview page, and the pill is
+ * one click away.
  */
 export const DEFAULT_VIEW: MapView = 'globe';
 

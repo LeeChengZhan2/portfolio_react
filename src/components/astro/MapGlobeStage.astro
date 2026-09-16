@@ -7,8 +7,18 @@
  * The comparison is deliberately narrow. Both earths read the same
  * public/globe/land.json and the same visited footprints, and both derive every
  * colour through src/scripts/globe/palette.ts. What differs is what each one
- * can DO, which is what the two modes are:
+ * can DO, which is what the three modes are — in switcher order, which is also
+ * the order they contain one another:
  *
+ *   combined — "All", and where the page opens (14 Sep 2026). Both halves on
+ *             one globe: the visited footprints and the recorded routes, each
+ *             behind its own chip, over the same five layer filters `explore`
+ *             has. It is also the one tab with a View switch, which is two
+ *             cameras over the same content — the flat sphere, and Terrain: a
+ *             single walk on a real 3D mesh, arriving on its mountain region
+ *             and dropping to the walk when one is picked. Clicking a route
+ *             here never leaves the tab; from the globe it moves that switch
+ *             to Terrain and drops onto the walk.
  *   explore — "Trips". The globe with a filter row over it. It starts at
  *             boundaries and country names alone, both local files, so entering
  *             it makes no third-party request; city names, relief, peaks and
@@ -26,12 +36,14 @@
  *             .gpx on the frame was removed 7 Sep 2026 — the routes are built
  *             in now, so the page had nothing left to ask for.
  *
- * TWO MODES, AND THERE WERE FOUR UNTIL 7 SEP 2026. `places` — the bare stylised
- * globe — and `atlas` — the same globe frozen at boundaries, names and relief —
- * came off at the author's request, and nothing went with them: `explore` opens
- * on what `atlas` drew minus its relief, and switching its two default chips
- * off leaves exactly what `places` drew. Two fixed positions on a dial, sitting
- * in the row beside the dial.
+ * THREE MODES, AND THERE WERE FOUR UNTIL 7 SEP 2026. `places` — the bare
+ * stylised globe — and `atlas` — the same globe frozen at boundaries, names and
+ * relief — came off at the author's request, and nothing went with them:
+ * `explore` opens on what `atlas` drew minus its relief, and switching its two
+ * default chips off leaves exactly what `places` drew. Two fixed positions on a
+ * dial, sitting in the row beside the dial. `combined` stands in the same
+ * relation to `explore` — with its Trails chip off it IS `explore` — which is
+ * why it is the one that leads the row rather than the one to cut.
  *
  * THE CHIP LABELS ARE NOT THE MODE IDS, deliberately — see the note in
  * modes.ts. "Trips" and "Trails" are both already taken by data types here:
@@ -66,6 +78,7 @@ import trails from '../../data/trails.json';
 import {
   DEFAULT_CONTENT,
   DEFAULT_LAYERS,
+  DEFAULT_MODE,
   DEFAULT_VIEW,
   MAP_CONTENT,
   MAP_LAYERS,
@@ -94,8 +107,11 @@ interface Props {
 const { trips, walkedOn } = Astro.props;
 
 /**
- * The two modes, in switcher order — the globe first, because it is what the
- * section is about and the cheaper of the two to arrive in.
+ * The three modes, in switcher order — `All` first, because it is the one that
+ * shows everything the page has and the other two are positions on its dial
+ * (14 Sep 2026, author's request). It is also where the page now opens; see
+ * DEFAULT_MODE in modes.ts, which is where that order and that default are both
+ * written down so they cannot disagree.
  *
  * The names are the author's (7 Sep 2026) and they are a matched pair on
  * purpose: both are one word, both are already true of the data behind them —
@@ -109,6 +125,14 @@ const { trips, walkedOn } = Astro.props;
  */
 const MODES = [
   {
+    id: 'combined',
+    name: 'All',
+    hint:
+      'Both halves on one globe — the places visited and the routes walked, ' +
+      'each behind its own chip, over the same five layers. Switch the View to ' +
+      'Terrain, or just click a route to drop onto it.',
+  },
+  {
     id: 'explore',
     name: 'Trips',
     hint:
@@ -121,14 +145,6 @@ const MODES = [
     hint:
       'Every recorded route at once, then one at a time on real elevation. ' +
       'Fetches DEM tiles when you switch to it.',
-  },
-  {
-    id: 'combined',
-    name: 'All',
-    hint:
-      'Both halves on one globe — the places visited and the routes walked, ' +
-      'each behind its own chip, over the same five layers. Tilt it with the ' +
-      'View switch.',
   },
 ] as const;
 
@@ -148,46 +164,29 @@ const CONTENT_COPY: Record<MapContent, { name: string; hint: string }> = {
 };
 
 /**
- * The `All` tab's view switch.
+ * The `All` tab's view switch — TWO positions since 14 Sep 2026, when four
+ * terrain views were cut to one at the author's request.
  *
  * A `Record<MapView, …>` for the same reason LAYER_COPY and CONTENT_COPY are:
  * adding a view and forgetting its label should be a build error rather than a
- * control nobody can reach.
+ * control nobody can reach. That is what kept this honest through two cuts.
  *
- * The hint on `terrain` says relief comes with it, because that is the one
- * thing about this control a reader cannot predict from its label — everything
- * else it does is visible the moment it is pressed.
+ * The hint on Terrain says relief comes with it, because that is the one thing
+ * about this control a reader cannot predict from its label — everything else
+ * it does is visible the moment it is pressed.
  */
 const VIEW_COPY: Record<MapView, { name: string; hint: string }> = {
   globe: {
     name: 'Globe',
     hint: 'The flat sphere. What this tab has always opened as — no tilt, no terrain.',
   },
-  route: {
-    name: 'Terrain 1',
-    hint:
-      'One route, the whole of it in frame, on real 3D terrain. Click any route ' +
-      'card to re-aim it — you stay in this tab.',
-  },
-  region: {
-    name: 'Terrain 2',
-    hint:
-      'The same route with its whole mountain region around it — six times the ' +
-      'extent, so the ranges are the subject and the walk is a thread through them.',
-  },
-  tilted: {
-    name: 'Terrain 3',
-    hint:
-      'The whole world, leaned over and shaded. The only terrain view that keeps ' +
-      'every trip in frame — and the only one with no real 3D relief, because the ' +
-      'mesh cannot be attached at this scale.',
-  },
   survey: {
-    name: 'Terrain 4',
+    name: 'Terrain',
     hint:
-      'Terrain 2 to start with, dropping to Terrain 1 when you pick a single ' +
-      'route — and the index down the side reaches every trip and every route ' +
-      'from either scale, so you never have to zoom out to change subject.',
+      'A route on real 3D terrain, with its whole mountain region around it — ' +
+      'and the walk itself once you pick one. The index down the side reaches ' +
+      'every trip and every route from either scale, so you never have to zoom ' +
+      'out to change subject.',
   },
 };
 
@@ -246,8 +245,9 @@ const routeHint = (route: MapTrail): string =>
  * nested under it.
  *
  * THIS IS NAVIGATION, NOT A FILTER, and that is why it is a list of proper
- * nouns rather than a row of chips. It exists because of one objection to
- * Terrain 2 (10 Sep 2026): at the scale that puts a mountain range in frame,
+ * nouns rather than a row of chips. It exists because of one objection to the
+ * region-scale terrain view (10 Sep 2026, when it was Terrain 2 of four): at
+ * the scale that puts a mountain range in frame,
  * everything else the page has to show is off it, so changing subject meant
  * zooming out to find another card and zooming back in — which is the map
  * being used as a menu. The rail is the menu, so the map does not have to be.
@@ -326,11 +326,29 @@ const placeMeta = (group: IndexGroup): string =>
       The same eight footprints and the same coastline file as the earth above, drawn by a map
       engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
       whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the three
-      tabs above the frame. <strong>Trips</strong> is the globe with a filter row over it, and it
-      starts quiet &mdash; country boundaries and country names, nothing else. Add city names,
-      shaded relief, named peaks or rivers and lakes a chip at a time; each layer is only
-      downloaded once you ask for it, and the eight footprints stay picked out in the page&rsquo;s
-      own accent whatever you switch on or off. <strong>Trails</strong> opens on
+      tabs above the frame, and it opens on the one that shows everything. <strong
+      >All</strong> puts both halves on one globe &mdash; every place visited and every route
+      walked, each
+      behind its own chip, over the same five layers &mdash; so the routes can be read in the
+      context of the trips they were walked on. Three of them were, which is why two cards that
+      would land on top of each other are drawn as one naming both &mdash; click it and the map
+      zooms until they come apart. Click a single route instead and the camera drops onto it on
+      real elevation without leaving the tab: that is the <strong>View</strong> switch moving
+      to <strong>Terrain</strong> on your behalf. That is the switch&rsquo;s other position, and
+      it is one view at two scales &mdash; it arrives on a route&rsquo;s whole mountain region,
+      drops to the walk itself the moment you pick one, and carries an index down the side that
+      reaches every trip and every route from either scale, so changing subject never means
+      zooming out to find something and back in again. What it cannot do is hold the whole world
+      at once, and that is forced rather than chosen: the 3D mesh needs a flat projection, and at
+      the globe&rsquo;s 20&nbsp;km per pixel a mountain is under half a pixel of relief, so a
+      whole-world view can have shading or it can have terrain and never both. The globe has the
+      shading, behind the <strong>Relief</strong> chip. The other
+      two tabs are that one with something taken away. <strong>Trips</strong> is the globe with
+      the routes left off and a filter row over it, and it starts quiet &mdash; country
+      boundaries and country names, nothing else. Add city names, shaded relief, named peaks or
+      rivers and lakes a chip at a time; each layer is only downloaded once you ask for it, and
+      the eight footprints stay picked out in the page&rsquo;s own accent whatever you switch on
+      or off. <strong>Trails</strong> opens on
       all {routes.length} of them at once &mdash; every hike and half marathon recorded so far
       &mdash; grouped into the places they were walked, because six are inside one corner of
       Johor. It is pitched and lit like the single-route view it leads to, so the relief reads
@@ -339,21 +357,7 @@ const placeMeta = (group: IndexGroup): string =>
       camera flies down to real elevation, and the filled dot is where the walk started while the
       ring is where it ended. Each route is drawn from a simplified line, but every figure beside
       it &mdash; distance, ascent, the elevation range &mdash; is measured from the full recording,
-      so tightening the one can never quietly shorten the other. <strong>All</strong> puts both
-      halves on one globe &mdash; every place visited and every route walked, each behind its own
-      chip, over the same five layers &mdash; so the routes can be read in the context of the
-      trips they were walked on. Three of them were, which is why two cards that would land on
-      top of each other are drawn as one naming both &mdash; click it and the map zooms until
-      they come apart. It is also the one tab with a <strong>View</strong> switch, and its four
-      terrain positions are four answers to one trade: the 3D mesh needs a flat projection, and
-      at the globe&rsquo;s 20&nbsp;km per pixel a mountain is under half a pixel of relief, so a
-      whole-world view can have shading or it can have terrain and never both. <strong
-      >Terrain 3</strong> keeps every trip in frame and settles for shading. <strong
-      >Terrain 1</strong> and <strong>2</strong> put one walk on real elevation, framed either
-      tight or with its whole mountain region around it. And <strong>Terrain 4</strong> opens
-      wide like the second and drops to the first the moment you pick a single route, with an
-      index down the side reaching every trip and every route from either scale &mdash; so
-      changing subject never means zooming out to find something and back in again.
+      so tightening the one can never quietly shorten the other.
     </p>
     {/* MIND THE LINE BREAKS in the paragraph above, and in the note at the foot
         of this file. Astro drops the whitespace between a text node and an
@@ -380,7 +384,7 @@ const placeMeta = (group: IndexGroup): string =>
         type="button"
         class="switch__opt"
         role="radio"
-        aria-checked={mode.id === 'explore'}
+        aria-checked={mode.id === DEFAULT_MODE}
         title={mode.hint}
         data-mapglobe-mode={mode.id}
       >
@@ -579,10 +583,10 @@ const placeMeta = (group: IndexGroup): string =>
     )}
 
     {/*
-      THE INDEX RAIL, and it belongs to the `All` tab's three mesh views alone
+      THE INDEX RAIL, and it belongs to the `All` tab's Terrain view alone
       (10 Sep 2026, author's request).
 
-      It answers a specific objection to Terrain 2: at the scale that puts a
+      It answers a specific objection to that view: at the scale that puts a
       mountain range in frame, everything else the page has to show is off it,
       so changing subject meant zooming out to hunt for another card and zooming
       back in. That is the map being used as a menu. This is the menu.
@@ -699,13 +703,14 @@ const placeMeta = (group: IndexGroup): string =>
 
   <p class="mapglobe__note">
     Colours come from the same palette module the earth above uses, so both follow the theme
-    picker. Nothing is fetched from a third party when <strong>Trips</strong> opens &mdash; the
-    coastline, the footprints, the boundaries and every name are local files, and so are the
+    picker. Nothing is fetched from a third party when this page opens on <strong>All</strong>,
+    or when you switch to <strong>Trips</strong> &mdash; the
+    coastline, the footprints, the boundaries, every name and the routes themselves are local
+    files, and so are the
     peaks, rivers and lakes. The single exception is <strong>Relief</strong>, which reads
-    elevation tiles from Mapterhorn; it is off until you switch it on, and it is the whole of <strong>Trails</strong>, the one mode that cannot preserve the property. The routes
-    themselves are local, one small file each,
-    fetched only for the route you pick. Nothing is requested until you ask for it &mdash; not the
-    tiles, not the routes, and not any of the local layers either.
+    elevation tiles from Mapterhorn; it is off until you switch it on, and it is the whole of <strong>Trails</strong> and of the Terrain view, which cannot preserve the property.
+    Nothing else is requested until you ask for it &mdash; not the
+    tiles, not the layers, and not the geometry of a route you have not looked at.
   </p>
 
   {/* The trips, handed to the script as data rather than fetched again. */}
@@ -882,12 +887,12 @@ const placeMeta = (group: IndexGroup): string =>
      and this is the part that wasted a measurement: Tailwind v4 scans source
      TEXT, so naming that utility in a comment is enough to emit it. The comment
      explaining the removal kept it alive. Do not write the class name here. */
-  /* WRAPS BETWEEN OPTIONS, NEVER INSIDE ONE (10 Sep 2026, when Terrain 4 made
-     it five). At 390px five labels do not fit on one line, and left to itself
-     each one broke into "TERRAIN" over "4" — five two-line options, which is no
-     shorter than two rows and much harder to read. Wrapping between them keeps
-     every label intact; the shared outline is what still says it is one
-     control. One line at every width from 640px up. */
+  /* WRAPS BETWEEN OPTIONS, NEVER INSIDE ONE. Two labels fit on one line at
+     every width now that the pill is Globe + Terrain (14 Sep 2026), so this is
+     currently inert — kept because it was earned: at five labels, left to
+     itself, each one broke into "TERRAIN" over "4", which is no shorter than
+     two rows and much harder to read. A label added here is one word away from
+     needing it again, and `nowrap` on an option is never wrong. */
   .panel__seg {
     @apply flex flex-wrap gap-0.5 rounded-full border border-line p-0.5;
     width: fit-content;
@@ -955,9 +960,10 @@ const placeMeta = (group: IndexGroup): string =>
      proper nouns that changes where the camera is.
 
      Inert without JS and only once the map is drawn, the same two gates every
-     control here is behind. `data-mesh-view` is written by index.ts and is true
-     for exactly the three views that attach the terrain mesh — the ones where
-     the frame holds one place and the rest of the collection is off it.
+     control here is behind. `data-terrain-view` is written by index.ts and is
+     true for the one view that attaches the terrain mesh — the one where the
+     frame holds a single place and the rest of the collection is off it. It was
+     `data-mesh-view` while three views shared that property.
 
      `max-height` rather than `bottom: 0.75rem`: a rail stretched to the full
      height of the frame with eight rows in it is mostly empty, and it would
@@ -968,7 +974,7 @@ const placeMeta = (group: IndexGroup): string =>
     @apply hidden;
   }
 
-  :global(html.js) [data-mesh-view='true'][data-state='ready'] .index {
+  :global(html.js) [data-terrain-view='true'][data-state='ready'] .index {
     @apply absolute top-3 right-3 z-10 flex flex-col;
     @apply rounded-lg border border-line p-1.5;
     width: 11.5rem;
@@ -1099,7 +1105,7 @@ const placeMeta = (group: IndexGroup): string =>
     /* Narrower and shorter, and it starts SHUT here — see storedIndex in
        index.ts. Half the height rather than all of it, so the rail and the
        filters panel below it are never the whole frame between them. */
-    :global(html.js) [data-mesh-view='true'][data-state='ready'] .index {
+    :global(html.js) [data-terrain-view='true'][data-state='ready'] .index {
       @apply top-2 right-2 p-1;
       width: 9.5rem;
       max-height: 50%;
@@ -1171,6 +1177,22 @@ const placeMeta = (group: IndexGroup): string =>
 
   .mapglobe__frame :global(.mapglobe__label:hover) {
     @apply border-accent;
+  }
+
+  /* The route the view is aimed at, marked by engine.ts's `retier`. Deliberately
+     the same pair of properties a hover sets: both say "this card is the one",
+     and the hover is then a preview of what picking it looks like rather than a
+     competing signal. The map had no mark for the selection at all until
+     16 Sep 2026 — three legs of one trek in the Changping valley drew three
+     identical cards — and the accent is the right colour for it because it is
+     the one colour on this earth that is not derived, reserved for the thing
+     meant to be looked at first. */
+  .mapglobe__frame :global(.mapglobe__label--current) {
+    @apply border-accent;
+  }
+
+  .mapglobe__frame :global(.mapglobe__label--current .mapglobe__label-name) {
+    @apply text-accent;
   }
 
   /* These are the only labels on the map that can be tabbed to — a hidden one

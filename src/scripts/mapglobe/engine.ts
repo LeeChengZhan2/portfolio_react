@@ -75,7 +75,7 @@ setWorkerUrl(workerUrl);
 
 import {
   MAP_LAYERS,
-  MESH_VIEWS,
+  TERRAIN_VIEW,
   type MapContent,
   type MapLayer,
   type MapMode,
@@ -180,8 +180,16 @@ export interface MapGlobe {
    *
    * Stored whatever the mode, applied only in `combined`, exactly as the layer
    * and content filters are.
+   *
+   * `trail` is the route to arrive on, and only one caller passes it: a route
+   * clicked on the flat globe, which moves this switch to Terrain on the
+   * reader's behalf rather than handing them to the Trails tab. Passing the two
+   * together is what makes that one camera movement instead of a flight to the
+   * route the view would have opened on followed by a second to the right one.
+   * It counts as the reader choosing a walk, so it drills; every other way into
+   * the Terrain view arrives at the region.
    */
-  setView(view: MapView): void;
+  setView(view: MapView, trail?: MapTrail | null): void;
   /**
    * Draw one of the built-in routes, fetching its geometry on first use.
    *
@@ -279,52 +287,24 @@ const TERRAIN = { source: 'dem', exaggeration: 1.35 };
  */
 const TRAILS_VIEW = { pitch: 62, bearing: -22 };
 
-/**
- * And the angle the `All` tab's Terrain view leans to — SEPARATE from
- * TRAILS_VIEW, and both numbers differ from it (10 Sep 2026).
- *
- * Reusing TRAILS_VIEW here was the first thing tried, on the reasoning that the
- * two are the same picture at two scales and two constants would drift apart.
- * Driven in Chrome, that was wrong, and the reason is scale: TRAILS_VIEW is
- * tuned for z5 and z13, where the frame holds a region or a single ridge, and
- * this view leans from GLOBE_HOME's z2.3, where it holds a hemisphere. Pitch is
- * not scale-free — at 62 degrees from there the camera looks ALONG the sphere
- * rather than across it.
- *
- * Measured over four candidates, as the share of the frame's height the trip
- * cards span and how many of them survive the collision pass:
- *
- *     pitch 62, bearing -22   29% of the frame, 5 cards
- *     pitch 50, bearing -22   28%, 5 cards — Asia collapses to one "+5" card
- *     pitch 40, bearing   0   36%, 5 cards
- *     pitch 32, bearing   0   40%, 6 cards, but barely reads as tilted
- *
- * 40 is the shipped answer. At 62 the eight trips compressed into a band under
- * the horizon while Australia, which has no trips on it at all, took the whole
- * foreground — backwards for the tab that exists to show where the author has
- * been. At 32 the composition is best and the tilt is almost invisible, which
- * loses the one thing the control is for.
- *
- * BEARING 0, where terrain mode turns -22. A rotation is worth it on a ridge,
- * where it lines the light up across the slope, and it is disorienting on a
- * hemisphere: at world scale north being up is information, and Asia arriving
- * rotated reads as the map having slipped rather than as the camera having
- * moved. This is the same reasoning that keeps `explore` flat — the wider the
- * frame, the more the reader needs the world in the orientation they know it.
- */
-const GLOBE_TILT = { pitch: 40, bearing: 0 };
+/* A GLOBE_TILT of pitch 40 / bearing 0 stood here, the angle the whole-world
+   `tilted` view leaned to. It went with that view on 14 Sep 2026 — the surviving
+   Terrain is at a ridge's scale and takes TRAILS_VIEW, which is what it was
+   always tuned for. The four-candidate measurement behind 40/0 is in the git
+   history and in CLAUDE.md if a hemisphere ever needs leaning again. */
 
 /**
- * How much wider than the route itself Terrain 2 frames (10 Sep 2026).
+ * How much wider than the route itself the Terrain view frames on ARRIVAL
+ * (10 Sep 2026).
  *
  * Six times the route's own extent, applied to the BOUNDS rather than as a zoom
  * offset, so the whole thing stays in the one `fitBounds` idiom every other
  * camera in this file uses and the padding keeps working. Six is 2^2.6, so it
- * is about two and a half zoom levels out from Terrain 1: a 14 km walk becomes
- * an 84 km box, which at this frame lands near z8 — close enough that the mesh
- * still reads as mountains, wide enough that the mountains rather than the walk
- * are the subject. That is the whole difference between the two views, and it
- * is one number.
+ * is about two and a half zoom levels out from the drilled frame: a 14 km walk
+ * becomes an 84 km box, which at this frame lands near z8 — close enough that
+ * the mesh still reads as mountains, wide enough that the mountains rather than
+ * the walk are the subject. That is the whole difference between the view's two
+ * scales, and it is one number.
  */
 const REGION_GROWTH = 6;
 
@@ -342,7 +322,8 @@ const REGION_GROWTH = 6;
 const TRAIL_GROWTH = 1.6;
 
 /**
- * And how much wider than a TRIP's own ground Terrain 4 frames it (10 Sep 2026).
+ * And how much wider than a TRIP's own ground the Terrain view frames it
+ * (10 Sep 2026).
  *
  * Far smaller than REGION_GROWTH, and the reason is what it is applied to. Six
  * is right for a 14 km walk, which is a line on a mountain and needs the
@@ -354,6 +335,73 @@ const TRAIL_GROWTH = 1.6;
  * a search for context that is missing.
  */
 const PLACE_GROWTH = 1.6;
+
+/**
+ * How close a fit is allowed to get to ONE route or ONE place — the cap that
+ * stops a short walk being framed from three metres away (14 Sep 2026,
+ * author's request: *"the terrain for single trail view some of it is too near.
+ * Use lamasi-muluozi range as default"*; loosened to this value the next day,
+ * *"now to far already, make the view between previous and now"*).
+ *
+ * `fitBounds` frames whatever it is given, and the ten routes differ in extent
+ * by a factor of six: Lamasi–Muluozi spans 9.2 km corner to corner and Cape
+ * Krathing 1.5 km. Fitting each one to its own extent therefore framed them at
+ * six different scales, spread over three and a half zoom levels, and the short
+ * ones ended up absurdly close — measured on a 1182x790 frame, uncapped:
+ *
+ *     Lamasi–Muluozi  9.2 km   z12.00    225 px of line, 23% of the frame
+ *     Kulai           7.3 km   z12.67    314 px, 32%
+ *     Belumut         4.6 km   z13.47    368 px, 37%
+ *     Pulai           3.6 km   z14.09    795 px, 81%
+ *     Lambak          1.7 km   z15.02    575 px, 58%
+ *     Cape Krathing   1.5 km   z15.50    891 px, 91% — and CLIPPED
+ *
+ * Two separate things go wrong at the bottom of that list. The one the author
+ * saw is that the ROUTE STOPS FITTING: at z15.5 Cape Krathing spans nearly the
+ * whole frame, so its far end slid under the index rail and off the edge —
+ * `fitBounds` cannot help, because it computes the frame top-down and this
+ * camera is pitched 62 degrees over a terrain mesh, so the ground it actually
+ * shows is a trapezoid narrower at the near edge than the box it fitted. The
+ * second is that there is less and less TO see: the DEM ends at DEM_MAX_ZOOM,
+ * so past it MapLibre is overzooming the same tiles and the hillside goes soft.
+ *
+ * THE NUMBER TOOK TWO TRIES, and the first one is why this is not simply
+ * `DEM_MAX_ZOOM`. Capping at the data's own depth is the principled answer and
+ * it over-corrected: every route landed at z12, which is the author's reference
+ * framing exactly, and a 3.8 km coastal walk at that scale is a 77 px mark in a
+ * 1182 px frame — 8% of the width. It also flattened the view's two scales for
+ * the two smallest routes, since six times a 1.5 km extent already reaches z12,
+ * so arriving and drilling were the same picture and the click did nothing.
+ *
+ * A level and a half of deliberate overzoom is the answer to both. Measured
+ * across the three candidates, as the share of the frame's width the line
+ * spans, and every route fully visible in all three:
+ *
+ *     cap        smallest   widest    capped   drill step   relief
+ *     z12             8%      23%     8 of 10  0.00-2.58    native
+ *     z13            14%      38%     7 of 10  0.59-2.59    soft
+ *     z13.5 <--      20%      53%     3 of 10  0.59-2.59    still reads
+ *     z14            29%      76%     3 of 10  0.59-2.59    visibly mushy
+ *
+ * So seven of the ten routes are framed by their own extent and only the three
+ * smallest are held back, every route keeps a real drill step, and the spread
+ * of scales is a level and a half rather than three and a half. Past here the
+ * gain is only in size: z14 is no more visible and the DEM is two levels
+ * overzoomed, which shows.
+ *
+ * IT IS ON THE REGION FIT AS WELL AS THE DRILLED ONE, and that is not
+ * belt-and-braces — it is what stops the drill running BACKWARDS if this number
+ * is ever lowered again. At z12 it mattered: six times a 1.5 km extent asks for
+ * z12.9, so capping only the drilled frame would have left Cape Krathing
+ * arriving at z12.9 and zooming OUT to z12 when the reader picked it. At z13.5
+ * no region fit reaches the cap, so it currently binds on the drilled frame
+ * alone; leave it on both.
+ *
+ * And it decides where the camera LANDS, not how close the reader may get:
+ * the map's own maxZoom is untouched at 22, and four notches of wheel take the
+ * capped frame from z12 to z12.72 with the page pinned under the cursor.
+ */
+const TRACK_MAX_ZOOM = DEM_MAX_ZOOM + 1.5;
 
 /* ---- label tuning --------------------------------------------------------- */
 
@@ -473,6 +521,72 @@ const CLUSTER_BREAK_PX = 150;
  * real collection at the home view, where it is the widest a card can be
  * without the ones beside it starting to go.
  */
+/**
+ * The zoom from which two colliding cards are STACKED rather than merged
+ * (16 Sep 2026, author's request: two routes that start at the same trailhead
+ * were reaching the terrain view as one card reading
+ * "Muluozi – Lamasi & Muluozi – Wuguishi", and *"when zoom until a certain view
+ * move the tab to let them dont conflict"*).
+ *
+ * A ZOOM GATE, and it has to be one — a screen-distance rule cannot express
+ * this, which is worth writing down because that was the first thing tried.
+ * Merging and stacking want opposite answers at the two ends of the map, and
+ * not in the order a distance threshold can produce:
+ *
+ *     Bangkok and Phuket, home view z2.3    50 px apart   merge (author's ask,
+ *                                                         10 Sep)
+ *     the two Muluozi starts, drilled z12   23 px apart   stack (author's ask,
+ *                                                         16 Sep)
+ *
+ * The pair that must merge is FURTHER apart on screen than the pair that must
+ * stack, so any single px threshold gets one of them wrong. What actually
+ * separates the two cases is scale: at collection scale a card stands for a
+ * place and two of them an hour apart are one story, while at a single ridge
+ * two trailheads 370 m apart are two walks and the reader is there to tell
+ * them apart. z10 is about where the frame stops holding a country and starts
+ * holding one mountain region.
+ */
+const NUDGE_MIN_ZOOM = 10;
+
+/**
+ * And how far apart the two ANCHORS must be before stacking is honest.
+ *
+ * Above the zoom gate this is the other half of the question: a stacked card
+ * still points at its own place by sitting over it, so if the two places are
+ * the same dot on screen, two cards pointing at it say less than one card
+ * naming both.
+ *
+ * NINE PIXELS IS THE START DOT'S OWN DIAMETER — `trail-start` is radius 4.5 at
+ * z12 — so the rule is exactly "the two dots do not overlap". Below it there is
+ * one mark on the map and two cards would both be pointing at it; at or above
+ * it the reader can see two, which is the thing a stacked card needs in order
+ * to mean anything.
+ *
+ * MEASURED, NOT COMPUTED, and the difference bit: on the flat map the two
+ * Muluozi starts are 370 m apart, which is 23 px at z12, and the first version
+ * of this constant was set to 16 on that arithmetic. In the frame they are
+ * **14 px** apart, because the view is pitched 62 degrees and those two
+ * anchors are in its far half, where everything is foreshortened. The gate was
+ * therefore shut in exactly the view it was written for. Any threshold here has
+ * to be checked against `map.project`, not against metres.
+ */
+const NUDGE_MIN_APART = 9;
+
+/**
+ * Where a stacked card may go, in multiples of its own box height, tried in
+ * order. Up first: cards hang above their anchor here, so up is the direction
+ * the eye already associates with the mark, and in a pitched frame the space
+ * above a point is the far distance, which is the emptier half.
+ *
+ * Vertical only, deliberately. These cards are wide and short, so a sideways
+ * step is most of a card width — 150 px and up — which puts the name a long way
+ * from the thing it names, while a step of one box height is under 40 px and
+ * leaves the card still centred on its own anchor. Two cards 23 px apart
+ * horizontally and a box height apart vertically each visibly sit over their
+ * own dot, which is the whole point of stacking rather than merging.
+ */
+const NUDGE_STEPS = [-1, 1, -2, 2];
+
 const MERGE_WIDTH = 0.24;
 const MERGE_MIN_WIDTH = 150;
 
@@ -1277,60 +1391,37 @@ export async function createMapGlobe({
   let view: MapView = openView;
 
   /**
-   * The `All` tab's four views, as three predicates.
+   * Whether the `All` tab's Terrain view is up — ONE predicate, and THE ONE
+   * PLACE THE VIEW ID IS TESTED BY NAME.
    *
-   * THE ONE PLACE THE VIEW IDS ARE TESTED BY NAME. Everything else in the
-   * engine asks these questions instead, because the interesting distinction is
-   * not which of the four is selected but which of two capabilities is in play:
-   * is the camera leaning, and is the 3D mesh attached. Those are what the
-   * projection, the layers, the shading and the fit all branch on, and spelling
-   * `view === 'route' || view === 'region'` at each of them is how one of them
-   * ends up disagreeing with the others.
+   * There were four of these while there were four views: `meshView`,
+   * `tiltView`, `surveyView` and `leaning`, because the interesting question
+   * was never which position the pill was in but which capability was in play —
+   * is the camera leaning, is the mesh attached, is this the scale that draws
+   * the other routes. With one terrain view left those are all the same
+   * question, and asking it once is the point: `view === 'survey'` spelled at
+   * each of the dozen sites that branch on it is how one of them ends up
+   * disagreeing with the rest, which is exactly what the cut version was
+   * written to prevent.
    */
-  function meshView(): boolean {
-    return current === 'combined' && MESH_VIEWS.includes(view);
-  }
-
-  function tiltView(): boolean {
-    return current === 'combined' && view === 'tilted';
-  }
-
-  /**
-   * Terrain 4, the one mesh view with two scales.
-   *
-   * It differs from its two neighbours in exactly two ways and both are here
-   * rather than spread through the file: `trackFactor` reads it to decide
-   * whether it is framing the region or the walk, and `applyLayers` reads it to
-   * leave the OTHER routes drawn. Everything else it does — mercator, the mesh,
-   * the pitch, the hard hillshade — it does because it is a mesh view.
-   */
-  function surveyView(): boolean {
-    return current === 'combined' && view === 'survey';
-  }
-
-  /** Any view that leans the camera — all three terrain views do. */
-  function leaning(): boolean {
-    return meshView() || tiltView();
+  function terrainView(): boolean {
+    return current === 'combined' && view === TERRAIN_VIEW;
   }
 
   /**
    * The angle a globe mode's camera sits at.
    *
-   * Flat is the default and the only option `explore` has. The two mesh views
-   * take terrain mode's own angle, because they are looking at the same kind of
-   * thing it is — one route on real ground — and a second set of numbers for
-   * that would be two tilts for one idea. `tilted` takes GLOBE_TILT instead,
-   * which is gentler, and the note on that constant says why a hemisphere
-   * cannot take a ridge's pitch.
+   * Flat is the default and the only option `explore` has. Terrain takes
+   * terrain MODE's own angle, because it is looking at the same kind of thing —
+   * one route on real ground — and a second set of numbers for that would be
+   * two tilts for one idea.
    */
   function viewAngle(): { pitch: number; bearing: number } {
-    if (meshView()) return { ...TRAILS_VIEW };
-    if (tiltView()) return { ...GLOBE_TILT };
-    return { pitch: 0, bearing: 0 };
+    return terrainView() ? { ...TRAILS_VIEW } : { pitch: 0, bearing: 0 };
   }
 
   /**
-   * A box grown about its own centre, for Terrain 2 and for the widened Trails
+   * A box grown about its own centre, for the Terrain view and for the widened Trails
    * fit.
    *
    * Latitude is clamped to the Web Mercator limit rather than to +/-90: a fit
@@ -1441,6 +1532,9 @@ export async function createMapGlobe({
     on: boolean;
     /** Set on the cards, null on the atlas ranks. See `merge`. */
     stack: StackPart | null;
+    /** The stack offset currently written to the element, so the write can be
+        skipped when nothing moved. See `setNudge`. */
+    ny: number;
   }
 
   interface LabelSpec {
@@ -1481,6 +1575,7 @@ export async function createMapGlobe({
       el: spec.el,
       at: spec.at,
       kind: spec.kind,
+      ny: 0,
       minZoom: spec.minZoom,
       maxZoom: spec.maxZoom ?? Infinity,
       priority: spec.priority,
@@ -1799,6 +1894,28 @@ export async function createMapGlobe({
       }
     }
 
+    /* And which of the route cards is the one the view is aimed at (16 Sep
+       2026, the author's request). Marked in the SAME vocabulary a hover uses —
+       accent border, accent name — because the two mean the same thing to the
+       reader, "this card is the one", and a third treatment for a third state
+       would be one more thing to learn about a map that has a dozen already.
+       It also puts the map's own mark in step with the index rail, which has
+       named the current route in the accent since the rail shipped.
+
+       Here rather than in `addTrailLabel`, because a card outlives any one
+       selection: the elements are built when the routes land and this has to
+       move every time `focused` does. `retier` is where card presence is
+       already decided and it runs at the end of `applyLayers`, so it is reached
+       on every path that can change the subject. `toggle` with a second
+       argument writes nothing when the answer has not changed. */
+    for (const label of labels) {
+      if (label.kind !== 'trail') continue;
+      label.el.classList.toggle(
+        'mapglobe__label--current',
+        Boolean(focused) && label.el.dataset.mapglobeTrail === focused?.id,
+      );
+    }
+
     const active = activeLayers();
 
     if (active.size) {
@@ -2037,6 +2154,10 @@ export async function createMapGlobe({
     y: number;
     d: number;
     box: Box;
+    /** How far the card was stacked off its anchor to clear a neighbour, in
+        pixels. Zero for everything that won its space outright, which is all
+        of the atlas ranks — only cards are ever stacked. */
+    dy: number;
   }
 
   /** One thing competing for space: a label, or a merged card standing for
@@ -2051,6 +2172,53 @@ export async function createMapGlobe({
 
   const overlaps = (a: Box, b: Box): boolean =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  /**
+   * Try to lift a card clear of the one that owns its space, so that both keep
+   * their own name instead of becoming one merged card.
+   *
+   * Mutates the spot's box on success, because everything downstream — the
+   * final placement pass, and the merged card's fallback to its members — reads
+   * that box and must see where the card actually is.
+   *
+   * The step is the box's own height, so two stacked boxes touch and never
+   * overlap; and each candidate is tested against everything already placed,
+   * controls included, so a stacked card can no more land under the panel than
+   * an unstacked one can.
+   */
+  function stack(spot: Spot, winner: Spot, placed: { box: Box }[]): boolean {
+    if (Math.hypot(spot.x - winner.x, spot.y - winner.y) < NUDGE_MIN_APART) return false;
+
+    for (const step of NUDGE_STEPS) {
+      const dy = step * spot.box.h;
+      const box = { ...spot.box, y: spot.box.y + dy };
+      if (placed.some((other) => overlaps(box, other.box))) continue;
+      spot.box = box;
+      spot.dy = dy;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Apply a stack offset to the card itself.
+   *
+   * `translate` and NOT `transform`: MapLibre owns the marker's `transform` and
+   * rewrites it on every frame the camera moves, so anything written there is
+   * gone by the next render. `translate` is its own property, composes with the
+   * transform rather than replacing it, and is left alone by MapLibre. The
+   * alternative — `marker.setOffset()` — is the library's own answer and is
+   * avoided here for a narrower reason: this runs inside a `render` handler,
+   * and that call reaches back into the map.
+   *
+   * Written only on change. declutter runs on every frame the map draws, and a
+   * style write per card per frame is a layout invalidation per card per frame.
+   */
+  function setNudge(label: Label, dy: number): void {
+    if (label.ny === dy) return;
+    label.ny = dy;
+    label.el.style.translate = dy ? `0 ${dy}px` : '';
+  }
 
   function declutter(): void {
     // A focused route carries no labels; the overview carries as many as the
@@ -2103,6 +2271,7 @@ export async function createMapGlobe({
         x: point.x,
         y: point.y,
         d: (point.x - cx) ** 2 + (point.y - cy) ** 2,
+        dy: 0,
         // Reconstructed from the marker's anchor rather than measured, so this
         // stays one arithmetic pass with no second forced layout.
         box: {
@@ -2157,15 +2326,36 @@ export async function createMapGlobe({
       members: null,
     }));
 
+    /* Stacking is tried BEFORE merging, and only where both gates open — see
+       NUDGE_MIN_ZOOM, which explains why one of them is a zoom. A card that can
+       be lifted clear of its neighbour keeps its own name and its own place;
+       one that cannot is absorbed exactly as before. */
+    const stacking = map.getZoom() >= NUDGE_MIN_ZOOM;
+
     for (const spot of cards) {
       const hit = winners.find((winner) => overlaps(spot.box, winner.box));
       if (!hit) {
         winners.push({ box: spot.box, members: [spot] });
         continue;
       }
-      if (hit.members) hit.members.push(spot);
-      else spot.label.el.style.visibility = 'hidden';
+      /* A control, not a card. There is nothing under the panel for a card to
+         be named on, and lifting it out from under one would drop it on the
+         map somewhere it does not belong. */
+      if (!hit.members) {
+        spot.label.el.style.visibility = 'hidden';
+        continue;
+      }
+      if (stacking && stack(spot, hit.members[0]!, winners)) {
+        winners.push({ box: spot.box, members: [spot] });
+        continue;
+      }
+      hit.members.push(spot);
     }
+
+    /* Every card carries its offset back to the DOM, including the zero that
+       puts one back where it belongs — a card that was stacked last frame and
+       won its own space this frame has to come down again. */
+    for (const spot of cards) setNudge(spot.label, spot.dy);
 
     let used = 0;
 
@@ -2389,6 +2579,45 @@ export async function createMapGlobe({
   }
 
   /**
+   * Which of the ten routes is the subject, said in colour (16 Sep 2026, the
+   * author's request: three of these walks are legs of one trek up the same
+   * valley, and picking one of them changed nothing about how the three were
+   * drawn).
+   *
+   * Every route was `p.visited` — the page's accent, the one colour here that is
+   * not derived — whether it was the one you had asked for or one of the nine
+   * you had not. The focused route did carry a casing and half a pixel more
+   * width, which is a real difference and not one anybody reads as "this one":
+   * in the Changping valley it left three near-identical accent lines and no
+   * answer to which was selected.
+   *
+   * So the OTHERS step off the accent and the subject keeps it. That direction
+   * matters — the focused track is already the heaviest mark on the map, and
+   * making it heavier still would have cost the hillside it is drawn on. It is
+   * also the direction the author asked for.
+   *
+   * `p.coast` is the strongest neutral step on the ramp, at 0.50, and the
+   * strongest is the right one: an unselected route is not decoration, it is
+   * how the reader reaches the other walks, and that is the whole reason
+   * Terrain draws the other nine at all. The rank is carried by hue — derived
+   * neutral against the one underived accent — rather than by a fade, which is
+   * the same call the atlas label ladder makes and for the same reason. It is
+   * reused rather than given a step of its own on the precedent of the city
+   * dot, which takes the coastline's colour for want of a strong enough one of
+   * its own.
+   *
+   * NOTHING SINGLES ITSELF OUT WITHOUT A SUBJECT. The trails overview and a
+   * trip picked from the index rail both leave `focused` null, and there every
+   * route is the accent again, equally — an overview that quietened nine of ten
+   * routes would be claiming a selection that had not been made.
+   */
+  function paintTrails(): void {
+    const others = focused ? p.coast : p.visited;
+    map.setPaintProperty('trails-line', 'line-color', others);
+    map.setPaintProperty('trail-start', 'circle-color', others);
+  }
+
+  /**
    * Show exactly the layers the current mode and filter ask for.
    *
    * One pass over the whole table rather than a diff against what was showing:
@@ -2410,20 +2639,20 @@ export async function createMapGlobe({
     for (const id of TRIP_LAYERS) {
       map.setLayoutProperty(id, 'visibility', trips ? 'visible' : 'none');
     }
-    /* Every route at once — but not in Terrain 1 or Terrain 2, where one route
-       is the subject and the other nine are sub-pixel specks in other
-       countries.
-
-       TERRAIN 4 IS THE EXCEPTION, and it is not an inconsistency (10 Sep 2026).
-       That view exists to be navigated: at its region scale a neighbouring walk
-       is genuinely in frame — three of these routes are legs of one trek up the
+    /* Every route at once, in every globe view including Terrain — which used
+       to be the exception written out here, because Terrain 1 and Terrain 2
+       hid the other nine as sub-pixel specks in other countries and Terrain 4
+       did not. Only Terrain 4 survived (14 Sep 2026), so the condition is gone
+       rather than inverted, and the reasoning that earned it is why: this view
+       exists to be navigated. At its region scale a neighbouring walk is
+       genuinely in frame — three of these routes are legs of one trek up the
        same valley — and the objection it was built for was that reaching
        another route meant zooming out. A line the reader can see beside the one
        they are on is the cheapest possible answer to that, and the routes off
-       in other countries are not sub-pixel here, they are off the edge of the
-       frame, which costs nothing. The focused route still draws its own track
-       over the top, so "this one" and "the others" are two different marks. */
-    const others = routes && (!meshView() || surveyView());
+       in other countries are off the edge of the frame, which costs nothing.
+       The focused route still draws its own track over the top, so "this one"
+       and "the others" stay two different marks. */
+    const others = routes;
     for (const id of OVERVIEW_LAYERS) {
       map.setLayoutProperty(id, 'visibility', others ? 'visible' : 'none');
     }
@@ -2437,15 +2666,19 @@ export async function createMapGlobe({
        somewhere in Johor — not wrong exactly, but a mark that answers no
        question the globe is being asked, and it competes with the footprints
        that do. On the overview it would be one route drawn twice. */
-    /* AND in the `All` tab's two mesh views, which is the point of them: they
-       frame exactly one route on real ground. `routes` gates it as well, so the
+    /* AND in the `All` tab's Terrain view, which is the point of it: it frames
+       exactly one route on real ground. `routes` gates it as well, so the
        Trails content chip still switches every route off — including this one,
        which then leaves a bare mountainside, and that is the right reading of
        "show me no routes". */
-    const oneTrack = focused && ((!globe && !overview) || (meshView() && routes));
+    const oneTrack = focused && ((!globe && !overview) || (terrainView() && routes));
     for (const id of TRACK_LAYERS) {
       map.setLayoutProperty(id, 'visibility', oneTrack ? 'visible' : 'none');
     }
+    /* Here rather than at each call site: every path that can change which
+       route is the subject already ends up in this function — loadTrail,
+       showPlace, showOverview, setView, setContent and setLayers alike. */
+    paintTrails();
 
     const active = activeLayers();
 
@@ -2466,7 +2699,7 @@ export async function createMapGlobe({
        whose surroundings are the point. The globe shades nothing unless the
        chip says otherwise.
 
-       AND THE `All` TAB'S PITCHED VIEW SHADES UNASKED TOO (10 Sep 2026),
+       AND THE `All` TAB'S TERRAIN VIEW SHADES UNASKED TOO (10 Sep 2026),
        for the same reason the overview does and one more: a tilt with no
        shading under it is a flat map at an awkward angle, so a control called
        Terrain that only moved the camera would not show any. Note what this
@@ -2477,11 +2710,11 @@ export async function createMapGlobe({
        index.ts, and the note there for why disabling beats leaving a control
        that cannot control. */
     if (current === 'terrain') setHillshade(focused ? 'terrain' : 'globe');
-    /* The mesh views take the harder setting terrain mode uses on a single
-       ridge, because they are at a single ridge's scale and the gentle one
-       disappears there. `tilted` takes the gentle one, at hemisphere scale. */
-    else if (meshView()) setHillshade('terrain');
-    else setHillshade(tiltView() || active.has('relief') ? 'globe' : null);
+    /* The terrain view takes the harder setting terrain mode uses on a single
+       ridge, because it is at a single ridge's scale and the gentle one
+       disappears there. */
+    else if (terrainView()) setHillshade('terrain');
+    else setHillshade(active.has('relief') ? 'globe' : null);
 
     retier();
   }
@@ -2509,11 +2742,11 @@ export async function createMapGlobe({
    */
   function attachTerrainWhenSettled(): void {
     const attach = (): void => {
-      /* A single route only — in terrain mode, or in the `All` tab's two mesh
-         views, which are the same picture with the trips and the layer chips
-         left on. Terrain mode's OVERVIEW stays on the globe; so does `tilted`,
-         and so does a flat `All`. See the note below. */
-      if (!(current === 'terrain' && focused) && !meshView()) return;
+      /* A single route only — in terrain mode, or in the `All` tab's Terrain
+         view, which is the same picture with the trips and the layer chips
+         left on. Terrain mode's OVERVIEW stays on the globe, and so does a
+         flat `All`. See the note below. */
+      if (!(current === 'terrain' && focused) && !terrainView()) return;
       map.setProjection({ type: 'mercator' });
       /* The source, here rather than only in applyMode. Opening the page
          straight into terrain mode draws its route BEFORE the first applyMode
@@ -2530,10 +2763,10 @@ export async function createMapGlobe({
   }
 
   /**
-   * Arrive in one of the `All` tab's two mesh views.
+   * Arrive in the `All` tab's Terrain view.
    *
-   * These are the only cameras on the page that REQUIRE a route: they exist to
-   * put one walk on real ground, and there is nothing to frame without one. So
+   * It is the only camera on the page that REQUIRES a route: it exists to put
+   * one walk on real ground, and there is nothing to frame without one. So
    * unlike terrain mode — where CLAUDE.md records that picking a default is
    * exactly what the overview exists not to do — a default here is forced, and
    * the order of preference is what makes it defensible: whatever the reader
@@ -2543,8 +2776,24 @@ export async function createMapGlobe({
    * empty says less than staying put, which is the same call `showOverview`
    * makes for the same reason.
    */
-  async function openMeshView(animate: boolean): Promise<void> {
-    /* Terrain 4 arrives at the region, always. Resuming it halfway drilled in
+  async function openTerrainView(animate: boolean, target: MapTrail | null = null): Promise<void> {
+    /* A route the reader named on their way in — a card or an index row clicked
+       on the flat globe, which moves the switch to Terrain rather than
+       leaving the tab (14 Sep 2026). That IS the reader choosing a walk, so it
+       is the one arrival that drills; `drilled` is left to `loadTrail`, which
+       sets it from its own third argument.
+
+       Before the preferences below, not after: a route that was clicked outranks
+       the trip, the focused route and the stored id alike, because it is the
+       only one of the four the reader asked for in the same gesture. */
+    if (target) {
+      await loadTrail(target, animate, true).catch((error: unknown) => {
+        console.error('mapglobe: the route a terrain view was aimed at could not be drawn', error);
+      });
+      return;
+    }
+
+    /* Terrain arrives at the region, always. Resuming it halfway drilled in
        would make the same control show two different pictures depending on
        where the reader had been, which is the property the view switch exists
        not to have. */
@@ -2568,7 +2817,7 @@ export async function createMapGlobe({
        given. */
     const opening = trail ?? trails[0];
     if (!opening) return;
-    /* `false` is the third argument, and it is what makes Terrain 4 open at the
+    /* `false` is the third argument, and it is what makes Terrain open at the
        region rather than on the walk. Arriving in a view is not the reader
        drilling into anything; only a click on a route is. */
     await loadTrail(opening, animate, false).catch((error: unknown) => {
@@ -2578,20 +2827,20 @@ export async function createMapGlobe({
 
   function applyMode(next: MapMode, animate: boolean): void {
     const wasGlobe = current !== 'terrain';
-    /* Read BEFORE `current` moves. Leaving `All` while one of its mesh views is
-       up means leaving a ridge at z11 in mercator with a terrain mesh attached,
+    /* Read BEFORE `current` moves. Leaving `All` while its Terrain view is up
+       means leaving a ridge at z11 in mercator with a terrain mesh attached,
        which is a journey home rather than a change of angle — and the test for
        it stops being true the moment `current` is reassigned. */
-    const wasMesh = meshView();
+    const wasMesh = terrainView();
     current = next;
 
     if (next !== 'terrain') {
-      /* The mesh views are a globe MODE with a mercator camera, so they leave
+      /* The Terrain view is a globe MODE with a mercator camera, so it leaves
          before the three lines below get a chance to put the sphere back. */
-      if (meshView()) {
+      if (terrainView()) {
         applyLayers();
         ensureTerrainSource();
-        void openMeshView(animate);
+        void openTerrainView(animate);
         return;
       }
 
@@ -2602,8 +2851,8 @@ export async function createMapGlobe({
       map.setProjection({ type: 'globe' });
 
       // Same globe, same scale: leave the camera where the reader put it. Only
-      // arriving back from terrain — or from a mesh view, which is terrain by
-      // another name — is a journey home.
+      // arriving back from terrain MODE — or from the Terrain view, which is
+      // the same picture with the trips left on — is a journey home.
       if (!wasGlobe || wasMesh) {
         const home = { ...GLOBE_HOME, ...viewAngle() };
         if (animate) map.flyTo({ ...home, duration: 2200, essential: true });
@@ -2691,7 +2940,7 @@ export async function createMapGlobe({
    */
   function fitAngle(): { pitch?: number; bearing?: number } {
     if (current === 'terrain') return TRAILS_VIEW;
-    return leaning() ? viewAngle() : {};
+    return terrainView() ? viewAngle() : {};
   }
 
   function setLayers(next: MapLayer[]): void {
@@ -2729,24 +2978,34 @@ export async function createMapGlobe({
    * tilting over rather than appearing a second after it settles.
    *
    * Stored whatever the mode, applied only in the one that reads it, exactly as
-   * setLayers and setContent are. A reader who tilts `All`, goes to look at a
-   * route and comes back finds it tilted; one who tilts it and switches to
-   * `Trips` sees no change at all, because `explore` is always flat.
+   * setLayers and setContent are. A reader who puts `All` on Terrain, goes to
+   * look at a route and comes back finds it on Terrain; one who does it and
+   * switches to `Trips` sees no change at all, because `explore` is always flat.
+   *
+   * THE `easeTo` AT THE FOOT IS NOW UNREACHABLE-BY-DESIGN, and it is kept
+   * deliberately. With four views there were two flat ones, and moving between
+   * them was an ease in place — the reader's centre and zoom preserved while
+   * the camera leaned. With `tilted` gone every remaining transition is
+   * globe↔Terrain, so `wasMesh` or `terrainView()` catches all of them and this
+   * line is the flat→flat case of a pill that has one flat position. It costs
+   * a line, it is the correct behaviour if a second flat view is ever added
+   * back, and deleting it would leave `setView` silently doing nothing at all
+   * in that case.
    */
-  function setView(next: MapView): void {
+  function setView(next: MapView, target: MapTrail | null = null): void {
     /* Read before `view` moves, for the same reason applyMode reads it before
-       `current` does: leaving a mesh view is a flight home and staying between
-       the two flat views is not, and after the assignment there is no way to
-       tell which just happened. */
-    const wasMesh = meshView();
+       `current` does: leaving Terrain is a flight home, and after the
+       assignment there is no way to tell which direction this was. With two
+       positions left it is the only thing this variable is still for. */
+    const wasMesh = terrainView();
     view = next;
     if (current !== 'combined') return;
 
     applyLayers();
 
-    if (meshView()) {
+    if (terrainView()) {
       ensureTerrainSource();
-      void openMeshView(true);
+      void openTerrainView(true, target);
       return;
     }
 
@@ -2758,14 +3017,14 @@ export async function createMapGlobe({
     if (wasMesh) {
       /* From a ridge at z11 the world has to be flown back to. There is nothing
          to preserve: the centre and zoom the reader had on the globe were
-         replaced by the route's when they entered the mesh view. */
+         replaced by the route's when they entered the Terrain view. */
       map.flyTo({ ...GLOBE_HOME, ...viewAngle(), duration: 2000, essential: true });
       return;
     }
 
-    /* Globe to tilted, or back. This is the original two-position behaviour and
-       the property worth protecting: the centre and the zoom are the reader's,
-       so whatever they had spun to is still framed when the camera leans. */
+    /* Flat to flat — see the note above for why this is kept with one flat
+       position left. The property it protects is that the centre and the zoom
+       are the reader's, so whatever they had spun to is still framed. */
     map.easeTo({ ...viewAngle(), duration: 900, essential: true });
   }
 
@@ -2780,13 +3039,16 @@ export async function createMapGlobe({
   let focused: MapTrail | null = null;
 
   /**
-   * Terrain 4 only: whether the reader has drilled from the region to the one
-   * route inside it.
+   * The Terrain view only: whether the reader has drilled from the region to
+   * the one route inside it.
    *
    * A boolean rather than a second view id, because the two scales are one
    * view's before-and-after rather than two things to choose between. The pill
-   * would otherwise need five positions to say what one click on a route card
-   * already says, and the reader would have to know to move it.
+   * would otherwise need a second Terrain position to say what one click on a
+   * route card already says, and the reader would have to know to move it.
+   * That is not hypothetical — those two positions EXISTED, as Terrain 1 and
+   * Terrain 2, and cutting them to this one boolean is what the author asked
+   * for on 14 Sep 2026.
    */
   let drilled = false;
 
@@ -3233,6 +3495,11 @@ export async function createMapGlobe({
 
     map.fitBounds(grow(box, PLACE_GROWTH), {
       padding: framePadding(),
+      /* A place is capped for the same reason a route is. None of the eight is
+         small enough to reach it today — the tightest is Phuket's footprint
+         with one walk folded in — but a trip whose footprint is a village
+         would over-zoom exactly as Cape Krathing did. */
+      maxZoom: TRACK_MAX_ZOOM,
       ...fitAngle(),
       duration: animate ? 2000 : 0,
       essential: true,
@@ -3285,14 +3552,15 @@ export async function createMapGlobe({
    * Frame the drawn route.
    *
    * `factor` is how much wider than the route's own extent to frame — 1 is the
-   * route filling the frame, and the two callers that pass more are Terrain 2
-   * and the Trails tab's own widened fit. It went from a bare `fitBounds` to
-   * this on 10 Sep 2026; the padding, pitch and bearing are unchanged.
+   * route filling the frame, and the two callers that pass more are the Terrain
+   * view on arrival and the Trails tab's own widened fit. It went from a bare
+   * `fitBounds` to this on 10 Sep 2026; the padding, pitch and bearing are
+   * unchanged.
    *
    * The angle comes from `fitAngle()` rather than the literal 62/-22 that used
    * to be written here. Those were a duplicate of TRAILS_VIEW that happened to
-   * agree with it, and the `All` tab's mesh views need the same angle from the
-   * same place — a third copy is how one of them ends up half a degree off.
+   * agree with it, and the `All` tab's Terrain view needs the same angle from
+   * the same place — a third copy is how one of them ends up half a degree off.
    */
   /**
    * How much wider than the route's own extent to frame it, by whoever is
@@ -3300,13 +3568,12 @@ export async function createMapGlobe({
    * had to be told its own scale is a fit that can be told the wrong one.
    */
   function trackFactor(): number {
-    /* Terrain 4's two scales, and the one place the difference between them
-       lives. It ARRIVES at the region — the author's spec, and the same picture
-       Terrain 2 frames — and tightens to the walk itself once the reader has
-       picked one. `drilled` is reset on every arrival in the view, so leaving
-       it and coming back starts wide again rather than resuming halfway down. */
-    if (surveyView()) return drilled ? 1 : REGION_GROWTH;
-    if (meshView()) return view === 'region' ? REGION_GROWTH : 1;
+    /* The Terrain view's two scales, and the one place the difference between
+       them lives. It ARRIVES at the region — the author's spec — and tightens
+       to the walk itself once the reader has picked one. `drilled` is reset on
+       every arrival in the view, so leaving it and coming back starts wide
+       again rather than resuming halfway down. */
+    if (terrainView()) return drilled ? 1 : REGION_GROWTH;
     return current === 'terrain' ? TRAIL_GROWTH : 1;
   }
 
@@ -3315,6 +3582,12 @@ export async function createMapGlobe({
     const factor = trackFactor();
     map.fitBounds(factor === 1 ? trackBounds : grow(trackBounds, factor), {
       padding: framePadding(),
+      /* The cap only ever pulls the camera BACK, so the wide arrival scales are
+         untouched by it — the widest REGION_GROWTH fit lands at z9.4, four
+         levels away. It binds on the drilled frame of the three smallest
+         routes, and on the Trails tab's own single-route fit, which had the
+         same problem more mildly. */
+      maxZoom: TRACK_MAX_ZOOM,
       ...fitAngle(),
       duration: animate ? 2000 : 0,
       essential: true,
@@ -3325,10 +3598,11 @@ export async function createMapGlobe({
   }
 
   /**
-   * `drill` is Terrain 4's, and it is what tells "the reader chose this walk"
-   * apart from "this view had to open on something". Only the first tightens
-   * the frame from the region to the route; see `trackFactor`. Every other
-   * view ignores it, and the arrival paths pass false.
+   * `drill` belongs to the `All` tab's Terrain view, and it is what tells "the
+   * reader chose this walk" apart from "this view had to open on something".
+   * Only the first tightens the frame from the region to the route; see
+   * `trackFactor`. The globe and terrain MODE ignore it, and the arrival paths
+   * pass false.
    */
   async function loadTrail(trail: MapTrail, animate = true, drill = true): Promise<void> {
     const coords = await trailGeometry(trail);
@@ -3347,18 +3621,18 @@ export async function createMapGlobe({
        ridge instead of jumping to it: the second fit used to start from the
        destination the first one had already jumped to, so the animation had
        nowhere to go. */
-    /* `!meshView()` is what keeps a route picked inside the `All` tab IN the
+    /* `!terrainView()` is what keeps a route picked inside the `All` tab IN the
        `All` tab (10 Sep 2026). Without it, choosing a route from a card on a
-       mesh view would fly to the ridge and land the reader in the Trails tab,
+       Terrain view would fly to the ridge and land the reader in the Trails tab,
        having silently changed their mode, their panel and what is on the map —
        for a click that meant "show me this one, here". */
-    if (current !== 'terrain' && !meshView()) {
+    if (current !== 'terrain' && !terrainView()) {
       applyMode('terrain', animate);
       return;
     }
 
     // Already somewhere that frames one route: the overview handing over to
-    // one, one handing over to another, or a mesh view being re-aimed. The
+    // one, one handing over to another, or the Terrain view being re-aimed. The
     // layers change, the mode does not.
     applyLayers();
     fitTrack(animate);
@@ -3406,8 +3680,11 @@ export async function createMapGlobe({
     map.setPaintProperty('region-line', 'line-color', p.visitedEdge);
     map.setPaintProperty('track', 'line-color', p.visited);
     map.setPaintProperty('track-casing', 'line-color', p.ground);
-    map.setPaintProperty('trails-line', 'line-color', p.visited);
-    map.setPaintProperty('trail-start', 'circle-color', p.visited);
+    /* Through paintTrails, NOT `p.visited` written out again: these two are the
+       one pair of paint properties whose value depends on whether a route is
+       focused, so a second copy here would repaint the de-emphasised routes
+       back to the accent on every theme change. */
+    paintTrails();
     map.setPaintProperty('trail-start', 'circle-stroke-color', p.ground);
     map.setPaintProperty('track-end', 'circle-color', [
       'case',

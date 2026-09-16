@@ -19,12 +19,13 @@ import type { MapGlobe, MapTrail, MapTrip } from './engine';
 import {
   DEFAULT_CONTENT,
   DEFAULT_LAYERS,
+  DEFAULT_MODE,
   DEFAULT_VIEW,
   MAP_CONTENT,
   MAP_LAYERS,
   MAP_MODES,
   MAP_VIEWS,
-  MESH_VIEWS,
+  TERRAIN_VIEW,
   type MapContent,
   type MapLayer,
   type MapMode,
@@ -32,17 +33,9 @@ import {
 } from './modes';
 
 const STORAGE_KEY = 'mapglobe-mode';
-/* `explore` — the globe — rather than `terrain`, because the globe is what the
-   travel section is about and terrain mode is the detour. It is also the cheaper
-   of the two on arrival: explore opens on two local files and makes no
-   third-party request at all, while terrain reaches straight for DEM tiles.
-
-   A mode stored before 7 Sep 2026 can be `places` or `atlas`, neither of which
-   exists now. Nothing special handles that, and nothing needs to: `isMode`
-   checks the stored string against MAP_MODES and a miss falls through to here,
-   which is the right answer anyway — both of those modes were positions
-   `explore` can be put in with its own chips. */
-const DEFAULT_MODE: MapMode = 'explore';
+/* DEFAULT_MODE is `combined` and it lives in modes.ts, beside the switcher
+   order it has to agree with and beside the three other defaults the markup
+   ships pre-selected. See the note there. */
 
 /**
  * The filter set lives under its own key, not inside the mode.
@@ -65,11 +58,11 @@ const CONTENT_KEY = 'mapglobe-content';
  * reason again — five now, one per thing the reader can decide, and none of
  * them able to forget another's answer.
  *
- * A reader who tilts `All`, goes to read a route and comes back should find it
- * tilted. Folding this into the mode key would mean the mode had to remember
- * an angle it does not have — `explore` is always flat and `terrain` is always
- * pitched — and folding it into the layer key would tie the tilt to a filter
- * set, so changing one chip would level the camera.
+ * A reader who puts `All` on Terrain, goes to read a route and comes back
+ * should find it on Terrain. Folding this into the mode key would mean the mode
+ * had to remember an angle it does not have — `explore` is always flat and
+ * `terrain` is always pitched — and folding it into the layer key would tie the
+ * camera to a filter set, so changing one chip would level it.
  */
 const VIEW_KEY = 'mapglobe-view';
 
@@ -447,22 +440,54 @@ if (section && stage && labelLayer) {
   /** Whether the index rail is open. */
   let railOpen = storedIndex();
 
-  /** Whether the `All` tab is in any of its four terrain views. */
+  /**
+   * Whether the `All` tab's Terrain view is up.
+   *
+   * There were two of these until the four terrain views were cut to one
+   * (14 Sep 2026): a `terrainView()` reading `view !== 'globe'` for the relief
+   * chip, and a `meshView()` reading MESH_VIEWS for the index rail. With one
+   * terrain position left they are the same question, and TERRAIN_VIEW comes
+   * from modes.ts so this and the engine's own `terrainView()` cannot disagree.
+   *
+   * Three things ask: the relief chip, which this view shades whether or not
+   * the chip says so; the index rail, which only this view carries; and `aim`,
+   * because a route clicked on the flat globe is a request to go and look at
+   * it, which is what this view is for.
+   */
   function terrainView(): boolean {
-    return mode === 'combined' && view !== 'globe';
+    return mode === 'combined' && view === TERRAIN_VIEW;
   }
 
   /**
-   * And whether it is in one of the three that attach the 3D mesh, which is
-   * what the index rail is gated on in CSS.
-   *
-   * Written as an attribute rather than switched in JS because everything about
-   * the rail's appearance is a style — the same way `data-mode` gates the two
-   * panels and the readout. MESH_VIEWS comes from modes.ts so this and the
-   * engine's own `meshView()` cannot disagree.
+   * The rail is gated on that in CSS, written as an attribute rather than
+   * switched in JS because everything about its appearance is a style — the
+   * same way `data-mode` gates the two panels and the readout.
    */
-  function markMesh(): void {
-    section!.dataset.meshView = String(mode === 'combined' && MESH_VIEWS.includes(view));
+  function markTerrainView(): void {
+    section!.dataset.terrainView = String(terrainView());
+  }
+
+  /**
+   * Move the `All` tab's view switch, and remember it.
+   *
+   * Shared by the pill and by `aim`, which moves it on the reader's behalf.
+   * `target` is the route to arrive on, and it is the reason this hands the
+   * engine both at once rather than setting the view and then aiming it: the
+   * view would open on whatever route it opens on, fly there, and then fly
+   * again to the one that was actually clicked.
+   */
+  function chooseView(next: MapView, target: MapTrail | null = null): void {
+    view = next;
+    markViews(view);
+    markTerrainView();
+    // The Terrain view implies relief, so the chip changes with the camera.
+    refreshLayers();
+    globe?.setView(view, target);
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // Works for this page view; just will not be remembered.
+    }
   }
 
   /* The relief chip is marked from the mode AND the view, which is why this is
@@ -471,8 +496,9 @@ if (section && stage && labelLayer) {
      because leaving `All` for `Trips` levels the camera and hands the chip back
      to the reader even though neither the filters nor the view was touched.
 
-     All three terrain views shade relief, not just the tilted one — the two
-     mesh views shade it harder, and neither can be asked not to. */
+     The Terrain view shades relief at the hard single-ridge strength and
+     cannot be asked not to, which is why the chip is marked on and disabled
+     rather than left as a control that controls nothing. */
   function refreshLayers(): void {
     markLayers(active, terrainView());
   }
@@ -504,7 +530,7 @@ if (section && stage && labelLayer) {
   markViews(view);
   markTrails(trail?.id ?? null);
   markIndexOpen(railOpen);
-  markMesh();
+  markTerrainView();
 
   /* ---- switching, which works before the map has loaded ------------------- */
   document.addEventListener('click', (event) => {
@@ -514,10 +540,10 @@ if (section && stage && labelLayer) {
     if (modeButton && isMode(modeButton.dataset.mapglobeMode)) {
       mode = modeButton.dataset.mapglobeMode;
       markSelected(mode);
-      markMesh();
+      markTerrainView();
       // `explore` is always flat, so leaving `All` hands the relief chip back
       // to the reader's own filter set — and returning to it takes it away
-      // again if the view is still tilted.
+      // again if the view switch is still on Terrain.
       refreshLayers();
       section.dataset.mode = mode;
       try {
@@ -541,7 +567,13 @@ if (section && stage && labelLayer) {
     const trailButton = target?.closest<HTMLElement>('[data-mapglobe-trail]');
     if (trailButton) {
       const found = trails.find((item) => item.id === trailButton.dataset.mapglobeTrail);
-      if (found) void (terrainView() ? aim(found) : pick(found));
+      /* `All` keeps its reader (14 Sep 2026, author's request). A route clicked
+         in this tab is answered inside it — by re-aiming the Terrain view, or by
+         moving the view switch onto it if the reader is on the globe. It used to
+         hand over to the Trails tab from a flat view, which silently changed the
+         tab, the panel and what was on the map for a click that meant "show me
+         this one". Only the Trails tab's own chips reach `pick`. */
+      if (found) void (mode === 'combined' ? aim(found) : pick(found));
       return;
     }
 
@@ -592,17 +624,7 @@ if (section && stage && labelLayer) {
 
     const viewButton = target?.closest<HTMLElement>('[data-mapglobe-view]');
     if (viewButton && isView(viewButton.dataset.mapglobeView)) {
-      view = viewButton.dataset.mapglobeView;
-      markViews(view);
-      markMesh();
-      // The pitched view implies relief, so the chip changes with the camera.
-      refreshLayers();
-      globe?.setView(view);
-      try {
-        localStorage.setItem(VIEW_KEY, view);
-      } catch {
-        // Works for this page view; just will not be remembered.
-      }
+      chooseView(viewButton.dataset.mapglobeView);
       return;
     }
 
@@ -649,14 +671,34 @@ if (section && stage && labelLayer) {
   }
 
   /**
-   * Re-aim one of the `All` tab's terrain views at a different route, WITHOUT
-   * leaving the tab.
+   * Answer a route click inside the `All` tab, WITHOUT leaving it.
    *
    * The difference from `pick` is only the mode: this does not call
    * `enterTerrain`, so the tab, the panel and the filters all stay where they
    * are. It writes the same `mapglobe-trail` key and marks the same picker,
    * which is what makes a route chosen here the route the Trails tab opens on —
    * one answer to "which route", wherever it was given.
+   *
+   * FROM THE FLAT GLOBE IT MOVES THE VIEW SWITCH TO TERRAIN (14 Sep 2026,
+   * author's request), where it used to hand the reader to the Trails tab. Both
+   * answers put the walk on real ground; the difference is that this one keeps
+   * the tab, the trips, the layer chips and the index rail, so the click costs
+   * nothing to undo. The rail is half of why this is the right destination —
+   * the objection that produced this view was that reaching another route meant
+   * zooming out, and a route arrived at by clicking its card on a world map is
+   * exactly where that bites.
+   *
+   * It DRILLS, which the pill's own way in deliberately does not: arriving in a
+   * view is not the reader choosing a walk, and a click on a route is. See
+   * `trackFactor` in engine.ts, which is where the view's two scales differ, and
+   * `loadTrail`'s third argument, which is what says which of the two happened.
+   *
+   * This branch also fixed a real bug in a view that no longer exists, which is
+   * worth knowing if a second flat view is ever added back: Terrain 3 leaned the
+   * camera but attached no mesh, so a route card clicked there reached
+   * `loadTrail` with no terrain view to hold it, and the ENGINE switched itself
+   * to terrain mode while this file went on believing the tab was `All`. Any
+   * flat view routed anywhere but here has the same hole.
    *
    * The readout stays hidden, because it belongs to the Trails tab. `All` has
    * the route's own card on the map, which is what was just clicked.
@@ -665,6 +707,15 @@ if (section && stage && labelLayer) {
     trail = next;
     markTrails(next.id);
     rememberTrail(next.id);
+
+    /* One camera movement, not two: the engine is handed the view and the route
+       together, so it frames the walk rather than flying to whatever route the
+       view would have opened on and then flying again. */
+    if (!terrainView()) {
+      chooseView(TERRAIN_VIEW, next);
+      return;
+    }
+
     if (!globe) return;
     try {
       await globe.loadTrail(next);
@@ -749,10 +800,10 @@ if (section && stage && labelLayer) {
 
          The manifest goes in whole, not just the route being opened: the
          overview draws all ten, and the engine cannot ask the page for them. */
-      /* Terrain mode opens ON a route if the reader left inside one. So do the
-         `All` tab's two mesh views, which cannot open on anything else — the
+      /* Terrain mode opens ON a route if the reader left inside one. So does
+         the `All` tab's Terrain view, which cannot open on anything else — the
          same stored id, so a route chosen in either place is the route the
-         other one arrives at. The flat views are handed it and ignore it. */
+         other one arrives at. The globe is handed it and ignores it. */
       const opening = mode === 'terrain' || terrainView() ? trail : null;
       globe = await createMapGlobe({
         host: stage!,
