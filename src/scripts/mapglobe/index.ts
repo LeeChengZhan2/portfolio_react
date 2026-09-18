@@ -18,19 +18,31 @@ import type { MapGlobe, MapTrail, MapTrip } from './engine';
 // static value import from the engine puts MapLibre in the eager bundle.
 import {
   DEFAULT_CONTENT,
+  DEFAULT_INFO,
   DEFAULT_LAYERS,
   DEFAULT_MODE,
   DEFAULT_VIEW,
   MAP_CONTENT,
+  MAP_INFO,
   MAP_LAYERS,
   MAP_MODES,
   MAP_VIEWS,
   TERRAIN_VIEW,
+  baseMode,
   type MapContent,
+  type MapInfo,
   type MapLayer,
   type MapMode,
   type MapView,
 } from './modes';
+/* The detail card's content is reached through a dynamic import and its VALUES
+   are never imported here — the same rule modes.ts states for the engine, in
+   the other direction. detail.ts is the five views, their charts and their
+   formatting, and it is ~4 KB gzipped that only matters once a route is on the
+   map. A static import of any one of its functions would put all of it in this
+   page's eager script, which every visitor to the route downloads whether or
+   not they ever scroll as far as the map. Types are free. */
+import type { TrailProfile } from './detail';
 
 const STORAGE_KEY = 'mapglobe-mode';
 /* DEFAULT_MODE is `combined` and it lives in modes.ts, beside the switcher
@@ -91,11 +103,25 @@ const TRAIL_KEY = 'mapglobe-trail';
  */
 const INDEX_KEY = 'mapglobe-index';
 
+/**
+ * And which of the five detail views the card in the top-left corner shows —
+ * a seventh key, for the seventh thing the reader can decide (16 Sep 2026).
+ *
+ * It outlives the route: a reader who prefers the elevation profile sees the
+ * profile of every route they pick, which is what "which view" means when the
+ * view is a way of looking rather than a thing looked at.
+ */
+const INFO_KEY = 'mapglobe-info';
+
 const section = document.querySelector<HTMLElement>('[data-mapglobe]');
 const stage = document.querySelector<HTMLElement>('[data-mapglobe-stage]');
 const labelLayer = document.querySelector<HTMLElement>('[data-mapglobe-labels]');
 const status = document.querySelector<HTMLElement>('[data-mapglobe-status]');
 const readout = document.querySelector<HTMLElement>('[data-mapglobe-readout]');
+/* The detail card and its menu — see MapGlobeStage.astro. The wrapper carries
+   `data-open` while the menu is up, the same way ThemePicker does. */
+const infoBox = document.querySelector<HTMLElement>('[data-mapglobe-info]');
+const infoCard = document.querySelector<HTMLElement>('[data-mapglobe-info-card]');
 
 /** Data the page hands over inline rather than making the script fetch it —
     the trips, and the manifest of recorded routes. Neither is large, and both
@@ -132,6 +158,10 @@ function isContent(value: string | null | undefined): value is MapContent {
 
 function isView(value: string | null | undefined): value is MapView {
   return MAP_VIEWS.includes(value as MapView);
+}
+
+function isInfo(value: string | null | undefined): value is MapInfo {
+  return MAP_INFO.includes(value as MapInfo);
 }
 
 function storedMode(): MapMode {
@@ -236,6 +266,57 @@ function storedIndex(): boolean {
     // Private browsing can refuse reads. Fall through to the frame's answer.
   }
   return window.innerWidth >= 640;
+}
+
+/**
+ * Which detail view the card opens on. Single-valued like the view key, so a
+ * stored string either names a view or falls through to the Summary.
+ */
+function storedInfo(): MapInfo {
+  try {
+    const saved = localStorage.getItem(INFO_KEY);
+    if (isInfo(saved)) return saved;
+  } catch {
+    // Private browsing can refuse reads. Fall through to the default.
+  }
+  return DEFAULT_INFO;
+}
+
+/**
+ * Mark the detail menu, and write the chosen view's name onto the button that
+ * opens it — the button IS the current view's label, so the reader can see
+ * which view is up without opening the menu.
+ */
+function markInfo(view: MapInfo): void {
+  for (const item of document.querySelectorAll<HTMLElement>('[data-mapglobe-info-option]')) {
+    const on = item.dataset.mapglobeInfoOption === view;
+    item.setAttribute('aria-checked', String(on));
+    if (on) {
+      const name = item.dataset.mapglobeInfoName ?? item.textContent?.trim() ?? view;
+      for (const current of document.querySelectorAll<HTMLElement>('[data-mapglobe-info-current]')) {
+        current.textContent = name;
+      }
+    }
+  }
+}
+
+/* The detail menu — open, shut, and the three ways it shuts. Same shape as the
+   theme picker in src/scripts/theme.ts, which is the model every click-driven
+   menu on the site copies. */
+function closeInfoMenu(): void {
+  if (!infoBox?.hasAttribute('data-open')) return;
+  infoBox.removeAttribute('data-open');
+  infoBox.querySelector('[data-mapglobe-info-toggle]')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleInfoMenu(): void {
+  if (!infoBox) return;
+  if (infoBox.hasAttribute('data-open')) {
+    closeInfoMenu();
+    return;
+  }
+  infoBox.setAttribute('data-open', '');
+  infoBox.querySelector('[data-mapglobe-info-toggle]')?.setAttribute('aria-expanded', 'true');
 }
 
 function markSelected(mode: MapMode): void {
@@ -427,7 +508,10 @@ function showTrackError(message: string): void {
 
 if (section && stage && labelLayer) {
   let globe: MapGlobe | null = null;
+  /** The TAB, which is one of eight. */
   let mode = storedMode();
+  /** What the ENGINE has been told, which is one of three. */
+  let engineMode = baseMode(mode);
   let active = storedLayers();
   /** Which of the trips and the trails the `All` tab is showing. */
   let shown = storedContent();
@@ -439,6 +523,107 @@ if (section && stage && labelLayer) {
 
   /** Whether the index rail is open. */
   let railOpen = storedIndex();
+
+  /** Which of the five detail views the card shows. */
+  let info: MapInfo = storedInfo();
+
+  /**
+   * The route the card is about — the one drawn as a single track, as the
+   * engine reports it through `onSubject`. Null whenever there is no such
+   * route on the map, which hides the card.
+   *
+   * NOT the same thing as `trail` above. That is the answer to "which route",
+   * stored and remembered across the flat globe; this is what is on screen.
+   */
+  let subject: MapTrail | null = null;
+
+  /** Bumped per render, so a profile that lands after the reader has moved on
+      is dropped rather than drawn over the card of a different route. */
+  let renderSeq = 0;
+
+  const hooks = {
+    probe(at: [number, number] | null): void {
+      globe?.setProbe(at);
+    },
+  };
+
+  /**
+   * The card's content module, fetched on first use and kept.
+   *
+   * Nothing is lost by deferring it: the card cannot be shown until a route is
+   * drawn as a single track, which cannot happen until the engine — 248 KB of
+   * it — has loaded and flown somewhere. This chunk is a hundredth of that and
+   * is asked for at the same moment.
+   */
+  let detail: typeof import('./detail') | null = null;
+
+  async function detailModule(): Promise<typeof import('./detail')> {
+    detail ??= await import('./detail');
+    return detail;
+  }
+
+  /**
+   * Fill the card for the current subject and view — or empty it.
+   *
+   * The Summary view is drawn at once from the manifest. The other four draw
+   * the heading and a one-line wait, fetch the profile (once per route, cached
+   * in detail.ts), and draw again when it lands — unless the subject or the
+   * view has moved on, in which case the late result is dropped.
+   *
+   * The track's colouring is cleared at the top rather than at the end, so a
+   * ramp derived for one route is never left on the line of the next while
+   * that one's profile is on its way.
+   */
+  async function renderInfo(): Promise<void> {
+    if (!infoCard) return;
+    const seq = ++renderSeq;
+    globe?.setProbe(null);
+    globe?.colourTrack(null);
+    section!.dataset.subject = String(subject !== null);
+
+    if (!subject) {
+      infoCard.replaceChildren();
+      return;
+    }
+    const route = subject;
+
+    let card: typeof import('./detail');
+    try {
+      card = await detailModule();
+    } catch (error) {
+      console.error('mapglobe: the route detail views could not be loaded', error);
+      return;
+    }
+    // The module fetch is a tick or two, in which the reader can have moved on.
+    if (seq !== renderSeq) return;
+
+    card.renderDetail(infoCard, info, route, null, hooks);
+    if (!card.needsProfile(info)) return;
+
+    let profile: TrailProfile;
+    try {
+      profile = await card.loadProfile(route.id);
+    } catch (error) {
+      if (seq === renderSeq) card.renderDetailError(infoCard, route);
+      console.error('mapglobe: reading a route profile failed', error);
+      return;
+    }
+    if (seq !== renderSeq) return;
+    card.renderDetail(infoCard, info, route, profile, hooks);
+    if (info === 'colour') globe?.colourTrack(card.heightSeries(profile));
+  }
+
+  /** Move the detail menu, remember it, and redraw the card. */
+  function chooseInfo(next: MapInfo): void {
+    info = next;
+    markInfo(info);
+    void renderInfo();
+    try {
+      localStorage.setItem(INFO_KEY, info);
+    } catch {
+      // Works for this page view; just will not be remembered.
+    }
+  }
 
   /**
    * Whether the `All` tab's Terrain view is up.
@@ -455,7 +640,10 @@ if (section && stage && labelLayer) {
    * it, which is what this view is for.
    */
   function terrainView(): boolean {
-    return mode === 'combined' && view === TERRAIN_VIEW;
+    /* THE BASE, not the tab. The five layout tabs are `combined` to the map —
+       see baseMode in modes.ts — so every one of them has the view switch and
+       the index rail that this gates. */
+    return baseMode(mode) === 'combined' && view === TERRAIN_VIEW;
   }
 
   /**
@@ -465,6 +653,17 @@ if (section && stage && labelLayer) {
    */
   function markTerrainView(): void {
     section!.dataset.terrainView = String(terrainView());
+  }
+
+  /**
+   * Which of the five layout proposals is up, or nothing on the other three
+   * tabs. An attribute rather than classes switched in JS, because every
+   * difference between them is a style — the same way `data-mode` gates the
+   * panels and `data-terrain-view` gates the rail.
+   */
+  function markLayout(): void {
+    if (baseMode(mode) === mode) delete section!.dataset.layout;
+    else section!.dataset.layout = mode;
   }
 
   /**
@@ -531,21 +730,40 @@ if (section && stage && labelLayer) {
   markTrails(trail?.id ?? null);
   markIndexOpen(railOpen);
   markTerrainView();
+  markInfo(info);
+  markLayout();
+  section.dataset.subject = 'false';
 
   /* ---- switching, which works before the map has loaded ------------------- */
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
+
+    /* The detail menu first, because its two rules are about the click's
+       position rather than its target: an option or the toggle acts, and
+       anything else on the page — including inside the card — dismisses. */
+    const infoOption = target?.closest<HTMLElement>('[data-mapglobe-info-option]');
+    if (infoOption && isInfo(infoOption.dataset.mapglobeInfoOption)) {
+      chooseInfo(infoOption.dataset.mapglobeInfoOption);
+      closeInfoMenu();
+      return;
+    }
+    if (target?.closest('[data-mapglobe-info-toggle]')) {
+      toggleInfoMenu();
+      return;
+    }
+    closeInfoMenu();
 
     const modeButton = target?.closest<HTMLElement>('[data-mapglobe-mode]');
     if (modeButton && isMode(modeButton.dataset.mapglobeMode)) {
       mode = modeButton.dataset.mapglobeMode;
       markSelected(mode);
       markTerrainView();
+      markLayout();
       // `explore` is always flat, so leaving `All` hands the relief chip back
       // to the reader's own filter set — and returning to it takes it away
       // again if the view switch is still on Terrain.
       refreshLayers();
-      section.dataset.mode = mode;
+      section.dataset.mode = baseMode(mode);
       try {
         localStorage.setItem(STORAGE_KEY, mode);
       } catch {
@@ -556,8 +774,14 @@ if (section && stage && labelLayer) {
          decided — by what the reader last looked at, or by the default, which
          is the overview. `pick` and `showAll` both switch the mode themselves,
          so `setMode` is only for the way back to the globe. */
-      if (mode === 'terrain') void (trail ? pick(trail) : showAll());
-      else globe?.setMode(mode);
+      /* Switching BETWEEN two tabs that mean `combined` must not touch the
+         camera: they are the same map with the chrome moved, so a `setMode`
+         here would fly the reader home for a change of layout. The engine is
+         told only when the base actually changed. */
+      if (baseMode(mode) === engineMode) return;
+      engineMode = baseMode(mode);
+      if (engineMode === 'terrain') void (trail ? pick(trail) : showAll());
+      else globe?.setMode(engineMode);
       return;
     }
 
@@ -573,7 +797,7 @@ if (section && stage && labelLayer) {
          hand over to the Trails tab from a flat view, which silently changed the
          tab, the panel and what was on the map for a click that meant "show me
          this one". Only the Trails tab's own chips reach `pick`. */
-      if (found) void (mode === 'combined' ? aim(found) : pick(found));
+      if (found) void (baseMode(mode) === 'combined' ? aim(found) : pick(found));
       return;
     }
 
@@ -650,7 +874,23 @@ if (section && stage && labelLayer) {
 
   });
 
-  section.dataset.mode = mode;
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !infoBox?.hasAttribute('data-open')) return;
+    closeInfoMenu();
+    // Focus goes back to the control that opened the menu, or it is stranded
+    // on an item that is now invisible.
+    infoBox.querySelector<HTMLElement>('[data-mapglobe-info-toggle]')?.focus();
+  });
+
+  // Tabbing out of the menu closes it, so it cannot sit open while focus is
+  // somewhere else entirely. Same rule as the theme picker.
+  document.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-mapglobe-info-menu]')) return;
+    closeInfoMenu();
+  });
+
+  section.dataset.mode = baseMode(mode);
 
   /* ---- routes -------------------------------------------------------------- */
   /**
@@ -666,8 +906,10 @@ if (section && stage && labelLayer) {
     rememberTrail(next?.id ?? null);
 
     mode = 'terrain';
+    engineMode = 'terrain';
     markSelected(mode);
-    section!.dataset.mode = mode;
+    markLayout();
+    section!.dataset.mode = 'terrain';
   }
 
   /**
@@ -804,20 +1046,29 @@ if (section && stage && labelLayer) {
          the `All` tab's Terrain view, which cannot open on anything else — the
          same stored id, so a route chosen in either place is the route the
          other one arrives at. The globe is handed it and ignores it. */
-      const opening = mode === 'terrain' || terrainView() ? trail : null;
+      const opening = engineMode === 'terrain' || terrainView() ? trail : null;
       globe = await createMapGlobe({
         host: stage!,
         labelLayer: labelLayer!,
         trips: readJson<MapTrip[]>('mapglobe-trips') ?? [],
         trails,
-        mode,
+        mode: engineMode,
         layers: active,
         content: shown,
         view,
         trail: opening,
         walkedOn: readJson<Record<string, string[]>>('mapglobe-walked-on') ?? {},
+        onSubject(next) {
+          subject = next;
+          void renderInfo();
+        },
       });
-      if (mode === 'terrain') {
+      /* The opening subject is reported from inside createMapGlobe, before
+         `globe` is assigned, so the render it triggered could not reach the
+         map. Once more now that it can — this is what colours the line for a
+         reader who left in the Colour view. */
+      if (subject) void renderInfo();
+      if (engineMode === 'terrain') {
         if (opening) showTrail(opening);
         else showAllRoutes();
       }

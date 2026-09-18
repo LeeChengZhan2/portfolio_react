@@ -65,8 +65,58 @@
    general case and `explore` is a position on its dial, so if the tab row ever
    needs shortening again this is the tab that can absorb its neighbour rather
    than the one to cut. */
-export const MAP_MODES = ['combined', 'explore', 'terrain'] as const;
+/* SIX LAYOUT TABS SINCE 16 SEP 2026, and five of them are the same map.
+
+   The author's note was that the `All` tab puts too much over the earth — the
+   filters panel, the index rail, the route card and the map's own cards, all
+   floating on the one frame — and that they want the information KEPT and
+   arranged better, proposed as tabs to review rather than applied to `All`:
+   *"Do not directly do at all Tab. Create 5 new tab after all tab."*
+
+   So `all-1` … `all-5` draw exactly what `combined` draws, from the same
+   state, and differ ONLY in where the chrome sits and how big it is. They are
+   mode ids because the author asked for tabs; they are not modes to the
+   engine, which never sees one — see `baseMode`.
+
+   Throwaway like the rest of this page, and more so: when one layout wins,
+   it replaces `combined`'s CSS and the other five tabs are deleted. */
+export const MAP_MODES = [
+  'combined',
+  'all-1',
+  'all-2',
+  'all-3',
+  'all-4',
+  'all-5',
+  'all-6',
+  'explore',
+  'terrain',
+] as const;
 export type MapMode = (typeof MAP_MODES)[number];
+
+/**
+ * The five layout proposals, in tab order. A subset of MAP_MODES rather than
+ * a list of its own, so a tab cannot exist in one and not the other.
+ */
+export const MAP_LAYOUTS = ['all-1', 'all-2', 'all-3', 'all-4', 'all-5', 'all-6'] as const;
+export type MapLayout = (typeof MAP_LAYOUTS)[number];
+
+/**
+ * What a tab MEANS to the map, as opposed to what it means to the page.
+ *
+ * The five layout tabs are `combined` in every respect the engine cares about
+ * — same content chips, same layer filters, same view switch, same camera —
+ * so the engine is handed `combined` and told nothing about the layout. That
+ * is the whole reason five extra tabs cost the engine nothing: `applyMode`,
+ * `applyLayers`, `terrainView` and every `current === …` test in engine.ts are
+ * untouched, and there is no sixth branch anywhere to keep in step.
+ *
+ * The page keeps the distinction: `data-mode` on the section is the base, so
+ * every existing rule gating a panel on `[data-mode='combined']` covers all
+ * six tabs for free, and `data-layout` carries the variant for the handful of
+ * rules that move things around.
+ */
+export const baseMode = (mode: MapMode): MapMode =>
+  (MAP_LAYOUTS as readonly string[]).includes(mode) ? 'combined' : mode;
 
 /**
  * The tab the page opens on — `combined`, the one that shows everything
@@ -217,3 +267,33 @@ export type MapLayer = (typeof MAP_LAYERS)[number];
  * trip labels are drawn in both modes; they are the point of the page.
  */
 export const DEFAULT_LAYERS: readonly MapLayer[] = ['countries'];
+
+/**
+ * The five ways of looking at ONE route — the detail views behind the button
+ * in the top-left corner of the frame (16 Sep 2026, author's request:
+ * *"Create 5 best view you think and a filter button on top left corner so
+ * that I can swap between that 5 view"*).
+ *
+ * Each is a different KIND of fact the GPX recording holds, which is what
+ * makes them five rather than one long card:
+ *
+ *   summary   the numbers — distance, climb, the clock, the shape of the walk
+ *   profile   height against distance, with the map's probe riding the chart
+ *   splits    each kilometre's time and climb, as bars
+ *   colour    the line itself coloured by height, with a legend
+ *   effort    heart rate against distance, and power on the runs
+ *
+ * Only the first is served from the manifest the page already holds. The
+ * other four read `public/globe/trails/<id>.profile.json`, which is the
+ * recording resampled by distance at build time — see scripts/build-trails.mjs
+ * — and is fetched the first time one of them is opened for a route.
+ *
+ * Order is the order the menu renders in, and it is cheapest-first: the view
+ * that costs no request leads, and the one that draws the author's own heart
+ * rate is last.
+ */
+export const MAP_INFO = ['summary', 'profile', 'splits', 'colour', 'effort'] as const;
+export type MapInfo = (typeof MAP_INFO)[number];
+
+/** The numbers. The one view that needs nothing fetched. */
+export const DEFAULT_INFO: MapInfo = 'summary';

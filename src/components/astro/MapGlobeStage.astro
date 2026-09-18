@@ -77,13 +77,16 @@ import trails from '../../data/trails.json';
    client reaches the same module through the <script> at the foot of this file. */
 import {
   DEFAULT_CONTENT,
+  DEFAULT_INFO,
   DEFAULT_LAYERS,
   DEFAULT_MODE,
   DEFAULT_VIEW,
   MAP_CONTENT,
+  MAP_INFO,
   MAP_LAYERS,
   MAP_VIEWS,
   type MapContent,
+  type MapInfo,
   type MapLayer,
   type MapView,
 } from '../../scripts/mapglobe/modes';
@@ -123,6 +126,19 @@ const { trips, walkedOn } = Astro.props;
  * `id` is what everything else keys off and it does NOT track these labels. See
  * modes.ts for why: `trips` and `trails` are taken.
  */
+/**
+ * FIVE LAYOUT PROPOSALS SIT BETWEEN `All` AND `Trips` (16 Sep 2026, author's
+ * request). Each draws exactly what `All` draws, from the same state, and
+ * moves the chrome somewhere else — the brief was that too much floats over
+ * the earth, that all of it is still wanted, and that `All` itself must not
+ * change while they are compared.
+ *
+ * They are tabs because that is what was asked for, and they are not modes to
+ * the engine, which is handed `combined` for all six — see `baseMode` in
+ * modes.ts. So the tab row grew by five and the engine grew by nothing.
+ *
+ * When one wins it becomes `All`'s own CSS and the other five tabs go.
+ */
 const MODES = [
   {
     id: 'combined',
@@ -131,6 +147,48 @@ const MODES = [
       'Both halves on one globe — the places visited and the routes walked, ' +
       'each behind its own chip, over the same five layers. Switch the View to ' +
       'Terrain, or just click a route to drop onto it.',
+  },
+  {
+    id: 'all-1',
+    name: 'All-1',
+    hint:
+      'Sidebar. The map gives up a column on the right and every control moves ' +
+      'into it, so nothing floats over the earth at all.',
+  },
+  {
+    id: 'all-2',
+    name: 'All-2',
+    hint:
+      'Dock. The map keeps the top of the frame and the controls run along a ' +
+      'strip beneath it, three groups side by side.',
+  },
+  {
+    id: 'all-3',
+    name: 'All-3',
+    hint:
+      'One panel. The earth keeps the whole frame, and the three floating ' +
+      'boxes become a single stack in one corner.',
+  },
+  {
+    id: 'all-4',
+    name: 'All-4',
+    hint:
+      'Minimal. Only a thin toolbar is up at rest; the route card and the ' +
+      'index open over the map when you ask for them.',
+  },
+  {
+    id: 'all-5',
+    name: 'All-5',
+    hint:
+      'Two columns. Controls down the left, the index down the right, the ' +
+      'earth in the middle of them.',
+  },
+  {
+    id: 'all-6',
+    name: 'All-6',
+    hint:
+      'Wide. The controls leave the frame entirely and stand either side of ' +
+      'the map, which becomes a card of its own and takes the whole screen.',
   },
   {
     id: 'explore',
@@ -187,6 +245,38 @@ const VIEW_COPY: Record<MapView, { name: string; hint: string }> = {
       'and the walk itself once you pick one. The index down the side reaches ' +
       'every trip and every route from either scale, so you never have to zoom ' +
       'out to change subject.',
+  },
+};
+
+/**
+ * The five detail views, keyed by id — the menu behind the button in the
+ * top-left corner of the frame (16 Sep 2026, author's request). A
+ * `Record<MapInfo, …>` for the same reason every other copy table here is one.
+ *
+ * The hints say what each view COSTS as well as what it shows, because four of
+ * the five fetch a file the map does not otherwise need — small, local, once
+ * per route — and the last draws the author's own heart rate.
+ */
+const INFO_COPY: Record<MapInfo, { name: string; hint: string }> = {
+  summary: {
+    name: 'Summary',
+    hint: 'The numbers: distance, climb and descent, the clock, and the shape of the walk.',
+  },
+  profile: {
+    name: 'Profile',
+    hint: 'Height against distance. Move along it and a dot follows on the route.',
+  },
+  splits: {
+    name: 'Splits',
+    hint: 'Each kilometre — its pace as a bar, and how much of it was up or down.',
+  },
+  colour: {
+    name: 'Colour',
+    hint: 'The route itself coloured by height, lowest in the accent and highest in ink.',
+  },
+  effort: {
+    name: 'Effort',
+    hint: 'Heart rate along the route, with the average marked. Power too, on the runs.',
   },
 };
 
@@ -378,7 +468,7 @@ const placeMeta = (group: IndexGroup): string =>
     on load: a static build cannot know what the visitor stored. Same reasoning
     as GlobeStage and ThemePicker.
   */}
-  <div class="switch" role="radiogroup" aria-label="Map mode">
+  <div class="switch switch--wide" role="radiogroup" aria-label="Map mode">
     {MODES.map((mode) => (
       <button
         type="button"
@@ -396,6 +486,76 @@ const placeMeta = (group: IndexGroup): string =>
   <div class="mapglobe__frame">
     <div class="mapglobe__stage" data-mapglobe-stage></div>
     <div class="mapglobe__labels" data-mapglobe-labels></div>
+
+    {/*
+      THE DETAIL CARD, top-left (16 Sep 2026, author's request: *"Create 5 best
+      view you think and a filter button on top left corner so that I can swap
+      between that 5 view"*).
+
+      It is about ONE route — the one drawn as a single track — and it is shown
+      only while there is one: index.ts writes `data-subject` from the engine's
+      `onSubject` callback, which reports the drawn track rather than the
+      remembered route, so a reader back on the flat globe sees no card about
+      a walk that is not on the map. The overview and a trip picked from the
+      index both clear it.
+
+      Top-LEFT, where the filters panel used to be before it moved to the
+      bottom (10 Sep 2026) — and the reason it moved is the reason this is
+      fine here: cards hang ABOVE their anchors, so the top of the frame is
+      the busy half, but the reserved-box rule in `framePadding` clears the
+      whole strip above a wide, short control, and a route fit that arrives
+      with this card up lands below it. The rail is top-right, so the two
+      share an edge but never a corner.
+
+      The BUTTON is the menu's trigger and the current view's name at once —
+      the reader can see which view is up without opening it. The menu is the
+      theme picker's grammar: `aria-haspopup`, `aria-expanded`, one
+      `menuitemradio` per view, Escape with focus returned, outside-click and
+      focus-out dismissal, all delegated from index.ts. `aria-checked` ships as
+      the default and is corrected from storage on load, like every control in
+      this frame.
+
+      The card's content is built by src/scripts/mapglobe/detail.ts, so its
+      inner selectors below are `:global` — the same reason the map's own
+      labels are.
+    */}
+    <div class="info" data-mapglobe-info data-mapglobe-reserve>
+      <button
+        type="button"
+        class="info__toggle"
+        aria-haspopup="true"
+        aria-expanded="false"
+        aria-controls="mapglobe-info-menu"
+        title="Five ways of looking at this route. Pick one."
+        data-mapglobe-info-toggle
+      >
+        <span class="info__eyebrow">Route</span>
+        <span class="info__current" data-mapglobe-info-current>{INFO_COPY[DEFAULT_INFO].name}</span>
+        <span class="info__chevron" aria-hidden="true">&#9662;</span>
+      </button>
+      <div
+        class="info__menu"
+        id="mapglobe-info-menu"
+        role="menu"
+        aria-label="Route detail"
+        data-mapglobe-info-menu
+      >
+        {MAP_INFO.map((id) => (
+          <button
+            type="button"
+            class="info__item"
+            role="menuitemradio"
+            aria-checked={id === DEFAULT_INFO}
+            data-mapglobe-info-option={id}
+            data-mapglobe-info-name={INFO_COPY[id].name}
+          >
+            <span class="info__item-name">{INFO_COPY[id].name}</span>
+            <span class="info__item-hint">{INFO_COPY[id].hint}</span>
+          </button>
+        ))}
+      </div>
+      <div class="info__card" data-mapglobe-info-card></div>
+    </div>
 
     {/*
       The controls sit INSIDE the frame, over the map, which is where a map's
@@ -1084,12 +1244,1065 @@ const placeMeta = (group: IndexGroup): string =>
     @apply text-accent;
   }
 
+  /* ---- the detail card --------------------------------------------------- *
+     Same materials as the rail — the translucent `bg` wash, the hairline, the
+     blur — because it is the same kind of thing on the same map. Two gates:
+     `html.js` like everything else, and `data-subject`, written by index.ts
+     when the engine reports a single route on the map.
+
+     WRITTEN AS PLAIN DECLARATIONS, NOT `@apply`, wherever the utility is not
+     already used in this file. `@apply` in a scoped block still emits the
+     utility into the shared sheet on all 25 pages — see the view-switch note
+     above — and this card wants a dozen sizes and colours nothing else on the
+     site uses. Fonts and colours go through the same tokens the utilities
+     would have resolved to.
+     ---------------------------------------------------------------------- */
+  .info {
+    @apply hidden;
+  }
+
+  :global(html.js) [data-subject='true'][data-state='ready'] .info {
+    @apply absolute top-3 left-3 z-10 flex flex-col;
+    @apply rounded-lg border border-line;
+    width: 19rem;
+    max-width: calc(100% - 1.5rem);
+    max-height: calc(100% - 1.5rem);
+    background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  /* The header row: an eyebrow, the current view's name, a chevron. It is the
+     rail's toggle with a second word in it. */
+  .info__toggle {
+    @apply flex shrink-0 cursor-pointer items-center gap-2 rounded px-2.5 py-1.5;
+    @apply font-mono text-[0.58rem] tracking-[0.12em] text-fg-meta uppercase;
+    @apply hover:text-accent;
+  }
+
+  .info__toggle:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .info__eyebrow {
+    color: var(--color-fg-faint);
+  }
+
+  .info__current {
+    color: var(--color-fg);
+    font-weight: 600;
+  }
+
+  .info__chevron {
+    @apply text-[0.7rem] leading-none transition-transform;
+    margin-left: auto;
+  }
+
+  .info[data-open] .info__chevron {
+    transform: rotate(180deg);
+  }
+
+  /* The menu drops over the card, under the header, and is out of the layout
+     entirely so opening it moves nothing. `hidden` unless `data-open`. */
+  .info__menu {
+    display: none;
+    position: absolute;
+    top: 2.1rem;
+    left: 0.375rem;
+    right: 0.375rem;
+    z-index: 2;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.375rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--color-bg) 96%, transparent);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px color-mix(in oklab, var(--color-fg) 12%, transparent);
+  }
+
+  .info[data-open] .info__menu {
+    display: flex;
+  }
+
+  .info__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.25rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .info__item:hover {
+    background: var(--color-surface-2);
+  }
+
+  .info__item:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  .info__item-name {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-fg-body);
+  }
+
+  .info__item[aria-checked='true'] .info__item-name {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .info__item-hint {
+    font-size: 0.66rem;
+    line-height: 1.3;
+    color: var(--color-fg-meta);
+  }
+
+  /* The card body scrolls, the header does not — the same split the rail makes
+     between its toggle and its list, for the same reason. */
+  .info__card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 0.625rem 0.625rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .info__card:empty {
+    display: none;
+  }
+
+  /* Everything below is built by detail.ts, hence global. `fg-meta` and
+     above throughout, never `fg-faint` — the rail's rule, for the rail's
+     reason. */
+  .info :global(.info__head) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+
+  .info :global(.info__name) {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+
+  .info :global(.info__where) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  /* Summary: a grid of facts, two across. Label over value, the way the index
+     rail sets a name over its meta line. */
+  .info :global(.info__facts) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.75rem;
+  }
+
+  .info :global(.info__facts--row) {
+    grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  }
+
+  .info :global(.info__fact) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .info :global(.info__label) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.55rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .info :global(.info__value) {
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+
+  .info :global(.info__sub) {
+    font-size: 0.64rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-meta);
+  }
+
+  /* The chart. Its units are the viewBox's, so every stroke here is in those
+     units too — 1 is a hairline at the card's width, and stays one when the
+     card is a full-width strip on a phone because the SVG scales with it. */
+  .info :global(.info__chart) {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: crosshair;
+    touch-action: pan-y;
+    border-radius: 0.25rem;
+  }
+
+  .info :global(.info__chart:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .info :global(.info__axis text) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 7.5px;
+    fill: var(--color-fg-meta);
+  }
+
+  .info :global(.info__grid) {
+    stroke: var(--color-line);
+    stroke-width: 0.6;
+  }
+
+  .info :global(.info__area) {
+    fill: var(--color-accent);
+    fill-opacity: 0.18;
+  }
+
+  .info :global(.info__line) {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .info :global(.info__ref) {
+    stroke: var(--color-fg-meta);
+    stroke-width: 0.8;
+    stroke-dasharray: 2 2;
+  }
+
+  .info :global(.info__mark) {
+    fill: var(--color-fg);
+  }
+
+  .info :global(.info__mark-text) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 7.5px;
+    fill: var(--color-fg);
+  }
+
+  .info :global(.info__cursor) {
+    stroke: var(--color-fg);
+    stroke-width: 0.8;
+    stroke-dasharray: 1.5 1.5;
+  }
+
+  .info :global(.info__cursor-dot) {
+    fill: var(--color-fg);
+    stroke: var(--color-bg);
+    stroke-width: 1.2;
+  }
+
+  .info :global(.info__readout) {
+    font-size: 0.66rem;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-body);
+  }
+
+  .info :global(.info__readout--error) {
+    color: var(--color-accent);
+  }
+
+  /* Splits: one row per kilometre — the number, a bar for its pace, the pace,
+     and its climb. The bar is pace so a slow kilometre reads as long, which is
+     how the ground felt. */
+  .info :global(.info__splits) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .info :global(.info__split) {
+    display: grid;
+    grid-template-columns: 1.6rem minmax(0, 1fr) 3.9rem 3.6rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.62rem;
+    line-height: 1.5;
+  }
+
+  .info :global(.info__split:hover) {
+    background: var(--color-surface-2);
+  }
+
+  .info :global(.info__km) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.58rem;
+    color: var(--color-fg-meta);
+  }
+
+  .info :global(.info__bar) {
+    display: block;
+    height: 0.4rem;
+    border-radius: 0.2rem;
+    background: var(--color-surface-2);
+    overflow: hidden;
+  }
+
+  .info :global(.info__bar i) {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-accent);
+  }
+
+  .info :global(.info__pace) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.58rem;
+    color: var(--color-fg);
+    text-align: right;
+  }
+
+  .info :global(.info__climb) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.55rem;
+    color: var(--color-fg-meta);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Colour: the legend is the same ramp the engine paints on the line — the
+     accent at one end and the page's ink at the other — drawn from the same
+     two tokens, so the two cannot disagree in any theme. */
+  .info :global(.info__legend) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .info :global(.info__ramp) {
+    flex: 1;
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    background: linear-gradient(to right, var(--color-accent), var(--color-fg));
+  }
+
+  .info :global(.info__legend-end) {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.58rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-meta);
+  }
+
+
+  /* ---- the five layout proposals ----------------------------------------- *
+     `all-1` … `all-5`, between `All` and `Trips` in the tab row (16 Sep 2026,
+     author's request). Each draws exactly what `All` draws — the engine is
+     handed `combined` for all six, see baseMode in modes.ts — and differs only
+     in where the chrome sits.
+
+     TWO MECHANISMS, and which one a layout uses is the proposal it is making.
+
+     1. CARVE. The frame becomes a grid, the stage stops being `inset-0` and
+        takes a cell, and the panels take the others. The map is smaller and
+        NOTHING is over it. MapLibre resizes itself — v6 keeps a ResizeObserver
+        on its container — so no engine call is needed, and `reserved()` now
+        skips a box that does not overlap the map, so the camera stops padding
+        around controls that are no longer on it.
+     2. FLOAT, as `All` does, but arranged differently — one corner instead of
+        three, or the same three at minimum weight.
+
+     Written as plain declarations rather than `@apply` throughout: a utility
+     used only here still lands in the shared stylesheet on all 25 pages, and
+     this whole block is going to be deleted when one layout wins.
+
+     The rules sit after the base ones and match their specificity, so source
+     order is what decides. Each layout sets `position` and `inset` explicitly
+     rather than relying on what it inherits, because the base rule it is
+     overriding is `absolute` with two edges pinned.
+     ---------------------------------------------------------------------- */
+
+  /* Shared by the three carving layouts: the stage leaves the absolute corner
+     and becomes a real box in the grid, and the panels stop floating. */
+  :global(html.js) [data-layout='all-1'] .mapglobe__stage,
+  :global(html.js) [data-layout='all-2'] .mapglobe__stage,
+  :global(html.js) [data-layout='all-5'] .mapglobe__stage {
+    position: relative;
+    inset: auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .index,
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .index,
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .index {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    backdrop-filter: none;
+    /* Off the map, so the blur and the wash have nothing to separate it from
+       and the hairline would be a box drawn round a thing that is not a box.
+       The column's own edge does that job once, below. */
+  }
+
+  /* ---- all-1 · Sidebar ---------------------------------------------------
+     The map gives up a column on the right and every control moves into it,
+     top to bottom: filters, the route card, the index. Nothing floats over the
+     earth at all — which is the most literal answer to the brief, and it costs
+     the map a fifth of its width whether or not there is anything to put
+     there. */
+  :global(html.js) [data-layout='all-1'] .mapglobe__frame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  :global(html.js) [data-layout='all-1'] .mapglobe__stage {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+
+  /* The column's ground, drawn as a pseudo-element because there is no wrapper
+     to paint — and absolutely positioned, so it is not a grid item. */
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .mapglobe__frame::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 19rem;
+    border-left: 1px solid var(--color-line);
+    background: var(--color-bg);
+  }
+
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .filters {
+    grid-column: 2;
+    grid-row: 1;
+    z-index: 1;
+    padding: 0.75rem 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .info {
+    grid-column: 2;
+    grid-row: 2;
+    z-index: 1;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .index {
+    grid-column: 2;
+    grid-row: 3;
+    z-index: 1;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  /* ---- all-2 · Dock ------------------------------------------------------
+     The map keeps the top of the frame and the controls run along a strip
+     beneath it, three groups side by side. The earth is clear and, unlike the
+     sidebar, it keeps its full WIDTH — which is the half of the frame the
+     globe actually uses, since a sphere is as wide as it is tall. The cost is
+     height, and the index has to read as a row rather than a column. */
+  :global(html.js) [data-layout='all-2'] .mapglobe__frame {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  :global(html.js) [data-layout='all-2'] .mapglobe__stage {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .mapglobe__frame::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 15rem;
+    border-top: 1px solid var(--color-line);
+    background: var(--color-bg);
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .index {
+    grid-row: 2;
+    z-index: 1;
+    height: 15rem;
+    padding: 0.625rem 0.75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .filters {
+    grid-column: 1;
+    width: 19rem;
+    align-content: start;
+    border-right: 1px solid var(--color-line);
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info {
+    grid-column: 2;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .index {
+    grid-column: 3;
+    width: 24rem;
+    max-height: none;
+    border-left: 1px solid var(--color-line);
+  }
+
+  /* EVERYTHING IN THE DOCK READS ACROSS, NOT DOWN, and that is the whole
+     difficulty of this proposal: the card and the index were both drawn as tall
+     narrow columns, and a dock is the opposite shape. Left alone, each becomes
+     a 13rem window scrolling a list twice its height — which is worse than the
+     floating version it replaces, not better.
+
+     The index goes into two CSS columns, with a group forbidden from breaking
+     across them so a trip is never split from the walks nested under it. */
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .index__list {
+    display: block;
+    column-count: 2;
+    column-gap: 0.75rem;
+    overflow: visible;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .index__group {
+    break-inside: avoid;
+  }
+
+  /* And the route card lays its parts side by side. */
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__card) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 1rem;
+    padding: 0;
+    overflow: hidden;
+    /* WRAPS, because the chart takes a fixed width off its own aspect ratio
+       and the heading takes a fixed width too — so on a narrow dock there can
+       be nothing left, and a `flex: 1` readout collapsed to zero and vanished.
+       Wrapping puts it on a second line instead, which the dock has room for:
+       the chart is 7.5rem of a 13rem strip. */
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__head) {
+    flex: none;
+    width: 12rem;
+  }
+
+  /* THE CHART TAKES A HEIGHT AND DERIVES ITS WIDTH, which is the opposite of
+     everywhere else and is forced by how SVG scales. With `width: 100%` and
+     `height: auto` it is a flex item that can be SHRUNK vertically — and a
+     shrunk SVG does not crop, it letterboxes, so the drawing ended up half
+     size and centred in a column of white space. Given a definite height and
+     `width: auto` the viewBox ratio supplies the width instead, and it fills
+     the dock's height exactly. */
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__chart) {
+    flex: none;
+    width: auto;
+    height: 6.5rem;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__facts) {
+    flex: 1;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    align-content: start;
+  }
+
+  /* The lists take what is left and scroll inside it rather than making the
+     whole card scroll, so the heading beside them stays put. */
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__splits) {
+    flex: 1;
+    min-width: 0;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__readout) {
+    flex: 1 1 9rem;
+    min-width: 0;
+  }
+
+  :global(html.js) [data-layout='all-2'][data-state='ready'] .info :global(.info__legend) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ---- all-3 · Stack -----------------------------------------------------
+     The earth keeps the whole frame and the three floating boxes become one
+     column in one corner. It concedes that something floats — and in exchange
+     the map is never made smaller, and the reader only has one place to look.
+     The boxes keep their own hairlines rather than merging into a single
+     outline: which of the three are up depends on the view and the subject, so
+     a merged outline would need to know which one is currently last. */
+  :global(html.js) [data-layout='all-3'] .mapglobe__frame {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 0.375rem;
+    padding: 0.75rem;
+    /* The frame's flow contains only the panels — the stage, the labels and
+       the status are all absolute — so this lays out exactly the three boxes
+       and nothing else. */
+  }
+
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .index {
+    position: relative;
+    inset: auto;
+    width: 19rem;
+    max-width: 100%;
+    min-height: 0;
+  }
+
+  /* Read down the frame in the order the reader needs them: what is on the map
+     first, then where to go, then what the map draws. The DOM order is
+     info → filters → index, so `order` is what puts the filters at the foot
+     without moving the markup. */
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .info {
+    order: 1;
+    max-height: 60%;
+  }
+
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .index {
+    order: 2;
+    max-height: 40%;
+  }
+
+  :global(html.js) [data-layout='all-3'][data-state='ready'] .filters {
+    order: 3;
+  }
+
+  /* ---- all-4 · Flush -----------------------------------------------------
+     The same three places as `All`, at the least weight they can carry: pushed
+     into the corners with no inset, square on the two edges they touch and
+     rounded only where they meet the map, a step of type smaller, tighter
+     padding, and a more transparent wash so the relief reads through them.
+     Nothing moves far and nothing is hidden. It is the cheapest of the five —
+     the only one that changes no geometry — and it is here to establish
+     whether the problem was WHERE the chrome is or only how much of it there
+     is.
+
+     THE LEGENDS STAY. Dropping them was tried first, on the reasoning that
+     five chips reading COUNTRIES, CITIES, RELIEF, PEAKS, RIVERS & LAKES do not
+     need a word saying "Layers" — and it made the panel three unlabelled rows
+     in which `Show` and `Layers` are the same kind of chip drawn the same way.
+     The brief was to keep the information. That row of words IS information. */
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .filters,
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .info,
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .index {
+    padding: 0.4375rem 0.5rem;
+    gap: 0.25rem 0.5rem;
+    background: color-mix(in oklab, var(--color-bg) 66%, transparent);
+    border-radius: 0;
+  }
+
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .filters {
+    inset: auto auto 0 0;
+    border-width: 1px 1px 0 0;
+    border-top-right-radius: 0.5rem;
+  }
+
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .info {
+    inset: 0 auto auto 0;
+    width: 16rem;
+    max-height: calc(100% - 6rem);
+    border-width: 0 1px 1px 0;
+    border-bottom-right-radius: 0.5rem;
+  }
+
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .index {
+    inset: 0 0 auto auto;
+    width: 10.25rem;
+    max-height: calc(100% - 2rem);
+    border-width: 0 0 1px 1px;
+    border-bottom-left-radius: 0.5rem;
+  }
+
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .panel__legend {
+    font-size: 0.5rem;
+  }
+
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .panel__opt,
+  :global(html.js) [data-layout='all-4'][data-state='ready'] .panel__seg-opt {
+    padding-inline: 0.4375rem;
+    font-size: 0.55rem;
+  }
+
+  /* ---- all-5 · Columns ---------------------------------------------------
+     Controls down the left, the index down the right, the earth between them.
+     It is the sidebar's argument applied symmetrically: a globe is round, so
+     the corners of a wide frame are the cheapest thing to give away, and this
+     gives away both. The map keeps its full height and reads as the subject
+     rather than as the background to a panel. */
+  :global(html.js) [data-layout='all-5'] .mapglobe__frame {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr) 12.5rem;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  :global(html.js) [data-layout='all-5'] .mapglobe__stage {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .mapglobe__frame::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 14rem;
+    border-right: 1px solid var(--color-line);
+    background: var(--color-bg);
+  }
+
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .mapglobe__frame::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 12.5rem;
+    border-left: 1px solid var(--color-line);
+    background: var(--color-bg);
+  }
+
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .filters {
+    grid-column: 1;
+    grid-row: 1;
+    z-index: 1;
+    padding: 0.75rem;
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .info {
+    grid-column: 1;
+    grid-row: 2;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .index {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    z-index: 1;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  /* One column of chips is narrow, so the card's facts go single-file too. */
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .info :global(.info__facts) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Every carved layout: the panels are in flow now, so their inner scroll has
+     to come from a definite height rather than from the `max-height` the
+     floating versions carry. */
+  :global(html.js) [data-layout='all-1'][data-state='ready'] .index__list,
+  :global(html.js) [data-layout='all-5'][data-state='ready'] .index__list {
+    min-height: 0;
+  }
+
+  /* ---- a larger frame for the layouts that give space away ---------------- *
+     The author's question, and it is the right one: the frame is capped at
+     74rem, and a 1400px window is 1344px of usable width — so there are 160
+     unused pixels sitting either side of it before anything is given up, and
+     far more on a bigger screen. A layout that carves a column out of the map
+     should be allowed to take that back.
+
+     So the three carving layouts get a bigger frame, and `all-6` below takes
+     nearly the whole window. `All`, `Trips`, `Trails`, `all-3` and `all-4` are
+     untouched — the last two keep the standard frame deliberately, because
+     they are the proposals that do NOT carve, and changing their size as well
+     would leave nothing to compare a carved layout against.
+
+     Gated at 1100px rather than at the 640px the frame's own breakout uses:
+     below that there is no spare width to hand back, the carved layouts have
+     already fallen back to floating, and a wider frame would only make the
+     page scroll sideways.
+
+     96vw, NOT 98 or 100 — the existing cap's gutter is what keeps a scrollbar
+     from overflowing the page, and that reasoning does not change because the
+     rem cap went up. Only the cap moves. */
+  @media (min-width: 1100px) {
+    :global(html.js) [data-layout='all-1'] .mapglobe__frame,
+    :global(html.js) [data-layout='all-2'] .mapglobe__frame,
+    :global(html.js) [data-layout='all-5'] .mapglobe__frame {
+      width: min(96vw, 100rem);
+      /* ONLY THE WIDTH CHANGES. The height is left exactly as the standard
+         frame's, and that is not caution — it is already tuned to two things a
+         taller frame breaks. The site header is sticky, so a frame taller than
+         the viewport less the header slides under the nav when it is scrolled
+         to; and the tab row sits above the frame, so a frame that fills what
+         is left pushes the row itself under the nav, which on this page is the
+         control you are using to compare the layouts. 90vh and 92vh were both
+         tried and did exactly that.
+
+         Nothing is lost by it, because the width is where the spare room was:
+         the cap is 74rem against a 1400px window's 1344px of usable width, so
+         there were already 160 unused pixels either side before anything was
+         given up, and 659 of them at 1920. */
+    }
+
+    /* ---- all-6 · Wide ---------------------------------------------------
+       The direct answer to "can the filter not be in the earth frame, can it
+       be left and right, or make the frame larger" — it is both.
+
+       THE MAP BECOMES A CARD AND THE CONTROLS STAND OUTSIDE IT. The frame
+       keeps its grid but gives up its own border, background and clipping, and
+       the STAGE takes them instead. So the bordered box on screen is the map
+       and nothing else, and the two columns are page furniture beside it
+       rather than chrome inside it — which is what the question was really
+       asking. The panels are still children of the frame in the DOM, and they
+       do not need to move: what makes a control read as "inside the frame" is
+       the border drawn around all of them together, and that border is now
+       drawn around the map alone.
+
+       And the whole assembly takes the window: 120rem against the standard
+       74rem, so on a wide screen the MAP ALONE is wider than today's entire
+       frame. On a 1920px screen that is 1443px of map against 1184px of frame
+       with a quarter of it covered. */
+    :global(html.js) [data-layout='all-6'] .mapglobe__frame {
+      display: grid;
+      grid-template-columns: 13rem minmax(0, 1fr) 12.5rem;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0 0.875rem;
+      width: min(96vw, 120rem);
+      /* Height untouched, for the two reasons in the note above. */
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      overflow: visible;
+    }
+
+    :global(html.js) [data-layout='all-6'] .mapglobe__stage {
+      position: relative;
+      inset: auto;
+      min-width: 0;
+      min-height: 0;
+      grid-column: 2;
+      grid-row: 1 / -1;
+      border: 1px solid var(--color-line);
+      border-radius: 0.75rem;
+      background: var(--color-band);
+      overflow: hidden;
+    }
+
+    /* The loading message belongs over the map, not over the columns beside
+       it — it is `absolute inset-0` of the frame, which is now wider than the
+       map. */
+    :global(html.js) [data-layout='all-6'] .mapglobe__status {
+      left: 13.875rem;
+      right: 13.375rem;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .filters,
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info,
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .index {
+      position: relative;
+      inset: auto;
+      z-index: auto;
+      width: auto;
+      max-width: none;
+      min-width: 0;
+      min-height: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      backdrop-filter: none;
+      padding: 0;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .filters {
+      grid-column: 1;
+      grid-row: 1;
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid var(--color-line);
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info {
+      grid-column: 1;
+      grid-row: 2;
+      padding-top: 0.875rem;
+      overflow: hidden;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .index {
+      grid-column: 3;
+      grid-row: 1 / -1;
+      max-height: none;
+      overflow: hidden;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info :global(.info__card) {
+      padding-inline: 0;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info :global(.info__facts) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info__toggle,
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .index__toggle {
+      padding-inline: 0;
+    }
+
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .index__list {
+      min-height: 0;
+    }
+
+    /* The menu still drops over the card, and with no panel padding to sit
+       inside it is anchored to the column's own edges. */
+    :global(html.js) [data-layout='all-6'][data-state='ready'] .info__menu {
+      left: 0;
+      right: 0;
+    }
+  }
+
+  /* ---- the eight-tab switcher -------------------------------------------- *
+     Five more tabs than the row was drawn for, which at the reading column's
+     width wrapped to two lines.
+
+     So it takes the same breakout `.mapglobe__foot`, `.mapglobe__legend` and
+     `.mapglobe__note` already take — it is the frame's own control and now it
+     lines up with the frame's left edge rather than with the prose. That is
+     the one thing in this work that the three original tabs also see, and it
+     is the tab ROW rather than anything inside the map: `All` draws exactly
+     what it drew. It goes when the layout tabs go. */
+  .switch--wide .switch__opt {
+    padding-inline: 0.625rem;
+  }
+
+  @media (min-width: 640px) {
+    :global(html.js) .switch--wide {
+      position: relative;
+      left: 50%;
+      width: min(96vw, 74rem);
+      transform: translateX(-50%);
+      justify-content: flex-start;
+    }
+  }
+
+  /* And it follows the frame it belongs to. The layouts that widen the frame
+     would otherwise leave the tab row floating short of it, left-aligned to a
+     different edge — which reads as a mistake rather than as a wider map. The
+     legend and the note below the frame deliberately do NOT follow: they are
+     prose, and prose does not want to be 1,843px wide. */
+  @media (min-width: 1100px) {
+    :global(html.js) [data-layout='all-1'] .switch--wide,
+    :global(html.js) [data-layout='all-2'] .switch--wide,
+    :global(html.js) [data-layout='all-5'] .switch--wide {
+      width: min(96vw, 100rem);
+    }
+
+    :global(html.js) [data-layout='all-6'] .switch--wide {
+      width: min(96vw, 120rem);
+    }
+  }
+
   /* The frame is short on a phone, so the panel gives back everything it can:
      tighter padding, smaller type, and the label column collapses — 45px of
      fixed width is worth more as a chip than as the word "Layers" when the
      whole frame is 390px wide. Labels then sit above their own rows, which is
      still aligned, just vertically. */
   @media (max-width: 639px) {
+    /* THE LAYOUT PROPOSALS ARE A DESKTOP QUESTION, and on a phone they are all
+       the same answer: a 390px frame has no column to give away and no dock to
+       spare. Every carved layout falls back to the floating one `All` already
+       uses, so the five tabs still render and still differ in nothing the
+       phone can show. Reviewing them at 390px is not the point; not breaking
+       them there is. */
+    :global(html.js) [data-layout] .mapglobe__frame {
+      display: block;
+    }
+
+    :global(html.js) [data-layout] .mapglobe__stage {
+      position: absolute;
+      inset: 0;
+    }
+
+    :global(html.js) [data-layout] .mapglobe__frame::before,
+    :global(html.js) [data-layout] .mapglobe__frame::after {
+      content: none;
+    }
+
+    :global(html.js) [data-layout][data-state='ready'] .filters,
+    :global(html.js) [data-layout][data-state='ready'] .info,
+    :global(html.js) [data-layout][data-state='ready'] .index {
+      position: absolute;
+      z-index: 10;
+      border: 1px solid var(--color-line);
+      border-radius: 0.5rem;
+      background: color-mix(in oklab, var(--color-bg) 84%, transparent);
+      backdrop-filter: blur(6px);
+      grid-column: auto;
+      grid-row: auto;
+      height: auto;
+      order: 0;
+    }
+
+    :global(html.js) [data-layout][data-state='ready'] .filters {
+      inset: auto auto 0.5rem 0.5rem;
+    }
+
+    :global(html.js) [data-layout][data-state='ready'] .info {
+      inset: 2.75rem auto auto 0.5rem;
+      width: calc(100% - 1rem);
+      max-height: calc(46% - 2.25rem);
+    }
+
+    :global(html.js) [data-layout][data-state='ready'] .index {
+      inset: 0.5rem 0.5rem auto auto;
+      width: 9.5rem;
+      max-height: 50%;
+    }
+
+    /* Full width under the rail's toggle row, and capped at under half the
+       frame so the filters panel at the bottom and this never meet. The rail,
+       when opened, sits over it — it starts shut here, and a reader who opens
+       it has asked for the list rather than the card. */
+    :global(html.js) [data-subject='true'][data-state='ready'] .info {
+      @apply top-2 left-2;
+      width: calc(100% - 1rem);
+      max-width: none;
+      max-height: 46%;
+    }
+
+    /* And a row lower while the index rail is up, because its toggle is
+       top-right and the card is now the full width — the two would share the
+       header line, with the rail's button over the card's chevron. Trails
+       mode has no rail, so the card keeps the corner there. */
+    :global(html.js) [data-terrain-view='true'][data-subject='true'][data-state='ready'] .info {
+      top: 2.75rem;
+      max-height: calc(46% - 2.25rem);
+    }
+
     :global(html.js) [data-mode='explore'][data-state='ready'] .filters,
     :global(html.js) [data-mode='combined'][data-state='ready'] .filters,
     :global(html.js) [data-mode='terrain'][data-state='ready'] .routes {

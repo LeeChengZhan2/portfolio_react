@@ -2724,6 +2724,357 @@ http://localhost:4321"* and refuses a second one, which is why `--port 4322` sil
 and only 4321 answered. It serves `dist/` from disk, so a rebuild is picked up without restarting
 it; `astro preview stop` is how to move it.
 
+### Five views of one route, behind a button in the corner (16 Sep 2026)
+
+The author: *"Since my all trails route is a gpx file can it show something when the route is been
+selected? … Create 5 best view you think and a filter button on top left corner so that I can swap
+between that 5 view."* So a card in the top-left of the frame, a menu on it, and five ways of
+reading the walk that is on the map.
+
+**What the GPX files actually hold, measured rather than assumed.** All ten are Strava exports
+carrying `lat`, `lon`, `ele`, `time` and `gpxtpx:hr` on **every** fix, one every 1–3 seconds, and
+the three runs add `power`. No cadence, no temperature, no waypoints, no laps, and no device name —
+`creator="StravaGPX"` is all the header says. Everything below is derived from those five columns.
+
+| View | Shows | Reads |
+|---|---|---|
+| **Summary** | distance, climb **and descent**, elevation range, the shape, start and finish clock, elapsed vs moving, pace | the manifest alone |
+| **Profile** | height against distance, high point marked, cursor | the profile file |
+| **Splits** | each kilometre: pace as a bar, metres up and down | the profile file |
+| **Colour** | the route on the map coloured by height, with a legend | the profile file |
+| **Effort** | heart rate against distance, mean marked; power on the runs | the profile file |
+
+**The manifest gained seven fields and they are all free**, in the sense that the build script was
+already reading every byte they come from: `descent`, `start`, `end`, `elapsed`, `moving` and
+`shape`. The two that are worth more than they look are `moving` and `start` — Belumut is 8 h 19 min
+elapsed against **2 h 53 min moving**, and two of the half marathons started at 03:02, which is a
+fact about the walk that no distance can carry.
+
+**`shape` is derived from the geometry, not declared.** The second half of the track is hashed into
+a grid of 40 m cells and asked how much of it lands on the first half: over 60% is an out-and-back,
+otherwise ends within 250 m are a loop and anything else is point to point. It gets all ten right,
+and it matters because the map already draws a filled dot and a ring at the ends — this is the word
+that goes with them. Belumut and Pulai both read "out and back" where a naive ends-are-close test
+called one a loop and the other point to point.
+
+#### The profile is a third file, and that is the whole design
+
+`public/globe/trails/<id>.profile.json`, beside the line the map draws. **The line is simplified by
+shape and the profile is sampled by distance, and neither can stand in for the other.**
+Douglas–Peucker at 4 m keeps 445 of Belumut's 27,533 fixes, and it keeps them where the path
+*turns* — so the top of a climb that lies on a straight stretch is dropped, and a chart drawn off
+the line would miss the summit. The profile resamples the FULL recording every 25–100 m, chosen per
+route so each lands at 150–450 samples, with position, elevation and clock interpolated and the
+heart rate taken from the nearer fix.
+
+- **The recording's true top and bottom are pinned into the nearest sample.** Interpolating every
+  50 m missed Belumut's summit by a metre, and the card then read "1,016 m" beside a Summary saying
+  "1,017 m" — two figures from one recording, disagreeing on screen. Only the elevation is
+  overwritten; the position and clock stay the sample's own, which is within half a step.
+- **It is fetched per route, on first use, and cached** — `loadProfile` keeps the promise exactly as
+  the engine keeps a route's geometry. 1.7–4.3 KB gzipped each. Summary needs none at all, which is
+  why it is the default view: arriving on a route costs nothing new.
+- **Every printed figure still comes off the full recording.** That was already the contract for
+  distance and ascent; the splits and the durations join it. Nothing the page prints is measured
+  from anything the page draws.
+
+#### Things that look like shortcuts and are not
+
+- **`detail.ts` is reached through a dynamic import and NONE of its values is imported statically.**
+  This is the INEFFECTIVE_DYNAMIC_IMPORT rule that already cost this page 138 KB once, in the other
+  direction — and it bit again here. As a static import the five views, their charts and their
+  formatting put the eager page script at **7.22 KB gz**, which every visitor to the route downloads
+  whether or not they scroll as far as the map. Deferred it is 4.02. Nothing is lost by waiting: the
+  card cannot appear until a route is drawn as a single track, which cannot happen until the 248 KB
+  engine has loaded and flown somewhere, and this chunk is 3.61 KB asked for at the same moment.
+- **The card follows the DRAWN TRACK, not the remembered route.** `onSubject` fires from
+  `applyLayers`, which is the one function every path that can change the subject already ends in —
+  `loadTrail`, `showPlace`, `showOverview`, `setView`, `setContent`, `setLayers`. So the card is
+  shown exactly when `TRACK_LAYERS` are, and a reader back on the flat globe sees no card about a
+  walk that is not on the map, although `mapglobe-trail` still remembers it. A getter could not have
+  done this: the engine picks a route of its own in `openTerrainView` when the reader arrives with
+  none, and the page has no way to know.
+- **A seventh storage key, `mapglobe-info`, and it outlives the route.** Same reasoning as the other
+  six. A reader who prefers the elevation profile gets the profile of every route they pick, because
+  "which view" is a way of looking rather than a thing looked at.
+- **The chart cursor and the map probe are one gesture.** Hovering the chart moves a dot along the
+  route on the ground, through `setProbe` — its own source and its own layer, in `TRACK_LAYERS` so
+  it can never show without the route it sits on. It takes the page's ink inside a ground-coloured
+  ring: a third mark, neither the accent start dot nor the ground-filled end ring, and the
+  strongest thing on the line because it is the one the reader is moving.
+- **The splits rows drive the probe too**, from the end of each kilometre. Samples are evenly spaced
+  by distance, so the index is the distance divided by the step — no search, on a `pointerenter`.
+- **The chart is keyboard-operable and inline SVG, not a library.** Arrow keys step, Shift steps ten,
+  Home/End jump, Escape clears. Two series against distance with a cursor is a hundred lines; a
+  charting dependency on a page that already ships two map engines would be one more thing to defer.
+- **`var()` works in these charts because every colour is a CSS class**, never a presentation
+  attribute — the trap the interaction mock-up below records, which renders a black shape in both
+  themes and passes every build.
+- **The Colour view paints the line through `line-gradient`, which needs `lineMetrics: true` on the
+  track source.** MapLibre only computes the along-line progress a gradient keys on when the source
+  asks for it. The ramp runs accent → `--color-fg`, so the lowest ground on the route looks exactly
+  as a route looks and everything above steps toward the text colour — "more ink is higher" in both
+  themes, with no dark block anywhere.
+- **The series is kept on the engine so `refreshTheme` can re-derive it.** The colours inside a
+  `line-gradient` expression are literals, so a theme change would otherwise leave a route painted
+  in the old theme's ink. Verified across a light→dark→light round trip with the Colour view up.
+- **The legend's ramp is the same two tokens as the line's**, in a CSS `linear-gradient`, so the key
+  and the thing it describes cannot disagree in any of the nine themes.
+- **Only the LAST split can be labelled as a partial.** A pause in the recording jumps the distance
+  past a kilometre boundary, so an earlier split can also come up short — it is still the ninth
+  kilometre, and labelling it "9.0" reads as a bug. And a zero carries no direction, so the climb
+  column prints "+13 / 0" rather than "+13 / −0".
+- **The menu is the theme picker's grammar**, for the third time on this site: `aria-haspopup`,
+  `aria-expanded`, `menuitemradio` items, Escape with focus returned, outside-click and focus-out
+  dismissal, all delegated. The button is also the current view's NAME, so the reader can see which
+  view is up without opening it.
+- **The card is top-left, where the filters panel used to be before it moved to the bottom.** That
+  move was because cards hang above their anchors and the top of the frame is the busy half — which
+  is handled here rather than avoided: `framePadding` already clears the whole strip above a wide,
+  short reserved box, and `declutter` already reserves anything carrying `data-mapglobe-reserve`.
+  Both follow this card as they followed the panel. The index rail is top-RIGHT, so the two share an
+  edge and never a corner: measured, the card ends at x=425 and the rail starts at x=1095.
+- **At 390px the card is full width and drops a row while the rail is up.** The rail's toggle is
+  top-right and the card is now the frame's whole width, so without that they share the header line
+  and the rail's button sits over the card's chevron. Trails mode has no rail, so the card keeps the
+  corner there.
+
+**Heart rate is the author's own physiological data, and shipping it is a decision rather than an
+oversight.** It is on every fix in all ten recordings and the Effort view draws it. Dropping that
+one view from `MAP_INFO` and its entry in `INFO_COPY` is the whole edit needed to stop shipping it;
+the build script would still need its `hr`/`power` lines removed to stop writing it.
+
+**What it costs**, page-scoped, measured before and after **in one session by swapping the files** —
+the absolute chunk figures are not comparable across sessions, so a delta against a number written
+down on another day is worthless:
+
+| | before | after |
+|---|---|---|
+| eager page script | 3.41 | **4.02** KB gz |
+| detail views, on the first card shown | — | **3.61** KB gz |
+| MapLibre engine chunk | 247.94 | **248.21** KB gz |
+| `/about/travel-preview` CSS | 5.95 | **7.10** KB gz |
+| site-wide CSS (`BaseLayout.css`, 25 pages) | 10.10 | **10.10** — unchanged |
+| three.js engine | 138.57 | 138.57 — unchanged |
+| one route's profile, on first use | — | 1.7–4.3 KB gz |
+
+Site-wide CSS does not move because the card's styles are written as plain declarations wherever
+the utility was not already used in this file — the `@apply`-emits-into-the-shared-sheet trap the
+mock-up section records, checked rather than assumed.
+
+**Verified in Chrome against the production build** — driven with `playwright-core` against the
+installed Chrome, since Playwright's own browsers are not installed on this machine — 54 checks,
+all passing: arriving on `All` with no card and no profile fetched; the Terrain view showing the
+card with eight facts read off the manifest and still fetching nothing; the card top-left inside the
+frame and clear of the rail; the menu's five `menuitemradio` items with exactly one checked, Escape
+returning focus, outside-click dismissing; each of the four profile views drawing, and the profile
+file fetched **exactly once** across all four; the cursor line written on hover and restored on
+leave; arrow keys moving it; the splits bars proportional with the longest at 100%; the legend ramp
+reading back as accent→fg and changing with the theme; the choice stored; a rail row changing the
+subject while keeping the view and fetching that route's profile once; a trip row and the Globe view
+each hiding the card and Terrain restoring it; the Trails overview hiding it and a picked route
+showing it; and 390px with the card inside the frame at 46% of its height, below the rail toggle,
+clear of the filters panel, hit-testable, its menu inside the frame, and 0 horizontal overflow.
+Console clean throughout, both themes screenshotted.
+
+**Known and left alone.** The Colour view's ramp is derived from the route's own elevation range, so
+a 3.8 km coastal walk and a 3,400 m valley use the same ink for very different heights — the legend
+is what says so, and a shared scale across ten routes would make eight of them one flat colour. And
+`PROFILE_STEPS` tops out at 100 m, so a route much longer than a half marathon would sample past
+450 points; nothing here is close.
+
+### Six layout tabs, because too much floats over the earth (16–17 Sep 2026)
+
+The author, on the `All` tab: *"For me too much information in the 3d earth frame. But I still want
+those information. You try to improve the uiux by modified the layout and size of those
+information. Do not directly do at all Tab. Create 5 new tab after all tab (all-1, all-2,
+all-3, ……) for different view to let me review."*
+
+So `all-1` … `all-6` sit between `All` and `Trips`. Each draws **exactly** what `All` draws, from
+the same state, and differs only in where the chrome sits and how big it is. `All` itself is
+untouched, which is the point of the exercise: the six are there to be compared against it.
+
+**The right measure is CLEAR MAP — the stage's area less whatever is drawn on top of it** — and
+finding that is most of the value here. "How big is the frame" flatters `All`, which keeps the
+whole frame and then covers a quarter of it; "how much is covered" flatters the carved layouts,
+which cover nothing and are smaller. Only the product answers the author's actual complaint, which
+was that they cannot see the earth.
+
+At 1920×1080, Terrain view, a route up:
+
+| tab | | stage | covered | clear map | vs `All` |
+|---|---|---|---|---|---|
+| `All` | as it is | 1182×894 | 22% | 824,232 | — |
+| `all-1` | **Sidebar** — one column right | 1294×894 | 0 | 1,156,836 | **+40%** |
+| `all-2` | **Dock** — a strip under the map | 1598×654 | 0 | 1,045,092 | +27% |
+| `all-3` | **Stack** — one floating column, bottom left | 1182×894 | 19% | 855,933 | +4% |
+| `all-4` | **Flush** — the same corners, minimum weight | 1182×894 | 19% | 855,933 | +4% |
+| `all-5` | **Columns** — controls left, index right | 1174×894 | 0 | 1,049,556 | +27% |
+| `all-6` | **Wide** — controls outside the map card | 1407×896 | 0 | 1,260,672 | **+53%** |
+
+**Every one of them beats `All`, which was not obvious before it was measured** — a layout that
+gives a fifth of the frame away still shows more earth than one that keeps all of it and puts
+three panels on it.
+
+The same table at 1400×900, where the window is the constraint rather than the caps, is much
+tighter: `all-1` +17%, the rest between +3% and +5%. **The layouts are a wide-screen answer.** At
+1400 the choice between them is very nearly a wash and should be made on how they read, not on the
+numbers.
+
+**A globe is round, which is the argument for the column layouts.** The corners of a wide frame
+hold nothing at the home view — the sphere is inscribed in the frame's height — so `all-1`, `all-5`
+and `all-6` give away pixels that were empty anyway. That stops being true the moment the reader
+zooms into a ridge, where the map is a full-bleed rectangle and every pixel is ground.
+
+#### How it is built, and why the engine grew by nothing
+
+**The five are mode ids, and the engine never sees one.** `baseMode()` in modes.ts maps `all-*` to
+`combined`, and that is the whole mechanism. The section carries both: `data-mode` is the base, so
+every existing rule gating a panel on `[data-mode='combined']` covers all six tabs for free, and
+`data-layout` carries the variant for the rules that move things. `applyMode`, `applyLayers`,
+`terrainView` and every `current === …` test in engine.ts are untouched, and there is no sixth
+branch anywhere to keep in step.
+
+**Two mechanisms, and which one a layout uses IS the proposal it is making.**
+
+- **Carve** (`all-1`, `all-2`, `all-5`, `all-6`): the frame becomes a grid, the stage stops being
+  `inset-0` and takes a cell, and the panels take the others. The map is smaller and nothing is
+  over it.
+- **Float** (`all-3`, `all-4`): as `All` does, but arranged differently — one corner instead of
+  three, or the same three at minimum weight.
+
+#### The frame did not have to stay 74rem wide (17 Sep 2026)
+
+The author's follow-up: *"Can the filter not mandatory in the earth frame can it be left and right?
+or make the frame larger?"* Both, and the second is the one that pays.
+
+**There were already 160 unused pixels either side of the frame at 1400px, and 659 at 1920.** The
+frame is `min(96vw, 74rem)`, so above a ~1233px window the rem cap binds and the rest of the screen
+is margin. A layout that carves a column out of the map should be allowed to take that back, so
+`all-1`, `all-2` and `all-5` now use `min(96vw, 100rem)` and `all-6` uses `min(96vw, 120rem)`.
+`All`, `Trips`, `Trails`, `all-3` and `all-4` keep the standard frame — the last two deliberately,
+because they are the proposals that do NOT carve, and widening them as well would leave nothing to
+compare a carved layout against.
+
+**ONLY THE WIDTH CHANGES, and the height is left alone for two reasons that are not caution.** The
+site header is sticky, so a frame taller than the viewport less the header slides under the nav
+when it is scrolled to; and the tab row sits above the frame, so a frame that fills what is left
+pushes the ROW under the nav — which on this page is the control being used to compare the layouts.
+90vh and 92vh were both tried and did exactly that, measured as `frameTop < navBottom`. At the
+standard height every layout reports `frameTop` 92 against a `navBottom` of 65, the same as `All`.
+
+**96vw stays 96vw.** The gutter is what keeps a scrollbar from overflowing the page, and that
+reasoning does not change because the rem cap went up. Verified at 1280, 1400, 1920 and 2560: 0
+horizontal overflow at every one.
+
+**`all-6` is the "left and right" question answered literally.** The map becomes a card and the
+controls stand outside it: the frame gives up its own border, background and clipping, and the
+STAGE takes them instead, so the bordered box on screen is the map and nothing else. **The panels
+are still children of the frame in the DOM and did not need to move** — what makes a control read
+as "inside the frame" is the border drawn around all of them together, and that border is now drawn
+around the map alone. On a 1920px screen `all-6`'s map is 1407px wide, which is wider than `All`'s
+entire frame.
+
+**The tab row follows the frame it belongs to.** A widened frame would otherwise leave the row
+floating short of it, aligned to a different edge, which reads as a mistake rather than as a wider
+map. The legend and the note below the frame deliberately do NOT follow — they are prose, and prose
+does not want to be 1,843px wide.
+
+**MapLibre resizes itself, so carving needs no engine call.** v6 keeps a `ResizeObserver` on its
+container (throttled 50ms) — verified rather than assumed, by reading the bundle and then by
+measuring: the canvas comes back 878, 1182 and 758 px wide against stage widths of 878, 1182 and
+758.
+
+**`reserved()` now skips a box that does not overlap the map**, which is the one engine change and
+is a strict improvement. It used to reserve everything inside the frame, which was the same thing
+while every control floated over the stage. A control beside the map must cost the camera no
+padding and can hide no card, because there is no card under it. Identical behaviour for the three
+original tabs, where every box is over the stage — confirmed by the 54 checks on those tabs passing
+unchanged.
+
+**Switching between two layout tabs must not move the camera**, and `applyMode` would have: the
+engine is only told when the BASE changed, so `all-1` → `all-3` is a CSS change and nothing else.
+Verified by projecting a card across the switch — it holds its ground to within the difference in
+stage width.
+
+#### Things that look like shortcuts and are not
+
+- **Every layout sets `position` and `inset` explicitly** rather than relying on what it inherits.
+  The base rule each is overriding is `absolute` with two edges pinned, and a layout that set only
+  `grid-column` would be a grid item still pinned to a corner.
+- **The carved panels drop their border, wash and blur.** Those exist to separate a floating box
+  from the map under it; off the map there is nothing to separate from, and the hairline becomes a
+  box drawn around a thing that is not a box. The column's own edge does that job once.
+- **The sidebar's ground is a pseudo-element**, because there is no wrapper to paint — and it is
+  `position: absolute`, so it is not a grid item and takes no cell.
+- **`all-2`'s chart takes a HEIGHT and derives its width**, which is the opposite of everywhere
+  else and is forced by how SVG scales. With `width: 100%` and `height: auto` it is a flex item
+  that can be *shrunk* vertically, and a shrunk SVG does not crop — it letterboxes. The chart came
+  out half size and centred in a column of white space. Given a definite height and `width: auto`
+  the viewBox ratio supplies the width instead.
+- **And `all-2`'s card wraps.** The chart takes a fixed width off its own ratio and the heading
+  takes one too, so on a narrow dock there can be nothing left — a `flex: 1` readout collapsed to
+  zero and vanished. It wraps to a second line, which a 15rem strip has room for.
+- **`all-2`'s index goes into two CSS columns**, with a group forbidden from breaking across them
+  so a trip is never split from the walks nested under it. A dock is the opposite shape from a
+  19-row index, and this is the layout that fights its content hardest.
+- **`all-4` keeps the legends.** Dropping them was tried first, on the reasoning that five chips
+  reading COUNTRIES, CITIES, RELIEF, PEAKS, RIVERS & LAKES do not need a word saying "Layers" —
+  and it made the panel three unlabelled rows in which `Show` and `Layers` are the same kind of
+  chip drawn the same way. The brief was to keep the information; that row of words is information.
+- **At 390px all six fall back to the floating layout `All` uses.** A phone frame has no column to
+  give away and no dock to spare, so the layouts are a desktop question and on a phone they are all
+  the same answer. Reviewing them at 390px is not the point; not breaking them there is.
+- **The tab row takes the frame's breakout.** Nine tabs wrapped to two lines at the reading
+  column's width. It now lines up with the frame's left edge, the same breakout
+  `.mapglobe__foot`, `.mapglobe__legend` and `.mapglobe__note` already take. **This is the one
+  thing the three original tabs also see** — and it is the tab ROW rather than anything inside the
+  map, so `All` draws exactly what it drew.
+
+#### Known, and part of what is being reviewed
+
+- **`all-1`, `all-5` and `all-6` have empty columns on the flat globe.** There is no index rail and
+  no route card outside the Terrain view, so the column holds the filter chips and then stops.
+  `all-5` and `all-6` show it twice. Collapsing the column when it empties would resize the map on
+  every view change, which is worse; this is the honest cost of reserving space for something that
+  is not always there.
+- **At 1400px `all-6` is the weakest of the carved layouts, at +3%.** Its two columns cost 436px of
+  a 1344px window, and the 120rem cap it exists for does not bind until about 1800px. It is built
+  for a wide screen and says so.
+- **`all-3`'s column runs most of the frame's height** with all three boxes up. It is one place to
+  look rather than three, which is the proposal — but it is not less ink.
+- **`all-2`'s index scrolls** even in two columns. 19 rows do not fit a 15rem strip.
+
+**What it costs**, page-scoped, measured before and after in one session:
+
+| | before | after |
+|---|---|---|
+| eager page script | 4.02 | **4.11** KB gz |
+| MapLibre engine chunk | 248.21 | **248.24** KB gz |
+| `/about/travel-preview` CSS | 7.10 | **8.81** KB gz |
+| site-wide CSS (`BaseLayout.css`, 25 pages) | 10.10 | **10.10** — unchanged |
+
+The 1.7 KB of CSS is six complete layouts and is the whole cost of the exercise; five of them are
+deleted when one wins. Site-wide CSS does not move because every rule is written as plain
+declarations rather than `@apply` — the trap the mock-up section records.
+
+**Verified in Chrome against the production build**, 42 checks on the layout tabs plus a re-run of
+the 54 on `All`, `Trips` and `Trails` with no regression: nine tabs in the right order with one
+checked and `All` carrying no `data-layout`; the row on one line at 1400px and aligned to the left
+edge of whichever frame its tab uses, at 1280, 1400, 1920 and 2560; switching layout tabs
+not flying the camera; each layout reporting `data-mode=combined` with its own `data-layout`, all
+three panels inside the frame, the canvas matching the stage to the pixel, and the view switch and
+rail intact; a layer chip, the detail menu and an index row all still working from inside a carved
+layout; a layout tab surviving a reload; leaving for Trails and back; every frame clearing the
+sticky header; 0 horizontal overflow at four screen widths; and 390px falling back to the floating
+layout with all nine tabs hit-testable. Console clean throughout, both views screenshotted for all
+seven tabs at 1400 and 1920.
+
+**The `.switch` trap caught me, exactly as the note below it says it would.** A check for "the tab
+row is on one line" reported two rows for a row that was on one — it had measured the three.js
+earth's own look switcher, which shares the class and has six options over two rows. Scope every
+selector on this page to `[data-mapglobe]`.
+
 ## The interaction mock-up (`/about/travel-preview`, 10 Sep 2026)
 
 A **third** section on the preview page, and the only one that is not an earth. The author's

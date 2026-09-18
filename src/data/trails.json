@@ -8,8 +8,14 @@
     "date": "2026-07-25",
     "km": 14.5,
     "ascent": 1127,
+    "descent": 1156,
     "low": 66,
     "high": 1017,
+    "start": "07:24",
+    "end": "15:43",
+    "elapsed": 29931,
+    "moving": 10387,
+    "shape": "out-and-back",
     "points": 25819
   },
   {
@@ -21,8 +27,14 @@
     "date": "2026-06-30",
     "km": 10.6,
     "ascent": 94,
+    "descent": 326,
     "low": 3407,
     "high": 3667,
+    "start": "07:25",
+    "end": "10:34",
+    "elapsed": 11337,
+    "moving": 7910,
+    "shape": "point-to-point",
     "points": 9654
   },
   {
@@ -34,8 +46,14 @@
     "date": "2026-06-29",
     "km": 11.1,
     "ascent": 201,
+    "descent": 203,
     "low": 3664,
     "high": 3754,
+    "start": "07:38",
+    "end": "13:42",
+    "elapsed": 21849,
+    "moving": 10319,
+    "shape": "out-and-back",
     "points": 18662
   },
   {
@@ -47,8 +65,14 @@
     "date": "2026-06-28",
     "km": 11.5,
     "ascent": 316,
+    "descent": 93,
     "low": 3412,
     "high": 3675,
+    "start": "12:20",
+    "end": "16:30",
+    "elapsed": 14981,
+    "moving": 10247,
+    "shape": "point-to-point",
     "points": 13827
   },
   {
@@ -60,8 +84,14 @@
     "date": "2025-11-17",
     "km": 3.8,
     "ascent": 203,
+    "descent": 185,
     "low": 1,
     "high": 136,
+    "start": "16:07",
+    "end": "18:28",
+    "elapsed": 8406,
+    "moving": 2992,
+    "shape": "out-and-back",
     "points": 7409
   },
   {
@@ -73,8 +103,14 @@
     "date": "2025-08-31",
     "km": 5.4,
     "ascent": 529,
+    "descent": 522,
     "low": 63,
     "high": 518,
+    "start": "08:14",
+    "end": "10:43",
+    "elapsed": 8917,
+    "moving": 4064,
+    "shape": "loop",
     "points": 8132
   },
   {
@@ -86,8 +122,14 @@
     "date": "2025-08-09",
     "km": 10.2,
     "ascent": 557,
+    "descent": 581,
     "low": 41,
     "high": 622,
+    "start": "08:05",
+    "end": "10:42",
+    "elapsed": 9428,
+    "moving": 7746,
+    "shape": "out-and-back",
     "points": 9136
   },
   {
@@ -99,8 +141,14 @@
     "date": "2026-04-25",
     "km": 20.7,
     "ascent": 58,
+    "descent": 58,
     "low": 15,
     "high": 32,
+    "start": "19:05",
+    "end": "21:35",
+    "elapsed": 8950,
+    "moving": 8928,
+    "shape": "point-to-point",
     "points": 8940
   },
   {
@@ -112,8 +160,14 @@
     "date": "2025-12-21",
     "km": 21.3,
     "ascent": 70,
+    "descent": 73,
     "low": 27,
     "high": 53,
+    "start": "03:02",
+    "end": "05:16",
+    "elapsed": 8088,
+    "moving": 8073,
+    "shape": "loop",
     "points": 8080
   },
   {
@@ -125,8 +179,14 @@
     "date": "2025-09-21",
     "km": 21.2,
     "ascent": 102,
+    "descent": 102,
     "low": 11,
     "high": 50,
+    "start": "03:02",
+    "end": "05:10",
+    "elapsed": 7712,
+    "moving": 7705,
+    "shape": "loop",
     "points": 7704
   }
 ]

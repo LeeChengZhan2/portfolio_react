@@ -122,9 +122,22 @@ export interface MapTrail {
   km: number;
   /** Null where the recording carried no elevation at all. Never estimated. */
   ascent: number | null;
+  /** The mirror of `ascent`, summed with the same 3 m rule (16 Sep 2026). */
+  descent: number | null;
   low: number | null;
   high: number | null;
   points: number;
+  /* The clock and the durations (16 Sep 2026), for the Summary detail view.
+     Local wall-clock times by the build script's longitude rule — "07:24" —
+     and seconds for the two durations. `moving` is every interval faster than
+     a standstill; the difference from `elapsed` is time spent stopped. */
+  start: string;
+  end: string;
+  elapsed: number | null;
+  moving: number | null;
+  /** From the geometry: does the walk retrace itself, close on itself, or end
+      somewhere else. Gives the start dot and the end ring a word. */
+  shape: 'loop' | 'out-and-back' | 'point-to-point';
 }
 
 /** Matches public/globe/visited.json. `at` is [lat, lon]; `ring` is [lon, lat]. */
@@ -216,6 +229,24 @@ export interface MapGlobe {
    * the map can point at.
    */
   showPlace(id: string, animate?: boolean): Promise<void>;
+  /**
+   * Put a dot on the drawn route, or take it off — the map half of the detail
+   * views (16 Sep 2026). Hovering the elevation profile or a split moves this
+   * to the matching point on the ground, so the chart and the line answer each
+   * other. `null` clears it. Its layer is one of TRACK_LAYERS, so it can never
+   * show without the route it sits on.
+   */
+  setProbe(at: [number, number] | null): void;
+  /**
+   * Colour the drawn route by a series along it — the Colour detail view. The
+   * values are 0–1, evenly spaced along the line by distance, and the ramp
+   * runs from the accent to the page's text colour so a higher value reads as
+   * "more ink" in both themes. `null` puts the flat accent back.
+   *
+   * The series is kept, so a theme change re-derives the same ramp in the new
+   * colours rather than dropping back to the flat line.
+   */
+  colourTrack(values: number[] | null): void;
   refreshTheme(): void;
   destroy(): void;
 }
@@ -724,11 +755,18 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
       land: { type: 'geojson', data: land },
       coast: { type: 'geojson', data: coast },
       regions: { type: 'geojson', data: regions },
-      track: { type: 'geojson', data: EMPTY },
+      /* `lineMetrics` is what makes `line-gradient` legal on the track layer —
+         MapLibre only computes the along-line progress a gradient is keyed on
+         when the source asks for it. It costs a little tile-time per route and
+         nothing on the wire. See `colourTrack`. */
+      track: { type: 'geojson', data: EMPTY, lineMetrics: true },
       /* The two ends of that track, as their own source rather than as extra
          features on `track`. A circle layer over a LineString draws a circle at
          every vertex, so there is no way to mark just the ends off one source. */
       'track-ends': { type: 'geojson', data: EMPTY },
+      /* And a single point somewhere along it, driven by the detail card's
+         charts. Its own source for the same reason the ends have one. */
+      probe: { type: 'geojson', data: EMPTY },
       /* Every recorded route at once, and a dot on each start — what terrain
          mode opens on. Kept separate from `track` rather than folded into it:
          the two are never on screen together, they are drawn at different
@@ -931,6 +969,23 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
           'circle-color': ['case', ['==', ['get', 'role'], 'start'], p.visited, p.ground],
           'circle-stroke-color': ['case', ['==', ['get', 'role'], 'start'], p.ground, p.visited],
           'circle-stroke-width': 2,
+        },
+      },
+      /* The probe: where on the ground the reader's cursor is on the chart.
+         The page's text colour inside a ground-coloured ring, so it is neither
+         the accent start dot nor the ground-filled end ring — a third mark
+         that reads as "here", and the strongest thing on the line because it
+         is the one the reader is moving. Drawn last so it sits over both
+         ends. */
+      {
+        id: 'track-probe',
+        type: 'circle',
+        source: 'probe',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': p.ink,
+          'circle-stroke-color': p.ground,
+          'circle-stroke-width': 2.5,
         },
       },
     ],
@@ -1224,7 +1279,7 @@ const COAST_LAYERS = ['coast'] as const;
 const OVERVIEW_LAYERS = ['trails-line', 'trail-start'] as const;
 
 /** The one recorded route and its two ends. Only a focused terrain view. */
-const TRACK_LAYERS = ['track-casing', 'track', 'track-end'] as const;
+const TRACK_LAYERS = ['track-casing', 'track', 'track-end', 'track-probe'] as const;
 
 /** Which label kind belongs to which filter. Trips answer to no filter. */
 /* `water` is deliberately absent: rivers and lakes are geometry only. They were
@@ -1299,6 +1354,19 @@ export interface MapGlobeOptions {
    * mountains they came for off the edge of the frame.
    */
   walkedOn: Record<string, string[]>;
+  /**
+   * Told which route is on the map as a single track, or null when none is —
+   * the overview, a trip, or any flat globe view, where the track layers are
+   * hidden. The page uses it to show and fill the detail card (16 Sep 2026).
+   *
+   * A callback rather than a getter, because the engine decides this in more
+   * places than the page can see: `openTerrainView` picks a route of its own
+   * when the reader arrives with none, `showPlace` clears it, and leaving for
+   * a flat view hides it without forgetting it. It fires from `applyLayers`,
+   * which every one of those paths already ends in, and only when the answer
+   * has changed.
+   */
+  onSubject?: (trail: MapTrail | null) => void;
 }
 
 export async function createMapGlobe({
@@ -1312,6 +1380,7 @@ export async function createMapGlobe({
   view: openView,
   trail,
   walkedOn,
+  onSubject,
 }: MapGlobeOptions): Promise<MapGlobe> {
   /* land-polygons.json, NOT land.json. The ring file is coastline drawn as line
      geometry on a sphere, where a jump from longitude +179.87 to -180 wraps
@@ -2025,6 +2094,22 @@ export async function createMapGlobe({
       // A panel hidden for the current mode is `display: none` and measures
       // zero, which is exactly the test for "not on screen".
       if (!box.width || !box.height) continue;
+      /* AND ONLY WHAT ACTUALLY OVERLAPS THE MAP (16 Sep 2026). This used to
+         reserve everything inside the frame, which was the same thing while
+         every control floated over the stage. The layout tabs carve a strip
+         out of the frame and put controls in it, beside the map rather than
+         on it — and a control that covers no part of the map must cost the
+         camera nothing and can hide no card, because there is no card under
+         it. Identical behaviour for the three original tabs, where every one
+         of these boxes is over the stage. */
+      if (
+        box.right <= rect.left ||
+        box.left >= rect.right ||
+        box.bottom <= rect.top ||
+        box.top >= rect.bottom
+      ) {
+        continue;
+      }
       boxes.push({
         x: box.left - rect.left,
         y: box.top - rect.top,
@@ -2675,6 +2760,16 @@ export async function createMapGlobe({
     for (const id of TRACK_LAYERS) {
       map.setLayoutProperty(id, 'visibility', oneTrack ? 'visible' : 'none');
     }
+    /* The detail card follows the track, not `focused`: a route the Terrain
+       view remembers while the reader is back on the flat globe is not on the
+       map, and a card describing it would be describing nothing on screen.
+       Only a change is reported — this runs on every layer and content click
+       too, and the page rebuilds a card when it hears this. */
+    const subject = oneTrack ? focused : null;
+    if (subject !== reported) {
+      reported = subject;
+      onSubject?.(subject);
+    }
     /* Here rather than at each call site: every path that can change which
        route is the subject already ends up in this function — loadTrail,
        showPlace, showOverview, setView, setContent and setLayers alike. */
@@ -3037,6 +3132,9 @@ export async function createMapGlobe({
    * has to know which of the two views is up.
    */
   let focused: MapTrail | null = null;
+
+  /** What `onSubject` was last told, so it is only told about changes. */
+  let reported: MapTrail | null = null;
 
   /**
    * The Terrain view only: whether the reader has drilled from the region to
@@ -3665,6 +3763,63 @@ export async function createMapGlobe({
 
   applyMode(mode, false);
 
+  /* ---- the detail card's two hooks into the map ---------------------------- */
+  function setProbe(at: [number, number] | null): void {
+    source('probe').setData(
+      at
+        ? {
+            type: 'FeatureCollection',
+            features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: at } }],
+          }
+        : EMPTY,
+    );
+  }
+
+  /**
+   * The series the track is currently coloured by, or null for the flat
+   * accent. Kept so `refreshTheme` can re-derive the ramp — the colours in a
+   * `line-gradient` expression are literals, and a theme change would
+   * otherwise leave a route painted in the old theme's ink.
+   */
+  let trackSeries: number[] | null = null;
+
+  /** Stops in the gradient. More than this is invisible on a 3px line, and an
+      expression with 900 literal colours is one MapLibre has to re-evaluate
+      per tile. */
+  const GRADIENT_STOPS = 48;
+
+  function paintGradient(): void {
+    if (!trackSeries || trackSeries.length < 2) {
+      /* `undefined` rather than `null`: MapLibre's `setPaintProperty` treats
+         the two the same way — the property is unset and the layer falls back
+         to `line-color` — but the typings only admit one of them. */
+      map.setPaintProperty('track', 'line-gradient', undefined);
+      return;
+    }
+    const n = Math.min(GRADIENT_STOPS, trackSeries.length);
+    const stops: (number | string)[] = [];
+    for (let k = 0; k < n; k++) {
+      const at = k / (n - 1);
+      const v = trackSeries[Math.round(at * (trackSeries.length - 1))]!;
+      /* Accent at the bottom of the range, the page's ink at the top. The
+         accent is the route's own colour, so the lowest ground on it looks
+         exactly as a route looks; everything above steps toward the text
+         colour, which is "more ink" in light and in dark alike. */
+      stops.push(at, mix(p.visited, p.ink, Math.min(1, Math.max(0, v))));
+    }
+    map.setPaintProperty('track', 'line-gradient', [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      ...stops,
+    ]);
+  }
+
+  function colourTrack(values: number[] | null): void {
+    trackSeries = values;
+    paintGradient();
+  }
+
   /* ---- theme -------------------------------------------------------------- */
   /* The site's theme controls only add and remove classes on <html>, so neither
      side has to know about the other — same contract the three.js globe honours.
@@ -3680,6 +3835,10 @@ export async function createMapGlobe({
     map.setPaintProperty('region-line', 'line-color', p.visitedEdge);
     map.setPaintProperty('track', 'line-color', p.visited);
     map.setPaintProperty('track-casing', 'line-color', p.ground);
+    map.setPaintProperty('track-probe', 'circle-color', p.ink);
+    map.setPaintProperty('track-probe', 'circle-stroke-color', p.ground);
+    // The gradient's colours are literals in an expression — see paintGradient.
+    paintGradient();
     /* Through paintTrails, NOT `p.visited` written out again: these two are the
        one pair of paint properties whose value depends on whether a route is
        focused, so a second copy here would repaint the de-emphasised routes
@@ -3764,6 +3923,8 @@ export async function createMapGlobe({
     loadTrail: (next, animate) => loadTrail(next, animate),
     showAllTrails,
     showPlace,
+    setProbe,
+    colourTrack,
     refreshTheme,
     destroy: () => map.remove(),
   };

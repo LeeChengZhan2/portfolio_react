@@ -26,6 +26,10 @@ export interface Palette {
   visited: string;
   visitedEdge: string;
   limb: string;
+  /** The page's text colour — the far end of every ramp above. Exposed for the
+      one mark that wants the full step: the MapLibre earth's probe dot and the
+      top of its elevation ramp (16 Sep 2026). Not a step of its own. */
+  ink: string;
 }
 
 type Rgb = [number, number, number];
@@ -152,5 +156,6 @@ export function palette(host: HTMLElement): Palette {
     visited: accent,
     visitedEdge: mix(accent, fg, 0.25),
     limb: step(0.3),
+    ink: fg,
   };
 }
