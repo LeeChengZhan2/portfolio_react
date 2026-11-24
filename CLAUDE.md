@@ -3214,6 +3214,15 @@ Adding a new `data-reveal` value means adding it to **both**. A value present in
 not in `reveal.ts` leaves elements permanently invisible — that is the failure mode to watch
 for. Supported: `fade`, `fade-up`, `slide-left`, `slide-right`, `split-chars`, `split-lines`.
 
+**Never put a link or a button inside a `split-*` element** (found 24 Nov 2026). SplitText
+rebuilds the text inside pieces marked `aria-hidden="true"` and copies a nested element into
+them, so a link in a split heading came out twice: an empty copy, still a focusable link, and
+the real one inside the hidden pieces, out of a screen reader's reach while it still takes
+focus. Seen in Chrome with GSAP 3.15, at 1280 and 390. Give such an element `fade-up` instead.
+Found when the AiBE work page's title briefly linked the product's name; that link is now a
+button under the role line. The "Current" badge is kept out of the h1 for a related reason
+(see "Content").
+
 ## Animation rules
 
 - **Never animate `background-position` from scroll.** It repaints every frame. Use
@@ -3310,6 +3319,387 @@ Two placement constraints, both deliberate:
 Keep `summary` well under the zod cap of 180 characters. It is rendered on a carousel card
 roughly 22rem wide, and every `stack` entry becomes a chip on that same card — past about
 seven chips the cards visibly grow, and they all stretch to match the tallest.
+
+### Case-study visuals on a work page (18 Nov 2026)
+
+Work pages are written for recruiters and interviewers who skim, so a work entry can carry
+four optional frontmatter fields that `work/[slug].astro` renders around the markdown body.
+An entry without them renders exactly as before; grep `src/content/work` for which use them.
+
+| Field | Component | Where it renders |
+|---|---|---|
+| `highlights` (≤4 `{value, label}`) | `WorkHighlights.astro` — stat tiles | between the header and the body |
+| `chat` (`{label?, messages: 2–8 {from: user\|agent, text}}`) | `WorkChat.astro` — example conversation | after the highlights |
+| `flow` (`{steps: 2–4 {title, text, tech?}, note?}`) | `WorkFlow.astro` — "How it works" diagram | after the body |
+| `challenges` (`{title, problem, fix, result}`) | `WorkChallenges.astro` — "Problems I solved" cards | after the flow |
+
+**A work page is public, so it carries common-level facts only.** What the product does, the
+author's part, results and the tech list are fine. A confidential project's internal design,
+data flow, architecture or incident details are not: not in `flow`, not in `challenges`, not
+in the body, and not in the HTML comment at the foot either (it ships in the built page). On
+18 Nov 2026 the author had the "How it works" diagram and the problem cards removed from
+`ai-agent-bms` for exactly this reason, and found the detailed stories too long for anyone to
+read anyway. `chat` is user-level by design: what someone types and what comes back, with
+made-up numbers labelled as such, never how the answer is produced.
+
+Why frontmatter and not HTML pasted into the markdown: the fields are validated by zod like
+everything else in the entry, and the components own the markup, so no prose file carries
+layout. The two headings ("How it works", "Problems I solved") belong to the components,
+which is why an entry that uses them must not also write those sections in its body.
+
+Things that look like shortcuts and are not:
+
+- **`highlights[].value` is a string.** "500+" and "50%" must render exactly as written.
+  Quote a bare number in YAML (`value: "10"`), or zod receives a number and fails the build.
+- **Stat values use proportional figures, not `tabular-nums`.** Equal-width digits make a
+  lone "10" look loose at `text-3xl`; tabular figures are for columns of numbers.
+- **The diagram is an `<ol>` of real text, not an SVG.** It wraps at any width, follows the
+  theme tokens, and reads in order to a screen reader. Below `md` the steps stack with `↓`
+  connectors; from `md` up they sit in one row with `→`, one column per step
+  (`grid-auto-flow: column` + `auto-cols-fr`), so a 2- or 3-step flow fills the row
+  instead of leaving the empty columns a fixed `md:grid-cols-4` did. The arrows are CSS `::after`, so they
+  are never announced. They use `fg-meta`, not the icon token `fg-faint`, which is about
+  2.5:1 on the light page — too faint for the one mark that says "this leads to that".
+- **Keep step text to about eight words and `tech` to one name.** From `md` up each card is
+  ~140px wide in the 42rem column. "ClickHouse · Python" broke over two lines there.
+- **Only `p`, `h2`, `ul` and links are styled inside `.page__body`.** A numbered list, an
+  `h3` or a table in a work entry's markdown renders unstyled; Tailwind's preflight strips
+  `ol` markers.
+- **Chat bubbles: user is `bg-accent` + `text-on-invert`, agent is `surface-2` on a
+  `surface` card.** The first is the pair the theming contract documents as AA in both
+  themes; the second recedes the right way in both (darker in light, lighter in dark).
+  Hidden "User:"/"Agent:" prefixes carry who said what, so it never rests on position or
+  colour. Quote a bare `"Yes"` in YAML, or it may parse as a boolean and fail zod.
+- **Values only one of these components uses are plain declarations, not `@apply`.** The
+  "build input" problem above applies to `.astro` files too: Tailwind scans the component
+  source, so every token in an `@apply` line is also emitted as a utility into the shared
+  BaseLayout stylesheet that all 25 pages load. Written as utilities, the 25 component-only
+  values (`size-6`, `max-w-[85%]`, the `md:` flow grid and so on) cost every page ~207 B gz:
+  the shared sheet measured 10,460 B gz with them and 10,253 B gz without (python gzip -9).
+  Utilities the site already uses stay as `@apply`; they cost nothing. Keep comments in these
+  files free of utility names too, for the same reason.
+
+**Cost: no JavaScript, and nothing in the shared stylesheet.** The components' CSS lives in
+the work-page stylesheet (`_slug_.*.css` linked by `/work/*`, 2,551 B gz whole). It loads on
+all seven work pages, not just the ones using the fields, because Astro bundles an imported
+component's CSS for the route whether or not an entry renders it.
+
+Verified 18 Nov 2026, light and dark, at 1280px and at a true 390px (a headless browser
+cannot make a window that narrow, so the phone view is a 390px iframe on a same-origin
+helper page that sets `localStorage.theme`). The switch to plain declarations was checked
+by pixel-diffing before/after screenshots of every page using the components: identical.
+Use headless Chrome for this. Headless Edge silently does nothing while Edge's Startup boost
+process (`msedge.exe --no-startup-window`) is running: the launcher hands off to it and
+returns at once, with no log and no file.
+
+### Showcase layout — opt-in, used by `ai-agent-bms` (20–24 Nov 2026)
+
+An entry with a `showcase` object renders through `WorkShowcase.astro` instead of the
+standard article. `[slug].astro` branches on that one field, so every other entry renders
+exactly as before. The order is the author's: **open by default is only their own work**;
+the whole team project is collapsed below.
+
+1. First view: the title, the entry's `summary` (the same line its cards show), the role
+   line, "What I did" (the markdown body, four points; its `ul` becomes numbered rows)
+   beside "Stack" (`showcase.tech`, grouped under plain-English labels).
+2. "Agents I built", in `WorkAgentDemo.astro` cards. An agent with `features` (building
+   operations, where the author spent most of their time) gets a block of its own: its name,
+   one line, then a card per feature. The rest sit under "More agents I built", a `<details>`
+   closed by default with their names on its header (the author's ask, 24 Nov 2026). This
+   section alone runs wider (80rem) so the cards sit three to a row from 80rem, two from
+   48rem. No row ends in a hole: cards left over from a row of three sit two to a row, half
+   each (`half`), so five cards are 3 + 2; a lone last card of two takes its row (`whole`).
+   **Every card holds up to three example chats, each as a web chat and as WhatsApp, and
+   shows one at a time**: a switch on the heading line picks the version, a pager under the
+   screen picks the example.
+3. A `<details>` for the team platform: `highlights` on its header; inside,
+   `platform.headline`, the areas (`groups`) with the author's items badged "Mine", the
+   channels and the team's extra tools.
+
+| Field | Used for |
+|---|---|
+| `showcase.location` | Follows `company` on the role line |
+| `showcase.tech` | `{group, items}` rows ("Databases": ClickHouse, FalkorDB); falls back to `stack`, so a card keeps its seven chips either way |
+| `showcase.agents` | `{name, text, link?, linkText?, channel: whatsapp\|web}` plus either `examples` (one card) or `features: [{name, text?, channel?, examples}]` (a card per feature), checked by zod. `examples` is one to three `{messages}`. `channel` is the version shown first; a feature may set its own (the author wants the second row of building operations on web, everything else on WhatsApp). A message may carry `rows` (label/value pairs under its text: a table on the web, bold-label lines on WhatsApp), `photo` (a label drawn on a made-up photo) and `replies` (quick-reply buttons, web version only; quote `"Yes"` / `"No"`), and its `text` keeps `\n` line breaks. `link` and `linkText` put a link under the line of an agent with `features`, as on a picture step (building operations → `/work/cloud-data-platform`); zod refuses `link` on a one-card agent, which has nowhere to draw it |
+| `showcase.platform` | `{title, tag?, headline, groups: [{name, items: [{text, mine}]}], channels?, tech?}`; `*phrase*` in the headline is set in `accent`; `mine: true` only for work the author wrote all or most of; `tech` is only the tools the team used and the author did not |
+| `site` (top level, not under `showcase`) | The product's public site, as a URL. A showcase page draws it as a "Visit aibe.now ↗" button under the role line, named by its host and styled as the outside links at the page's foot, opening in a new tab like them. zod refuses `site` on an entry without `showcase` |
+
+Things that look like shortcuts and are not:
+
+- **Claims in the open part and "Mine" badges are checked against the work repo's history
+  before they go in.** The evidence stays out of this repo on purpose: no commit counts, no
+  remarks about colleagues, nothing about how the product is built. Being the top committer
+  on something is not "most of it". Re-check before adding a claim, a badge or a tool.
+- **Every example chat shows something its agent can really do, with made-up data.** All 33
+  were checked against the agents' own tools and prompts on 24 Nov 2026, and 20 changed (16
+  showed something the agent does not do, 4 disagreed with another card): a plausible chat
+  is not evidence. Check the tools before writing one: which
+  fields a list shows, what an action needs first (a booking needs a purpose, completing a
+  job needs its cause), what the agent always asks for (the comfort survey ID), and which
+  equipment a feature covers. The made-up building is one building: the 11 units, yesterday's
+  3 alarms, Meeting Room 3 and fan unit 5 agree across cards. The buttons in the web version
+  and the WhatsApp version of building operations are a drawing choice.
+- **Workspace finder is a plain card.** A comfort-range chart beside its chat was tried and
+  dropped (24 Nov 2026): the author wanted two equal cards in that row.
+- **Recruiters do not know the tool names, so the stack is grouped, not explained.** The
+  labels (Backend, AI agents, AI models, Databases, Monitoring, Cloud) say what each tool is
+  for in a word, which was the author's ask: "dont introduce the tech stack just make sure
+  recuitter can know that in a glance". Small libraries and product names that would hint at
+  a client are left out.
+- **The first view holds everything on a 1280 x 800 screen**: "What I did" ends at 737px and
+  the stack at 711px. On a 390 x 844 phone "What I did" ends at 763px and the stack follows
+  it, ending at 1031px. The phone spacing and chip size are tighter than the desktop ones for
+  that reason; re-measure after changing anything above. (676 / 650 and 706 / 974 before the
+  aibe.now button went in, 24 Nov 2026.)
+- **One figure only.** The author wants "1000+ questions a month" and no counts beside it
+  (24 Nov 2026), in `summary` and in `highlights`. The figure is theirs. It also shows on the
+  cards on `/` and `/work`.
+- **WhatsApp chats have no quick-reply buttons**: the agents' WhatsApp channel cannot send
+  them, so the user types the reply, and a message that relied on a button asks its own
+  question instead ("Apply this weekly schedule to fan unit 2?").
+- **Card headings are two words at most** (the author's rule) and say what the chat shows
+  ("Sensor readings", "Fault diagnosis"), with one short line under each. Not "Fault
+  reporting" for the diagnosis card: that is the name of the separate agent occupants use to
+  report a fault.
+- **Both controls are radio inputs and `:has()`, no script.** Each group needs a page-unique
+  name, so `WorkShowcase` passes `uid` (`f0-3`, `a2`). The radios stay in the page, visually
+  hidden, so Tab, the arrow keys and screen readers work. A pager arrow is one `<label>` per
+  example pointing at its neighbour's radio, and only the label for the example on show is
+  displayed, so it wraps around. Three examples is the most the rules know. Without `:has()`
+  the first chat of each card shows and both controls go away (checked by rewriting the two
+  `@supports` conditions in a copy of the build).
+- **All the chats of a card share one grid cell and the others are `visibility: hidden`, not
+  `display: none`.** The card is then always as tall as its tallest chat, so flipping never
+  moves the page: heights are identical in all six states at 1280, 900 and 390. Hidden chats
+  are still out of the tab order and the accessibility tree.
+- **Two kinds of motion on the messages, on purpose.** The chat shown first carries the
+  site's `fade-up` reveal on each message, so they arrive as it scrolls into view. Every chat
+  also has a short CSS entrance staggered by `--i`. `visibility` does not restart an
+  animation the way `display` does, so the entrance's *name* is what changes: a screen and a
+  chat set `--ag-anim` to `ag-arrive` while shown and `none` otherwise, and a message reads
+  it. Use the animation longhands there: the minifier turned a shorthand without a name into
+  `animation: none`, and the entrance silently stopped. Reduced motion turns it off; the
+  global rule alone shortens durations but not delays.
+- **Nothing inside either `<details>` carries a reveal.** Content in a closed `<details>` has
+  no layout, so a ScrollTrigger measured there fires at the wrong place or never, and the
+  element would stay at opacity 0 after opening. The cards in "More agents I built" get
+  `reveal={false}`; `details:not([open])` holds their CSS entrance back, so it plays on
+  opening (without that rule it had already run, unseen, at page load).
+- **Each chat version has its own set of `--chat-*` colours**, at the foot of
+  `WorkAgentDemo.astro`. The web version maps them to the theme tokens, so it shows in the
+  site's accent across all nine themes. The WhatsApp version is drawn in WhatsApp's own
+  colours, the one exception to the token rule on the site, because the author asked for it
+  to look like the real app: teal bar, beige doodle wallpaper, light-green outgoing bubbles,
+  blue read ticks; light palette under all eight light themes, dark palette under the site's
+  dark theme. The author tried the web version in WhatsApp's colours too and went back to the
+  accent. The doodle tile is an inline SVG, one per palette, since a data URI cannot read a
+  CSS variable.
+- **The labels on the band are `fg-muted`, not `fg-meta`**: in Classic, `fg-meta` on `band`
+  is 4.39:1. Every other new text pair is at least 4.5:1 and every mark at least 3:1 in all
+  nine themes.
+- **WhatsApp times sit over an inline spacer, not in a flex row.** A box that wraps keeps its
+  full width instead of fitting its longest line, so a flex row pushed short messages to the
+  right, and a spacer wider than the time pushed them onto two lines. The spacer is the
+  measured width of the time: 1.625rem, 2.75rem with the ticks. After `rows` it follows the
+  last row, so the time shares that line. It is WhatsApp-only: even at zero width, one after
+  a web table opened an empty line under it. The times are generated (two a minute, ending on
+  9:41), so an example must not mention a later hour of "today".
+- **Example data is made up and says so** ("Example chats · made-up data"), with generic
+  names: Zone 4, Meeting Room 3, level 3. Real zone, room and office names from the work
+  repo look just as generic and are not used. Numbers inside a message are joined with
+  no-break spaces (`level 3`), or a narrow bubble strands the "3", and a range like 3–5 has
+  a word joiner (U+2060) after its dash, or it breaks there.
+- **All the component CSS is plain declarations**, per "This file is a build input". Writing
+  it leaked twice, both times from a comment: one containing the word `invert` added the
+  filter utility to the shared sheet, and one containing `shrink` added `flex-shrink`.
+  `cmp` the shared `BaseLayout.*.css` before and after any change to these files.
+- **Notes about an entry go in YAML comments in its frontmatter**, which never reach the page.
+  An HTML comment at the foot of the body ships in the built HTML.
+
+Checked 24 Nov 2026 by building a copy of the tree with the change reverted: 22 of 25 pages
+identical (once the work-page CSS file name and the carousel's per-build island `uid` are set
+aside), `/` and `/work` different only in this entry's `summary` on its card, and the other
+six work pages pixel-identical at 1280 and 390 in light and dark. Mouse, Tab and arrow keys
+were driven through a real browser at 1280 and 390, in all the states above.
+
+Cost: no JavaScript, and the shared sheet is unchanged. The work-page stylesheet, which all
+seven work pages load, went from 2,580 to 6,960 B gz (python gzip -9). This page's HTML is
+15.1 kB gz for 33 chats drawn twice.
+
+**The product's site, and the data platform linked both ways** (24 Nov 2026). The author gave
+the product's site, https://aibe.now/ ("AiBE by Primustech"), and asked for building
+operations to mention the cloud data platform, which is the agents' database.
+
+- **"Visit aibe.now ↗" is a button under the role line** (`site`), styled as the outside
+  links at the page's foot. The author picked it from four mock-ups (in the role line, a
+  button, a link in "What I did", the foot of the page) after three tries the same day looked
+  wrong in the page, so none of them comes back:
+  - the title renamed "AiBE: AI Agent for Building Management": "AiBE" in the title did not
+    look right, so the title stays as it was;
+  - "aibe.now ↗" at the right end of the kicker: "the place is bad";
+  - "AiBE" in the title as the link itself, which also turned up the SplitText bug written
+    up under "Reveal animation contract".
+- **The two pages point at each other.** Building operations now says it reads every sensor,
+  meter and unit "from our cloud data platform", with "See the data platform →" under it; the
+  data platform's third picture box is titled "AiBE's AI agents" and keeps "See the AI agents
+  →". Fitting the 200-character cap on an agent's `text` is why "piece of equipment" became
+  "unit", the word both pages already use.
+
+Checked against a build from before the change: the shared stylesheet byte-identical, 23 of 25
+pages identical, and the two entry pages different only as above. With motion on and off,
+light and dark, at 1280 and 390: the button is 143 x 41px, clickable and reachable by Tab,
+its text at least 11.88:1 at rest and 5.72:1 hovered in all nine themes; the data platform
+link is at least 5.09:1; no horizontal overflow. The new rules cost 65 B gz in the work-page
+stylesheet; no JavaScript.
+
+### "What I built" — the showcase for work that is not agents, used by `cloud-data-platform` (24 Nov 2026)
+
+`cloud-data-platform` uses the showcase layout with `showcase.built` in place of `agents`.
+The first view and the collapsed team section are the same components as `ai-agent-bms`;
+the band between them is "What I built". `agents` is now optional, and zod fails the build
+for a showcase with neither.
+
+**It is written for a reader who knows nothing about buildings** (the author's brief, 24 Nov
+2026: recruiters and interviewers must get it at a glance). Several rounds on the same day,
+so none of these is retried:
+
+- One card per kind of data, a vendor's raw record above the standard one, mirroring the
+  agent page: turned down. JSON, codes like `CHWP` and Brick class names mean nothing to
+  that reader.
+- A card per part of the work in plain words, with the building and vendor counts in the
+  summary: turned down. The counts are too small to be worth saying, and "My part" should
+  read as the author's process, in their order.
+- In the flow, a live feed of readings for "fetch and store", a code → name dictionary for
+  "convert", and one graph with three questions: turned down. Each picture has to show what
+  the author really did in the work repo: the storage they designed, the model the client's
+  lists become, and the graph they built.
+- The graph as four small drawings, one per kind of link: a misreading. "It should be 4
+  section" meant **step 4** of the flow, not four sections. The author wanted it moved there
+  and redrawn as the graph they built, with more equipment.
+- The graph as a whole building, two floors with eight units, a caption under it and four
+  ticks: "too long and too many things". Then a few rooms with a chiller feeding two air-con
+  units: "still not good". The author wanted a people counter in it, and the shape of a real
+  building's graph with made-up names. Now one air-con unit and what links to it (below),
+  three rows, two ticks, 398px tall at 1280 (the whole building was 635).
+- No "Examples · made-up data" note on this page's band (the author's ask, 24 Nov 2026). The
+  agent page keeps its own note.
+- What is live now, top to bottom:
+
+1. **The summary names the consumer**: "The data platform behind our building AI agents", and
+   2B+ sensor readings, the one figure kept. The author asked for the agent to be mentioned,
+   because this is its database, so "never refer to another work entry" no longer holds here,
+   nor on the agent page, which links back (24 Nov 2026).
+2. **"Where it fits"** (`WorkPicture.astro`): three boxes, building systems → this platform →
+   the AI agents, with the platform's box marked "This project" and the last box, "AiBE's AI
+   agents" (the product they belong to), linking to `/work/ai-agent-bms`. What goes in and who
+   uses what comes out, never the steps inside.
+3. **"My part"** (`WorkSteps.astro`): the author's five steps as a numbered flow, in their
+   words: understand the client's data; fetch it and design the storage; convert it into a
+   common data layer; save the asset relationships in a graph; make sure it works and is
+   safe. Each step is a title, one line and a picture of it (`WorkShow.astro`, which draws the
+   graph with `WorkGraphDemo.astro`). The titles down the left are the story in five lines.
+
+| `built` field | Renders as |
+|---|---|
+| `picture` (2–4 `{icon, title, text, mine?, link?, linkText?}`) | `WorkPicture`: one row from 48rem with arrows between, stacked with down arrows below |
+| `steps[]` (`{title, text, show}`) | `WorkSteps`: from 64rem text left, picture right, a rule joining the numbers; below, the picture follows its text |
+| `show` `kind: list` (`title?`, `hint?`, `items: {name, text, url?, json?}`) | `WorkShow`: the kinds of data a client's system can give; an item with `url` and `json` is a dropdown that opens to an example request and the JSON that comes back |
+| `show` `kind: store` (`flow`, `columns`, `rows`, `notes`, `note?`) | `WorkShow`: where fetched data goes as a row of boxes, a sample of the table, and the design choices behind it |
+| `show` `kind: model` (`from: [list, value]`, `to: {depth, name, type, code?}`) | `WorkShow`: the client's separate records, an arrow, and the one connected model they become, as an indented tree |
+| `show` `kind: checks` (`items`) | `WorkShow`: things that are always true, each with a tick |
+| `show` `kind: graph` (`rows: [{name, id?, at?, span?, units: [{id, name, at?}]}]`, `links`, `notes`) | `WorkShow` + `WorkGraphDemo`: the graph drawn as a few rooms of one building (rooms as boxes, each unit in its room, a labelled arrow per link), then the choices behind it, ticked as in the store |
+
+`platform` gained two fields this page uses and the agent page does not: `note` (one line
+under the headline, for who built what: this is a team of two) and `shared: true` on an item
+(an outlined "Shared" badge, for work done with a colleague, beside "Mine").
+
+Things that look like shortcuts and are not:
+
+- **Every example is made up, but each shows something the platform really does**, checked
+  against the work repo on 24 Nov 2026; the evidence stays out of this repo, as for the agent
+  page. Check that the platform gives an output today, not that code for it exists, before a
+  step shows it. The made-up building is one building: AHU-02 (air-con unit 2), EAF-03
+  (exhaust fan 3), PM-06 (power meter 6), the L2 PLANT RM and Level 2 agree across steps.
+- **The graph picture is the graph the author built**, in the shape a real building's graph
+  has, with made-up names (no real asset or room): one air-con unit in a plant room, serving
+  a hall on another floor, fed by a fresh air unit and by the people counter in that hall,
+  and measured by a power meter. Each unit sits in the room it is in; the arrows are the
+  links that come from the facility team's spreadsheet (feeds, measures, serves). The real
+  graph also has the building and its floors, and links each unit to its system and the
+  kinds of reading it gives; the drawing leaves those out to stay short. Add to it only by
+  taking something else away.
+- **The step 1 examples are on example.com** (zod enforces it), with generic field names, so
+  no reader takes them for a real endpoint or a vendor's real API. Their JSON must parse, or
+  the build fails; it is drawn as written and coloured at build time, keys in the accent.
+  The dropdowns are native `<details>` sharing a `name`, so one opens at a time with no
+  script, and Tab, Enter and Space work.
+- **The storage picture names no product and no table**: plain boxes, a two-row sample and
+  the design choices the author made (split by month, sorted by equipment, sensor and time,
+  one copy of a reading loaded twice, values kept as sent).
+- **No counts of buildings or vendors anywhere**, including `highlights`, which keeps only
+  2B+ (the author, 24 Nov 2026: "small value").
+- **Everyday words over trade words in the graph**: "Air-con unit", "Fresh air unit" (no
+  hyphen: a phone broke the line at it), "People counter", "feeds", "serves", "measures". The
+  model tree is the one place for the standard's own codes (`brick:AHU`, `rec:Zone`), small
+  and after the plain words.
+- **The rule joining the numbers is decoration** (`line-strong`, under 3:1 on the band): the
+  numbers and the ordered list carry the order, to the eye and to a screen reader.
+- **The graph drawing is laid out at build time** (`WorkGraphDemo`), three columns at every
+  width, so the YAML order is the drawing and it fits a 360px phone. Heights are fixed in rem
+  and only the spread across is in %, so a line, label or box sits at a known height. Units,
+  rooms and labels are HTML, so text stays readable; the links are one SVG stretched to the
+  rooms' box (`preserveAspectRatio="none"`, non-scaling strokes). Each link joins
+  neighbouring rows (zod enforces it) and leaves its unit straight up or down: in the same
+  column it runs straight into its target; otherwise it turns at the target's height and
+  comes in from the side. Either way it meets an outline square on, which is why its
+  arrowhead can be a CSS triangle on the target, pointing straight, which a stretched SVG
+  could not draw undistorted. Top and bottom arrowheads are the unit's or room's own
+  pseudo-elements, left and right ones its name's, so a unit can take a line on all four
+  sides; the build fails if two lines would meet at one side. Every link label sits
+  halfway across its gap, on the straight part. A room a line points to is named in its
+  body, right under the arrowhead, and is only as wide as it needs to be: a wide box with
+  the name on its outline made the air-con look as if it served an empty box (the author,
+  24 Nov 2026). Any other room's name sits on its outline at the
+  first corner no line crosses at the narrowest width (15.5rem of rooms). Lines only move
+  away from a name as the drawing widens, so clear there is clear everywhere. A long unit
+  name breaks onto two balanced lines on a phone.
+- **Re-check the graph for collisions after changing it**: a probe that tests every pair of
+  units, labels and rooms for overlap, and samples every line for crossing a name or a unit
+  it does not join, found none at 1280, 1024, 768, 390 and 360.
+- **Media queries, not size queries on the panel.** The CSS at-rule for a size query has the
+  same name as a Tailwind utility, so writing one in a component put that utility in the
+  shared stylesheet (found by `cmp` on 24 Nov 2026). The breakpoints (36rem for the storage
+  flow, 40rem for the graph's larger text) are where the panel is wide enough at every
+  layout. Do not name the at-rule in a comment either.
+- **Each step's text and its picture carry the site's fade-up reveal, and nothing inside
+  them does**, so nothing animates twice. A CSS entrance played at load would run unseen
+  below the fold.
+- **The first view holds "What I did" on a 1280 x 800 screen**: four rows, ending at 727px. A
+  fifth pushed it to 810px. On a 390 x 844 phone they end at 698px.
+- **Keyboard changes to a `:has()`-driven radio show on the next frame.** A probe that reads
+  computed style straight after a key press sees the old state, on the agent cards; wait a
+  frame before reading.
+- **Content in a closed `<details>` keeps the previous theme's colours in `getComputedStyle`**
+  until it opens (Chrome does not restyle what it hides). A contrast probe that switches
+  themes must skip it, or it reports a false failure; opened, it is right.
+- **`highlights` labels are lower case** ("sensor readings"): on a showcase page they render
+  inline on the team section's header, not as tiles.
+- **A pixel diff of the agent page with its sections open is not deterministic.** Two
+  screenshots of the same build can differ in "More agents I built", from animation timing.
+  When it flags, compare computed styles instead: every element and pseudo-element, the
+  properties sorted (custom properties come back in no fixed order), animation, transition,
+  opacity and transform left out, and the server's port taken out of resolved URLs.
+
+Checked 24 Nov 2026 against a build from before the change: 22 of 25 pages identical, `/` and
+`/work` different only in this entry's `summary`, the carousel card the same size, and the
+agent page's 7,329 elements and pseudo-elements identical in computed style with its sections
+open, light and dark. `bms-platform` and `alliance-bank` are pixel-identical at 1280 and 390
+in both themes. Contrast was measured in all nine themes: text at least 5.09:1, marks
+(lines and arrowheads against the sheet and a room) at least 5.09:1. With motion on, a full
+scroll leaves nothing hidden. Re-checked after the graph moved to step 4 and was cut down.
+
+Cost: no JavaScript, and the shared sheet is unchanged. The work-page stylesheet went from
+6,960 to 9,496 B gz; this page's HTML is 11.3 kB gz.
 
 ### Travel — a second collection under one section (20 Aug 2026)
 

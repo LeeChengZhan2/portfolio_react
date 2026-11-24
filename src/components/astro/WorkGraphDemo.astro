@@ -1,0 +1,445 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+type Built = NonNullable<NonNullable<CollectionEntry<'work'>['data']['showcase']>['built']>;
+type Graph = Extract<Built['steps'][number]['show'], { kind: 'graph' }>;
+
+interface Props {
+  graph: Graph;
+}
+
+const { graph } = Astro.props;
+
+// The drawing is laid out here, at build time, so nothing runs on the page.
+// Heights are fixed, in rem, so every box, line and label sits at a known
+// height; only the spread across changes with the screen, in % of the width,
+// three columns to a row.
+const COLS = 3;
+const PAD = 0.75; // inside the frame, top and bottom
+const ROW = 3.5; // a row of rooms
+const LANE = 2.25; // between two rows
+const TURN_Y = 0.75; // a turning line's corner: rem down,
+const TURN_X = 3; // and % across
+
+type Side = 'top' | 'bottom' | 'left' | 'right';
+type Unit = { id: string; name: string; c: number; x: number };
+type Room = { name: string; id?: string; c0: number; span: number; row: number; units: Unit[] };
+
+const colX = (c: number) => ((c + 0.5) / COLS) * 100;
+const n = (value: number) => Math.round(value * 1000) / 1000;
+
+const top = (row: number) => PAD + row * (ROW + LANE);
+const bottom = (row: number) => top(row) + ROW;
+const middle = (row: number) => top(row) + ROW / 2;
+const height = bottom(graph.rows.length - 1) + PAD;
+
+// Rooms left to right, each from its `at` or after the one before, a unit to
+// a column (zod has checked that they fit).
+const rooms: Room[] = graph.rows.flatMap((row, r) => {
+  let next = 0;
+  return row.map((room) => {
+    const c0 = room.at ?? next;
+    const span = room.span ?? Math.max(1, room.units.length);
+    next = c0 + span;
+    const units = room.units.map((unit, k) => {
+      const c = unit.at ?? c0 + k;
+      return { id: unit.id, name: unit.name, c, x: colX(c) };
+    });
+    return { name: room.name, id: room.id, c0, span, row: r, units };
+  });
+});
+
+// What a link can start or end at: a unit, or a room with an id.
+type End = { id: string; name: string; c: number; x: number; row: number; room: Room; unit: boolean };
+const ends = new Map<string, End>();
+for (const room of rooms) {
+  if (room.id) {
+    const c = room.c0 + (room.span - 1) / 2;
+    ends.set(room.id, { id: room.id, name: room.name, c, x: colX(c), row: room.row, room, unit: false });
+  }
+  for (const unit of room.units) ends.set(unit.id, { ...unit, row: room.row, room, unit: true });
+}
+
+// Every line leaves its unit straight up or down and crosses the gap between
+// the rows there, where its label sits. In the same column it runs straight
+// into what it points to; otherwise it turns at the height of the unit it
+// points to and comes in from the side. Either way it meets an outline
+// square on, so its arrowhead, drawn on what it points to, points straight.
+// A unit or room takes one line on each side at most, so no two overlap.
+const sides = new Map<string, Set<Side>>();
+const arrivals = new Map<string, Side[]>();
+const take = (end: End, side: Side, arriving = false) => {
+  const taken = sides.get(end.id) ?? new Set<Side>();
+  if (taken.has(side)) throw new Error(`WorkGraphDemo: two lines meet at the ${side} of "${end.name}"; move one`);
+  sides.set(end.id, taken.add(side));
+  if (arriving) arrivals.set(end.id, [...(arrivals.get(end.id) ?? []), side]);
+};
+const roomArrowAt = new Map<string, number>(); // the column a room's arrowhead sits over
+const crossings = new Map<Room, { top: number[]; bottom: number[] }>();
+const cross = (room: Room, edge: 'top' | 'bottom', x: number) => {
+  const lines = crossings.get(room) ?? { top: [], bottom: [] };
+  lines[edge].push(x);
+  crossings.set(room, lines);
+};
+
+const links = graph.links.flatMap(([from, label, to]) => {
+  const a = ends.get(from);
+  const b = ends.get(to);
+  if (!a || !b) return [];
+  const up = b.row < a.row;
+  const exit = up ? top(a.row) : bottom(a.row);
+  const enter = up ? bottom(b.row) : top(b.row);
+  take(a, up ? 'top' : 'bottom');
+  cross(a.room, up ? 'top' : 'bottom', a.x);
+  if (b.room.units.length) cross(b.room, up ? 'bottom' : 'top', a.x);
+  const tag = { x: a.x, y: (exit + enter) / 2, label };
+  const start = `M${n(a.x)} ${n(middle(a.row))}`;
+  if (!b.unit || a.c === b.c) {
+    if (!b.unit && (a.c < b.room.c0 || a.c >= b.room.c0 + b.room.span)) {
+      throw new Error(`WorkGraphDemo: "${a.name}" is not above or below "${b.name}", so it cannot point straight at it`);
+    }
+    take(b, up ? 'bottom' : 'top', true);
+    if (!b.unit) roomArrowAt.set(b.id, a.c);
+    return [{ a, b, label, d: `${start}V${n(b.unit ? middle(b.row) : enter)}`, tag }];
+  }
+  const towards = Math.sign(b.x - a.x);
+  take(b, towards > 0 ? 'left' : 'right', true);
+  const yb = middle(b.row);
+  return [
+    {
+      a,
+      b,
+      label,
+      d: `${start}V${n(yb + (up ? TURN_Y : -TURN_Y))}Q${n(a.x)} ${n(yb)} ${n(a.x + towards * TURN_X)} ${n(yb)}H${n(b.x)}`,
+      tag,
+    },
+  ];
+});
+
+const arrowsOf = (id?: string) => ((id && arrivals.get(id)) || []).map((side) => `kg__in-${side}`);
+
+// A room a line points to is named in its body, under the arrowhead, so the
+// line points at the room rather than at an empty box; so is a room with
+// nothing in it. Any other room is named on its outline (cornerOf).
+const nameColumn = (room: Room) =>
+  (room.id ? roomArrowAt.get(room.id) : undefined) ?? (room.units.length ? undefined : room.c0 + (room.span - 1) / 2);
+
+// A room's arrowhead sits over the column its line comes down, as a share of
+// the room's own width (which is its columns' less 0.5rem of gaps).
+const roomArrowStyle = (room: Room) => {
+  const c = room.id ? roomArrowAt.get(room.id) : undefined;
+  if (c === undefined) return '';
+  const f = (c - room.c0 + 0.5) / room.span;
+  return `; --ax: calc(${n(f * 100)}% + ${n(f * 0.5 - 0.25)}rem)`;
+};
+
+// Where a room's name sits on its outline: the first corner, from top left,
+// that no line crosses at the narrowest the drawing gets (15.5rem across its
+// rooms, on a 360px phone). Lines cross an outline straight, under their
+// unit, and move away from a name as the drawing widens, so a name clear of
+// them there is clear at every width.
+const NARROWEST = 15.5;
+const LETTER = 0.4375; // rem for each letter of a name: 0.625rem mono, tracked
+const CORNERS = [
+  ['top', 'left'],
+  ['top', 'right'],
+  ['bottom', 'left'],
+  ['bottom', 'right'],
+] as const;
+const cornerOf = (room: Room) => {
+  const col = NARROWEST / COLS;
+  const width = room.name.length * LETTER + 0.75;
+  const left = room.c0 * col + 0.75;
+  const right = (room.c0 + room.span) * col - 0.75;
+  const lines = crossings.get(room) ?? { top: [], bottom: [] };
+  const clear = CORNERS.find(([edge, side]) => {
+    const from = side === 'left' ? left : right - width;
+    const to = side === 'left' ? left + width : right;
+    return lines[edge].every((x) => {
+      const at = (x / 100) * NARROWEST;
+      return at < from - 0.375 || at > to + 0.375;
+    });
+  });
+  return (clear ?? CORNERS[0]).join('-');
+};
+
+const boxOf = (room: Room) =>
+  `left: calc(${n((room.c0 / COLS) * 100)}% + 0.25rem); width: calc(${n((room.span / COLS) * 100)}% - 0.5rem); ` +
+  `top: ${n(top(room.row))}rem; height: ${ROW}rem` +
+  roomArrowStyle(room);
+
+// The same drawing in words, for a screen reader.
+const listOf = (names: string[]) =>
+  names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+const description = [
+  ...rooms.map((room) => (room.units.length ? `${room.name}: ${listOf(room.units.map((unit) => unit.name))}.` : `${room.name}.`)),
+  ...links.map(({ a, b, label }) => `${a.name} ${label} ${b.name}.`),
+].join(' ');
+---
+
+{/* The knowledge graph, as the picture of a step of "My part" (WorkShow
+    puts the choices behind it underneath). Made-up data in the shape of the
+    real graph: a few rooms of one building, each unit inside the room it is
+    in, and an arrow with its label for each link, so a reader who knows
+    nothing about graphs or buildings can follow it. Every one of those is a
+    node or a link in the real graph.
+
+    The drawing is decoration for a screen reader (aria-hidden); the caption
+    says the same in sentences. No controls and no motion of its own: the
+    panel around it carries the reveal. */}
+<figure class="kg">
+  <div class="kg__map" style={`height: ${n(height)}rem`} aria-hidden="true">
+    <div class="kg__plot">
+      {
+        rooms.map((room) => (
+          <div class:list={['kg__room', arrowsOf(room.id)]} style={boxOf(room)}>
+            {nameColumn(room) === undefined && (
+              <span class={`kg__room-name kg__room-name--${cornerOf(room)}`}>{room.name}</span>
+            )}
+          </div>
+        ))
+      }
+      <svg class="kg__links" viewBox={`0 0 100 ${n(height)}`} preserveAspectRatio="none">
+        {links.map((link) => (
+          <path class="kg__link" d={link.d} vector-effect="non-scaling-stroke" />
+        ))}
+      </svg>
+      {
+        rooms.flatMap((room) => {
+          const c = nameColumn(room);
+          return c === undefined
+            ? []
+            : [
+                <span class="kg__place" style={`--x: ${n(colX(c))}%; --y: ${n(middle(room.row))}rem`}>
+                  {room.name}
+                </span>,
+              ];
+        })
+      }
+      {
+        rooms.flatMap((room) =>
+          room.units.map((unit) => (
+            <span
+              class:list={['kg__unit', arrowsOf(unit.id)]}
+              style={`--x: ${n(unit.x)}%; --y: ${n(middle(room.row))}rem`}
+            >
+              <span class="kg__name">{unit.name}</span>
+            </span>
+          )),
+        )
+      }
+      {
+        links.map(({ tag }) => (
+          <span class="kg__tag" style={`--x: ${n(tag.x)}%; --y: ${n(tag.y)}rem`}>
+            {tag.label}
+          </span>
+        ))
+      }
+    </div>
+  </div>
+  <figcaption class="sr-only">{description}</figcaption>
+</figure>
+
+<style>
+  /* Plain declarations throughout, on purpose: Tailwind scans component files,
+     so a utility named here would ship in the shared stylesheet all 25 pages
+     load (CLAUDE.md, "This file is a build input"). No frame of its own: it
+     sits in a step's panel. */
+  .kg {
+    margin: 0;
+  }
+
+  /* A dotted sheet. */
+  .kg__map {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.875rem;
+    background-color: var(--color-band);
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--color-fg) 9%, transparent) 1px,
+      transparent 1.5px
+    );
+    background-size: 0.875rem 0.875rem;
+  }
+
+  /* The rooms, units, lines and labels share one box inside the sheet, so
+     their % across and rem down mean the same thing. Later ones paint over
+     earlier ones: rooms, lines, then what the lines join. */
+  .kg__plot {
+    position: absolute;
+    inset: 0 0.75rem;
+  }
+
+  /* A room: square corners, as places, apart from the round units. */
+  .kg__room {
+    position: absolute;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 0.375rem;
+    background: var(--color-surface);
+  }
+
+  /* A room a line points to, named in its body under the arrowhead. */
+  .kg__place {
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    line-height: 1.3;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* A room with units, named on its outline at a corner no line crosses. */
+  .kg__room-name {
+    position: absolute;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+    background: var(--color-surface);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .kg__room-name--top-left,
+  .kg__room-name--top-right {
+    top: 0;
+    transform: translateY(-50%);
+  }
+
+  .kg__room-name--bottom-left,
+  .kg__room-name--bottom-right {
+    bottom: 0;
+    transform: translateY(50%);
+  }
+
+  .kg__room-name--top-left,
+  .kg__room-name--bottom-left {
+    left: 0.5rem;
+  }
+
+  .kg__room-name--top-right,
+  .kg__room-name--bottom-right {
+    right: 0.5rem;
+  }
+
+  .kg__links {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* The drawing is about its links, so they are all in the accent. */
+  .kg__link {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2px;
+  }
+
+  .kg__unit,
+  .kg__tag,
+  .kg__place {
+    position: absolute;
+    top: var(--y);
+    left: var(--x);
+    transform: translate(-50%, -50%);
+  }
+
+  /* A unit: as wide as its name, up to its column, where a long name breaks
+     onto two balanced lines rather than squeeze. */
+  .kg__unit {
+    width: max-content;
+    max-width: calc(100% / 3 - 0.625rem);
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 0.875rem;
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+    color: var(--color-fg);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .kg__tag {
+    padding: 0 0.3125rem;
+    border: 1px solid var(--color-accent);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font-size: 0.625rem;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  /* Arrowheads, on whatever a line points to, at the side it comes in: top
+     and bottom on the unit or room itself, left and right on a unit's name,
+     which is placed by the unit around it. A room's sits over the column its
+     line comes down (--ax). */
+  .kg__in-top::before,
+  .kg__in-bottom::after,
+  .kg__in-left > .kg__name::before,
+  .kg__in-right > .kg__name::after {
+    content: '';
+    position: absolute;
+    background: var(--color-accent);
+  }
+
+  .kg__in-top::before,
+  .kg__in-bottom::after {
+    left: var(--ax, 50%);
+    width: 0.5rem;
+    height: 0.4375rem;
+    margin-left: -0.25rem;
+  }
+
+  .kg__in-top::before {
+    bottom: calc(100% + 1px);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+
+  .kg__in-bottom::after {
+    top: calc(100% + 1px);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  }
+
+  .kg__in-left > .kg__name::before,
+  .kg__in-right > .kg__name::after {
+    top: 50%;
+    width: 0.4375rem;
+    height: 0.5rem;
+    margin-top: -0.25rem;
+  }
+
+  .kg__in-left > .kg__name::before {
+    right: calc(100% + 1px);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
+
+  .kg__in-right > .kg__name::after {
+    left: calc(100% + 1px);
+    clip-path: polygon(100% 0, 0 50%, 100% 100%);
+  }
+
+  @media (width >= 40rem) {
+    .kg__unit {
+      padding: 0.3125rem 0.75rem;
+      font-size: 0.75rem;
+    }
+
+    .kg__tag {
+      font-size: 0.6875rem;
+    }
+  }
+</style>

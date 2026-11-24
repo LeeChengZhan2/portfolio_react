@@ -1,0 +1,71 @@
+---
+interface Props {
+  messages: { from: 'user' | 'agent'; text: string }[];
+  label?: string;
+}
+
+const { messages, label = 'Example chat' } = Astro.props;
+---
+
+{/* A short, made-up conversation that shows the product the way a user sees
+    it: a plain-English request and the reply. Nothing about how it works
+    inside. User bubbles are accent + on-invert, the pair the theme contract
+    documents as AA in both light and dark. Agent bubbles are surface-2 on a
+    surface card, so they recede the right way in both themes (darker in light,
+    lighter in dark). An <ol> with hidden "User:"/"Agent:" prefixes, so a screen
+    reader hears who said what without relying on bubble position or colour. */}
+<figure class="chat" data-reveal="fade-up">
+  <figcaption class="chat__label">{label}</figcaption>
+  <ol class="chat__list">
+    {
+      messages.map((message) => (
+        <li class={message.from === 'user' ? 'msg msg--user' : 'msg msg--agent'}>
+          <span class="sr-only">{message.from === 'user' ? 'User: ' : 'Agent: '}</span>
+          {message.text}
+        </li>
+      ))
+    }
+  </ol>
+</figure>
+
+<style>
+  @reference "#styles";
+
+  /* Values only this component uses are plain declarations, so they stay out
+     of the shared stylesheet (see WorkHighlights.astro). */
+  .chat {
+    @apply mb-12 rounded-2xl border border-line bg-surface p-4;
+  }
+
+  @media (width >= 40rem) {
+    .chat {
+      padding: 1.25rem;
+    }
+  }
+
+  .chat__label {
+    @apply mb-4 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-fg-meta;
+  }
+
+  .chat__list {
+    @apply flex flex-col;
+    gap: 0.625rem;
+  }
+
+  .msg {
+    @apply rounded-2xl py-2 text-sm leading-snug;
+    max-width: 85%;
+    padding-inline: 0.875rem;
+  }
+
+  .msg--user {
+    @apply bg-accent text-on-invert;
+    align-self: flex-end;
+    border-bottom-right-radius: 0.375rem;
+  }
+
+  .msg--agent {
+    @apply self-start bg-surface-2 text-fg;
+    border-bottom-left-radius: 0.375rem;
+  }
+</style>

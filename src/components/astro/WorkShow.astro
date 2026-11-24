@@ -1,0 +1,724 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import WorkGraphDemo from './WorkGraphDemo.astro';
+
+type Built = NonNullable<NonNullable<CollectionEntry<'work'>['data']['showcase']>['built']>;
+type Show = Built['steps'][number]['show'];
+
+interface Props {
+  show: Show;
+  /** Unique on the page: groups a list's dropdowns, so one opens at a time. */
+  uid: string;
+}
+
+const { show, uid } = Astro.props;
+
+// A made-up JSON example, split into tokens at build time so keys, values and
+// punctuation can each take a colour. Drawn exactly as written in the entry.
+type Token = { text: string; kind?: 'key' | 'str' | 'num' | 'lit' | 'punct' };
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],])|(\s+|.)/g;
+const tokensOf = (json: string): Token[] =>
+  [...json.trim().matchAll(JSON_TOKEN)].flatMap((m): Token[] => {
+    if (m[1]) return m[2] ? [{ text: m[1], kind: 'key' }, { text: m[2], kind: 'punct' }] : [{ text: m[1], kind: 'str' }];
+    if (m[3]) return [{ text: m[3], kind: 'num' }];
+    if (m[4]) return [{ text: m[4], kind: 'lit' }];
+    if (m[5]) return [{ text: m[5], kind: 'punct' }];
+    return [{ text: m[0] }];
+  });
+
+// Heroicons 24/outline chevron-down, as on the site's other fold-outs.
+const CHEVRON_DOWN = 'm19.5 8.25-7.5 7.5-7.5-7.5';
+
+// Heroicons 24/outline (v2.1.5), inlined like the header's icons.
+const TABLE =
+  'M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5';
+const CHECK = 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z';
+const ARROW_DOWN = 'M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3';
+---
+
+{/* The picture of one step of "My part" (WorkSteps), by kind, for a reader
+    who knows nothing about the field (made-up data):
+
+    - list: the kinds of data a client's system can give, each with what it
+      holds. An item with an example is a <details> dropdown that opens to
+      a made-up request URL and the JSON that comes back; they share a
+      `name`, so opening one closes the others and the panel stays short;
+    - store: where fetched data goes, as a short flow of boxes, then a
+      sample of the table it lands in and the choices behind its design;
+    - model: the client's separate lists, an arrow, and the one connected
+      model they become, as an indented tree with a standard type per part;
+    - checks: things that are always true, each with a tick;
+    - graph: the knowledge graph drawn as one building (WorkGraphDemo),
+      then the choices behind it, ticked as in the store.
+
+    No controls and no motion of its own: the panel around it carries the
+    reveal. */}
+{
+  show.kind === 'list' && (
+    <div class="vz-screen">
+      {(show.title || show.hint) && (
+        <p class="vz-bar">
+          {show.title && <span>{show.title}</span>}
+          {show.hint && <span class="vz-bar__hint">{show.hint}</span>}
+        </p>
+      )}
+      <ul class="vz-list">
+        {show.items.map((item) => {
+          const head = (
+            <>
+              <span class="vz-list__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d={TABLE} stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="vz-list__name">{item.name}</span>
+              <span class="vz-list__holds">{item.text}</span>
+            </>
+          );
+          return item.url && item.json ? (
+            <li>
+              <details class="vz-drop" name={`vz-${uid}`}>
+                <summary class="vz-list__row">
+                  {head}
+                  <span class="vz-list__chev" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d={CHEVRON_DOWN} stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                </summary>
+                <div class="vz-ex">
+                  <p class="vz-ex__label">Example request</p>
+                  <p class="vz-ex__url">
+                    <span class="vz-ex__method">GET</span>
+                    <span>{item.url}</span>
+                  </p>
+                  <p class="vz-ex__label">Example response</p>
+                  <pre class="vz-json"><code>{tokensOf(item.json).map((token) => (token.kind ? <span class={`vz-j-${token.kind}`}>{token.text}</span> : token.text))}</code></pre>
+                </div>
+              </details>
+            </li>
+          ) : (
+            <li class="vz-list__row">{head}</li>
+          );
+        })}
+      </ul>
+    </div>
+  )
+}
+
+{
+  show.kind === 'store' && (
+    <figure class="vz-store">
+      <ol class="vz-flow">
+        {show.flow.map((box) => (
+          <li>
+            <span class="vz-flow__name">{box.name}</span>
+            <span class="vz-flow__text">{box.text}</span>
+          </li>
+        ))}
+      </ol>
+      <div class="vz-screen">
+        <p class="vz-bar">
+          <span>{show.flow[show.flow.length - 1]?.name}</span>
+          <span class="vz-bar__hint">Sample rows</span>
+        </p>
+        <table class="vz-table">
+          <thead>
+            <tr>
+              {show.columns.map((column) => (
+                <th scope="col">{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {show.rows.map((row) => (
+              <tr>
+                {row.map((value) => (
+                  <td>{value}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {show.note && <p class="vz-foot">{show.note}</p>}
+      </div>
+      <p class="vz-ex__label">How I designed it</p>
+      <ul class="vz-checks vz-checks--tight">
+        {show.notes.map((note) => (
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <path d={CHECK} stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>{note}</span>
+          </li>
+        ))}
+      </ul>
+      <figcaption class="sr-only">How fetched readings are kept, with made-up sample rows.</figcaption>
+    </figure>
+  )
+}
+
+{
+  show.kind === 'model' && (
+    <figure class="vz-model">
+      <p class="vz-ex__label">The client's separate lists</p>
+      <ul class="vz-from">
+        {show.from.map(([list, value]) => (
+          <li>
+            <span class="vz-from__list">{list}</span>
+            <code class="vz-code">{value}</code>
+          </li>
+        ))}
+      </ul>
+      <span class="vz-model__arrow" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25">
+          <path d={ARROW_DOWN} stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
+      <p class="vz-ex__label">One connected model</p>
+      <ul class="vz-tree">
+        {show.to.map((node) => (
+          <li class:list={[{ 'vz-tree__child': node.depth > 0 }]} style={`--d: ${node.depth}`}>
+            <span class="vz-tree__name">{node.name}</span>
+            <span class="vz-tree__type">
+              {node.type}
+              {node.code && <code class="vz-tree__code">{node.code}</code>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <figcaption class="sr-only">
+        The client's separate lists become one connected model, each part with a standard type. Made-up data.
+      </figcaption>
+    </figure>
+  )
+}
+
+{
+  show.kind === 'checks' && (
+    <ul class="vz-checks">
+      {show.items.map((item) => (
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <path d={CHECK} stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+{
+  show.kind === 'graph' && (
+    <div class="vz-graph">
+      <WorkGraphDemo graph={show} />
+      <p class="vz-ex__label">How I built it</p>
+      <ul class="vz-checks vz-checks--tight">
+        {show.notes.map((note) => (
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <path d={CHECK} stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>{note}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+<style>
+  /* Plain declarations throughout, on purpose: Tailwind scans component files,
+     so a utility named here would ship in the shared stylesheet all 25 pages
+     load (CLAUDE.md, "This file is a build input"). */
+
+  /* A small screen, recessed into the panel, with a bar along its top. */
+  .vz-screen {
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: var(--color-band);
+  }
+
+  .vz-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.875rem;
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-surface-2);
+    color: var(--color-fg-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* ---- What the client can give ----------------------------------------- */
+
+  .vz-list {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0.75rem;
+    list-style: none;
+  }
+
+  /* The row's card is the li, so an open dropdown keeps it round its example
+     as well. */
+  .vz-list > li {
+    border-radius: 0.625rem;
+    background: var(--color-surface);
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.06);
+  }
+
+  /* Icon, name over what it holds, and a chevron when it opens. */
+  .vz-list__row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+  }
+
+  summary.vz-list__row {
+    border-radius: 0.625rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  summary.vz-list__row::-webkit-details-marker {
+    display: none;
+  }
+
+  summary.vz-list__row:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  summary.vz-list__row:hover .vz-list__name {
+    color: var(--color-accent);
+  }
+
+  .vz-list__chev {
+    display: grid;
+    grid-row: 1 / span 2;
+    grid-column: 3;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+    transition: transform 0.2s;
+  }
+
+  .vz-list__chev svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .vz-drop[open] .vz-list__chev {
+    transform: rotate(180deg);
+  }
+
+  .vz-bar__hint {
+    margin-left: auto;
+    font-weight: 400;
+  }
+
+  /* ---- An item's example: the request, then the JSON that comes back ---- */
+
+  .vz-ex {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0.125rem 0.75rem 0.75rem;
+  }
+
+  .vz-ex__label {
+    margin-top: 0.25rem;
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* Long URLs and lines wrap rather than scroll, so a phone shows all of an
+     example without a scroll box inside the page. */
+  .vz-ex__url {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.5rem;
+    background: var(--color-band);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .vz-ex__url > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .vz-ex__method {
+    flex: none;
+    padding: 0 0.375rem;
+    border-radius: 0.25rem;
+    background: var(--color-accent);
+    color: var(--color-on-invert);
+    font-size: 0.6875rem;
+    font-weight: 700;
+  }
+
+  .vz-json {
+    margin: 0;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--color-band);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .vz-j-key {
+    color: var(--color-accent);
+  }
+
+  .vz-j-str,
+  .vz-j-num,
+  .vz-j-lit {
+    color: var(--color-fg);
+  }
+
+  /* Longhands, as in the site's other entrances: plays each time a
+     dropdown opens. */
+  .vz-drop[open] .vz-ex {
+    animation-name: vz-open;
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+
+  @keyframes vz-open {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .vz-drop[open] .vz-ex {
+      animation: none;
+    }
+  }
+
+  .vz-list__icon {
+    display: grid;
+    grid-row: 1 / span 2;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
+    color: var(--color-accent);
+  }
+
+  .vz-list__icon svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .vz-list__name {
+    grid-column: 2;
+    color: var(--color-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.35;
+    transition: color 0.15s;
+  }
+
+  .vz-list__holds {
+    grid-row: 2;
+    grid-column: 2;
+    color: var(--color-fg-muted);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  /* ---- Where fetched data goes, and how it is kept ----------------------- */
+
+  /* The flow sits in a row from 36rem, where its panel is wide enough for
+     three boxes, and stacks below that. A media query, not a size query on
+     the panel: the at-rule for those is also the name of a utility, so
+     writing one here would put that utility in the shared stylesheet. */
+  .vz-store,
+  .vz-graph {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .vz-flow {
+    --vz-gap: 2.25rem;
+    display: grid;
+    gap: var(--vz-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (width >= 36rem) {
+    .vz-flow {
+      grid-auto-columns: minmax(0, 1fr);
+      grid-auto-flow: column;
+    }
+  }
+
+  .vz-flow li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: var(--color-surface);
+  }
+
+  /* The last box is where the data lands: the one this step designs. */
+  .vz-flow li:last-child {
+    border: 2px solid var(--color-accent);
+  }
+
+  /* Arrows between the boxes: down when they stack, right in a row.
+     fg-meta, which holds 3:1 on the surface in every theme. */
+  .vz-flow li:not(:last-child)::after {
+    --vz-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3'/%3E%3C/svg%3E");
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 1.25rem;
+    height: var(--vz-gap);
+    background: var(--color-fg-meta);
+    -webkit-mask: var(--vz-arrow) center / 1.25rem no-repeat;
+    mask: var(--vz-arrow) center / 1.25rem no-repeat;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  @media (width >= 36rem) {
+    .vz-flow li:not(:last-child)::after {
+      top: 50%;
+      left: 100%;
+      width: var(--vz-gap);
+      height: 1.25rem;
+      transform: translateY(-50%);
+    }
+  }
+
+  .vz-flow__name {
+    color: var(--color-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .vz-flow__text {
+    color: var(--color-fg-muted);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  /* A sample of the table: its columns and a couple of rows. */
+  .vz-table {
+    width: 100%;
+    border-spacing: 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .vz-table th,
+  .vz-table td {
+    padding: 0.4375rem 0.875rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .vz-table th {
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-fg-muted);
+    font-weight: 400;
+  }
+
+  .vz-table td {
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-surface);
+    color: var(--color-fg);
+  }
+
+  .vz-foot {
+    padding: 0.5rem 0.875rem;
+    background: var(--color-surface-2);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+  }
+
+  /* ---- Separate lists into one connected model ------------------------- */
+
+  .vz-model {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .vz-from {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .vz-from li {
+    display: grid;
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+    column-gap: 0.625rem;
+    align-items: baseline;
+  }
+
+  .vz-from__list {
+    color: var(--color-fg-muted);
+    font-size: 0.8125rem;
+  }
+
+  .vz-code {
+    justify-self: start;
+    padding: 0.125rem 0.4375rem;
+    border-radius: 0.375rem;
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .vz-model__arrow {
+    display: grid;
+    place-items: center;
+    justify-self: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0.25rem 0;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: var(--color-on-invert);
+  }
+
+  .vz-model__arrow svg {
+    width: 0.9375rem;
+    height: 0.9375rem;
+  }
+
+  /* The model as an indented tree: each part one step in from the part it
+     belongs to, joined to it by an elbow. */
+  .vz-tree {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: var(--color-band);
+    list-style: none;
+  }
+
+  .vz-tree li {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.125rem 0.625rem;
+    margin-left: calc(var(--d, 0) * 1.125rem);
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.06);
+  }
+
+  .vz-tree__child::before {
+    content: '';
+    position: absolute;
+    top: -0.5rem;
+    left: -0.75rem;
+    width: 0.625rem;
+    height: 1.375rem;
+    border-bottom: 1.5px solid var(--color-fg-meta);
+    border-left: 1.5px solid var(--color-fg-meta);
+    border-bottom-left-radius: 0.25rem;
+  }
+
+  .vz-tree__name {
+    color: var(--color-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .vz-tree__type {
+    color: var(--color-fg-muted);
+    font-size: 0.8125rem;
+  }
+
+  .vz-tree__code {
+    margin-left: 0.375rem;
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+  }
+
+  /* ---- Checks ------------------------------------------------------------ */
+
+  .vz-checks {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.25rem 0;
+    list-style: none;
+  }
+
+  .vz-checks li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    color: var(--color-fg-body);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .vz-checks--tight {
+    gap: 0.4375rem;
+    padding: 0;
+  }
+
+  .vz-checks--tight li {
+    font-size: 0.875rem;
+  }
+
+  .vz-checks svg {
+    flex: none;
+    width: 1.375rem;
+    height: 1.375rem;
+    margin-top: -0.0625rem;
+    color: var(--color-accent);
+  }
+</style>

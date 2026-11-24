@@ -1,0 +1,117 @@
+---
+interface Props {
+  steps: { title: string; text: string; tech?: string }[];
+  note?: string;
+}
+
+const { steps, note } = Astro.props;
+---
+
+{/* "How it works" as a flow diagram: numbered cards joined by arrows, in a
+    row from md up and stacked below it. Real text in an <ol>, not an SVG, so
+    it wraps at any width, follows the theme tokens, and reads in order to a
+    screen reader. The arrows are decoration (CSS ::after, never announced).
+    The last card is the outcome, so it alone carries the accent border. */}
+<section class="flow-section" aria-labelledby="how-it-works">
+  <h2 id="how-it-works" class="flow-section__title">How it works</h2>
+  <ol class="flow" data-reveal="fade-up">
+    {
+      steps.map((step, i) => (
+        <li class="step">
+          <span class="step__num" aria-hidden="true">
+            {i + 1}
+          </span>
+          <p class="step__title">{step.title}</p>
+          <p class="step__text">{step.text}</p>
+          {step.tech && <p class="step__tech">{step.tech}</p>}
+        </li>
+      ))
+    }
+  </ol>
+  {note && <p class="flow__note">{note}</p>}
+</section>
+
+<style>
+  @reference "#styles";
+
+  .flow-section {
+    @apply mt-10;
+  }
+
+  /* Matches the markdown h2 in work/[slug].astro, so the sections the body
+     renders and the ones these components render look like one document. */
+  .flow-section__title {
+    @apply mb-4 text-2xl font-semibold tracking-tight;
+  }
+
+  /* From md up, one column per step (column flow + equal auto columns), so a
+     two- or three-step flow fills the row; a fixed four-column grid left empty
+     columns after a shorter flow. Values only this component uses are plain
+     declarations, not @apply, so they stay out of the shared stylesheet (see
+     WorkHighlights.astro). */
+  .flow {
+    @apply grid grid-cols-1;
+    gap: 1.75rem;
+  }
+
+  @media (width >= 48rem) {
+    .flow {
+      grid-auto-flow: column;
+      grid-template-columns: none;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+  }
+
+  .step {
+    @apply relative flex flex-col rounded-xl border border-line bg-surface p-4;
+  }
+
+  .step:last-child {
+    @apply border-accent/40;
+  }
+
+  /* The connector. Stacked: a down arrow in the gap under the number badge.
+     In a row: a right arrow in the gap, level with the badge. fg-meta, not the
+     icon token fg-faint: fg-faint is ~2.5:1 on the light page, too faint for
+     the one mark that says "this leads to that". */
+  .step:not(:last-child)::after {
+    @apply absolute text-base leading-none text-fg-meta;
+    bottom: -1.5rem;
+    left: 1.45rem;
+    content: '↓';
+  }
+
+  @media (width >= 48rem) {
+    .step:not(:last-child)::after {
+      top: 1.05rem;
+      bottom: auto;
+      right: -1.05rem;
+      left: auto;
+      content: '→';
+    }
+  }
+
+  .step__num {
+    @apply inline-flex items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .step__title {
+    @apply mt-3 text-sm font-semibold text-fg;
+  }
+
+  .step__text {
+    @apply mt-1 text-sm leading-snug text-fg-body;
+  }
+
+  .step__tech {
+    @apply mt-3 self-start rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.7rem] text-fg-muted;
+  }
+
+  .flow__note {
+    @apply text-sm leading-relaxed text-fg-muted;
+    margin-top: 1.25rem;
+  }
+</style>

@@ -2,6 +2,11 @@
 import type { GetStaticPaths } from 'astro';
 import { render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import WorkHighlights from '../../components/astro/WorkHighlights.astro';
+import WorkChat from '../../components/astro/WorkChat.astro';
+import WorkFlow from '../../components/astro/WorkFlow.astro';
+import WorkChallenges from '../../components/astro/WorkChallenges.astro';
+import WorkShowcase from '../../components/astro/WorkShowcase.astro';
 import { getWork, formatYears } from '../../lib/content';
 
 export const getStaticPaths = (async () => {
@@ -14,72 +19,100 @@ export const getStaticPaths = (async () => {
 
 const { entry } = Astro.props;
 const { Content } = await render(entry);
+const { showcase } = entry.data;
 ---
 
 <BaseLayout title={entry.data.title} description={entry.data.summary}>
-  <article class="page">
-    <header class="page__header">
-      <div class="page__kicker">
-        <a href="/work" class="back">&larr; Work</a>
-        {entry.data.current && <span class="badge">Current</span>}
-      </div>
-      <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
-      <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
+  {/* An entry with `showcase` gets the product layout (WorkShowcase.astro);
+      every other entry keeps the standard article below, unchanged. */}
+  {
+    showcase ? (
+      <WorkShowcase data={entry.data} showcase={showcase}>
+        <Content />
+      </WorkShowcase>
+    ) : (
+      <article class="page">
+        <header class="page__header">
+          <div class="page__kicker">
+            <a href="/work" class="back">&larr; Work</a>
+            {entry.data.current && <span class="badge">Current</span>}
+          </div>
+          <h1 class="page__title" data-reveal="split-lines">{entry.data.title}</h1>
+          <p class="page__summary" data-reveal="fade-up">{entry.data.summary}</p>
 
-      <dl class="facts" data-reveal="fade-up">
-        <div>
-          <dt>Role</dt>
-          <dd>{entry.data.role}</dd>
-        </div>
-        {
-          entry.data.company && (
+          <dl class="facts" data-reveal="fade-up">
             <div>
-              <dt>Company</dt>
-              <dd>{entry.data.company}</dd>
+              <dt>Role</dt>
+              <dd>{entry.data.role}</dd>
             </div>
-          )
-        }
-        <div>
-          <dt>Year</dt>
-          <dd>{formatYears(entry.data)}</dd>
+            {
+              entry.data.company && (
+                <div>
+                  <dt>Company</dt>
+                  <dd>{entry.data.company}</dd>
+                </div>
+              )
+            }
+            <div>
+              <dt>Year</dt>
+              <dd>{formatYears(entry.data)}</dd>
+            </div>
+            {
+              entry.data.stack.length > 0 && (
+                <div class="facts__stack">
+                  <dt>Stack</dt>
+                  <dd>
+                    <ul class="chips">
+                      {entry.data.stack.map((tech) => (
+                        <li class="chip">{tech}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              )
+            }
+          </dl>
+        </header>
+
+        {/* The case-study visuals are optional frontmatter (see content.config.ts):
+            numbers first, then an example chat, then the prose, then how it works
+            and what went wrong. An entry without them renders exactly as before. */}
+        {entry.data.highlights.length > 0 && <WorkHighlights items={entry.data.highlights} />}
+
+        {entry.data.chat && <WorkChat messages={entry.data.chat.messages} label={entry.data.chat.label} />}
+
+        <div class="page__body" data-reveal="fade-up">
+          <Content />
         </div>
+
+        {entry.data.flow && <WorkFlow steps={entry.data.flow.steps} note={entry.data.flow.note} />}
+
+        {entry.data.challenges.length > 0 && <WorkChallenges items={entry.data.challenges} />}
+
         {
-          entry.data.stack.length > 0 && (
-            <div class="facts__stack">
-              <dt>Stack</dt>
-              <dd>{entry.data.stack.join(' · ')}</dd>
+          (entry.data.repo || entry.data.external || entry.data.doc) && (
+            <div class="actions">
+              {entry.data.external && (
+                <a href={entry.data.external} target="_blank" rel="noopener noreferrer" class="action">
+                  View publication
+                </a>
+              )}
+              {entry.data.repo && (
+                <a href={entry.data.repo} target="_blank" rel="noopener noreferrer" class="action">
+                  View on GitHub
+                </a>
+              )}
+              {entry.data.doc && (
+                <a href={entry.data.doc} download class="action action--ghost">
+                  Download report
+                </a>
+              )}
             </div>
           )
         }
-      </dl>
-    </header>
-
-    <div class="page__body" data-reveal="fade-up">
-      <Content />
-    </div>
-
-    {
-      (entry.data.repo || entry.data.external || entry.data.doc) && (
-        <div class="actions">
-          {entry.data.external && (
-            <a href={entry.data.external} target="_blank" rel="noopener noreferrer" class="action">
-              View publication
-            </a>
-          )}
-          {entry.data.repo && (
-            <a href={entry.data.repo} target="_blank" rel="noopener noreferrer" class="action">
-              View on GitHub
-            </a>
-          )}
-          {entry.data.doc && (
-            <a href={entry.data.doc} download class="action action--ghost">
-              Download report
-            </a>
-          )}
-        </div>
-      )
-    }
-  </article>
+      </article>
+    )
+  }
 </BaseLayout>
 
 <style>
@@ -120,8 +153,11 @@ const { Content } = await render(entry);
     @apply mt-4 grid grid-cols-2 gap-4 border-y border-line py-4 sm:grid-cols-3;
   }
 
+  /* The stack takes the whole row, as chips. Recruiters scan it for names
+     they know; joined with dots into one column of three, it wrapped over
+     several lines and read as small print. */
   .facts__stack {
-    @apply col-span-2 sm:col-span-1;
+    grid-column: 1 / -1;
   }
 
   .facts dt {
@@ -130,6 +166,16 @@ const { Content } = await render(entry);
 
   .facts dd {
     @apply mt-0.5 text-sm text-fg;
+  }
+
+  /* The chip from the /work rows and the home carousel, a step larger and in
+     the main text colour here, where the stack is a headline fact. */
+  .chips {
+    @apply flex flex-wrap gap-1.5 pt-1;
+  }
+
+  .chip {
+    @apply rounded bg-surface-2 px-2 py-0.5 font-mono text-xs text-fg;
   }
 
   .page__body :global(p) {

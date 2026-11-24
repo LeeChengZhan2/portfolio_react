@@ -1,0 +1,55 @@
+---
+interface Props {
+  items: { value: string; label: string }[];
+}
+
+const { items } = Astro.props;
+---
+
+{/* Headline numbers for one work page, as a row of stat tiles.
+    A <dl> so a screen reader hears "Questions a month: 500+"; the column is
+    reversed so the eye gets the number first. The value is the page's own
+    sans, semibold, with proportional figures — tabular-nums gives every digit
+    the width of a 0, which makes a lone "10" look loose at this size. */}
+<dl class="stats" data-reveal="fade-up">
+  {
+    items.map((item) => (
+      <div class="stat">
+        <dt class="stat__label">{item.label}</dt>
+        <dd class="stat__value">{item.value}</dd>
+      </div>
+    ))
+  }
+</dl>
+
+<style>
+  @reference "#styles";
+
+  /* Values only this component uses are plain declarations, not @apply:
+     Tailwind scans component files, so every @apply token is also emitted into
+     the shared stylesheet all 25 pages load. Utilities the site already uses
+     stay as @apply, at no cost. CLAUDE.md, "This file is a build input". */
+  .stats {
+    @apply mb-12 grid grid-cols-2 gap-3;
+  }
+
+  @media (width >= 40rem) {
+    .stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .stat {
+    @apply flex flex-col-reverse gap-1 rounded-xl border border-line bg-surface px-4;
+    justify-content: flex-end;
+    padding-block: 0.875rem;
+  }
+
+  .stat__value {
+    @apply text-3xl font-semibold tracking-tight text-fg;
+  }
+
+  .stat__label {
+    @apply text-xs leading-snug text-fg-meta;
+  }
+</style>

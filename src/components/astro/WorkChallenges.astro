@@ -1,0 +1,96 @@
+---
+interface Props {
+  items: { title: string; problem: string; fix: string; result: string }[];
+}
+
+const { items } = Astro.props;
+---
+
+{/* Problem → fix → result stories, one card each. Written for skimming: the
+    labels line up in a left column from sm up, and Result is the one row in
+    accent and full-strength ink, so reading only the results still tells the
+    story. A <dl> per card, so the labels are announced with their text. */}
+<section class="challenges" aria-labelledby="problems-i-solved">
+  <h2 id="problems-i-solved" class="challenges__title">Problems I solved</h2>
+  <div class="challenges__list">
+    {
+      items.map((item) => (
+        <article class="card" data-reveal="fade-up">
+          <h3 class="card__title">{item.title}</h3>
+          <dl class="card__rows">
+            <div class="card__row">
+              <dt>Problem</dt>
+              <dd>{item.problem}</dd>
+            </div>
+            <div class="card__row">
+              <dt>Fix</dt>
+              <dd>{item.fix}</dd>
+            </div>
+            <div class="card__row card__row--result">
+              <dt>Result</dt>
+              <dd>{item.result}</dd>
+            </div>
+          </dl>
+        </article>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  @reference "#styles";
+
+  .challenges {
+    @apply mt-12;
+  }
+
+  /* Same as the markdown h2 in work/[slug].astro. */
+  .challenges__title {
+    @apply mb-4 text-2xl font-semibold tracking-tight;
+  }
+
+  .challenges__list {
+    @apply flex flex-col gap-4;
+  }
+
+  .card {
+    @apply rounded-xl border border-line bg-surface p-5;
+  }
+
+  .card__title {
+    @apply text-lg font-semibold tracking-tight text-fg;
+  }
+
+  .card__rows {
+    @apply mt-4 flex flex-col gap-3;
+  }
+
+  .card__row {
+    @apply grid gap-1 sm:gap-4;
+  }
+
+  /* Values only this component uses are plain declarations, so they stay out
+     of the shared stylesheet (see WorkHighlights.astro). */
+  @media (width >= 40rem) {
+    .card__row {
+      grid-template-columns: 5.5rem 1fr;
+    }
+  }
+
+  .card__row dt {
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.12em] text-fg-meta;
+    padding-top: 0.2rem;
+  }
+
+  .card__row dd {
+    @apply text-sm leading-relaxed text-fg-body;
+  }
+
+  .card__row--result dt {
+    @apply text-accent;
+  }
+
+  .card__row--result dd {
+    @apply font-medium text-fg;
+  }
+</style>

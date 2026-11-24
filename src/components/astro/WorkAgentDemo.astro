@@ -1,0 +1,953 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+type Agent = NonNullable<NonNullable<CollectionEntry<'work'>['data']['showcase']>['agents']>[number];
+
+interface Props {
+  /** The card's heading: an agent, or one feature of one. */
+  name: string;
+  /** One line under the heading. */
+  text?: string;
+  /** Who the chat is with, shown in its top bar. */
+  title: string;
+  /** Up to three example chats; the pager under the screen shows one at a time. */
+  examples: NonNullable<Agent['examples']>;
+  /** The version shown first; the switch offers the other. */
+  first: 'web' | 'whatsapp';
+  /** Unique on the page: names the radio groups of the switch and the pager. */
+  uid: string;
+  /** Off inside a closed <details>, where a scroll trigger cannot measure. */
+  reveal?: boolean;
+  /** In the three-column grid: half the row instead of a third. */
+  half?: boolean;
+  /** In the two-column grid: the whole row. */
+  whole?: boolean;
+}
+
+const { name, text, title, examples, first, uid, reveal = true, half = false, whole = false } = Astro.props;
+const versions = first === 'web' ? (['web', 'whatsapp'] as const) : (['whatsapp', 'web'] as const);
+const count = examples.length;
+
+// Message times, two to a minute, ending on the status bar's 9:41.
+const timeOf = (i: number, total: number) => `9:${41 - Math.floor((total - 1 - i) / 2)}`;
+
+// Heroicons 24/outline paths, inlined like the header's.
+const CHEVRON = 'M15.75 19.5 8.25 12l7.5-7.5';
+const SPARKLES =
+  'M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z';
+---
+
+{/* One card: an agent the author built, or one feature of one, with up to
+    three example chats (made-up data). Every chat exists twice, as a web chat
+    and as WhatsApp. A two-option switch picks the version and a small pager
+    under the screen picks the example; one chat shows at a time. Both controls
+    are radio inputs and :has(), so they need no script; without :has(), the
+    first version of the first example shows and both controls go away.
+
+    All the chats of a card share one grid cell, the ones not shown kept in
+    layout but unseen, so the card is always as tall as its tallest chat and
+    nothing on the page moves when a reader flips through.
+
+    Between the versions: label and value pairs are a table on the web and
+    bold-label lines on WhatsApp, which has no tables; quick-reply buttons show
+    on the web only, because the agents' WhatsApp channel cannot send them (the
+    user types the reply); only WhatsApp shows times, ticks and bubble tails.
+    Colours come from one set of --chat-* variables per version, at the foot of
+    the styles: the web version maps them to the site's theme tokens (its
+    accent, all nine themes), the WhatsApp version to WhatsApp's own palette.
+
+    Motion: the chat shown first carries the site's fade-up reveal on each
+    message, so they arrive as it scrolls into view (`reveal`). Every chat also
+    has a short CSS entrance, staggered by --i, whose name reaches a message
+    through --ag-anim only while its chat is the one shown; a new name restarts
+    it, so flipping either control plays the conversation. Only the chat shown
+    reaches a screen reader; the phone and browser parts are aria-hidden. */}
+<li class:list={['ag', { 'ag--half': half, 'ag--whole': whole }]}>
+  <div>
+    <div class="ag__top">
+      <h4 class="ag__name">{name}</h4>
+      <div class="ag__switch" role="radiogroup" aria-label={`Show the ${name} chat as`}>
+        <label class="ag__seg">
+          <input type="radio" name={`chat-${uid}`} value="web" checked={first === 'web'} />
+          Web
+        </label>
+        <label class="ag__seg">
+          <input type="radio" name={`chat-${uid}`} value="whatsapp" checked={first === 'whatsapp'} />
+          WhatsApp
+        </label>
+      </div>
+    </div>
+    {text && <p class="ag__text">{text}</p>}
+  </div>
+
+  <div class="ag__box">
+    {
+      versions.map((version) => {
+        const wa = version === 'whatsapp';
+        return (
+          <figure class:list={['ag__screen', wa ? 'ag__screen--wa' : 'ag__screen--web']}>
+            {wa ? (
+              <div class="ag__status" aria-hidden="true">
+                <span>9:41</span>
+                <span class="ag__sys">
+                  <svg viewBox="0 0 18 12" fill="currentColor">
+                    <rect x="0" y="7.5" width="3" height="4.5" rx="1" />
+                    <rect x="5" y="5" width="3" height="7" rx="1" />
+                    <rect x="10" y="2.5" width="3" height="9.5" rx="1" />
+                    <rect x="15" y="0" width="3" height="12" rx="1" />
+                  </svg>
+                  <svg viewBox="0 0 26 12" fill="currentColor">
+                    <rect x="0.6" y="0.6" width="22.4" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.45" />
+                    <rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" />
+                    <path d="M24.4 4.1v3.8c.9-.3 1.4-1.1 1.4-1.9s-.5-1.6-1.4-1.9Z" opacity="0.45" />
+                  </svg>
+                </span>
+              </div>
+            ) : (
+              <div class="ag__browser" aria-hidden="true">
+                <span class="ag__dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span class="ag__address" />
+              </div>
+            )}
+
+            <div class="ag__bar" aria-hidden="true">
+              {wa && (
+                <svg class="ag__back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d={CHEVRON} stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              )}
+              <span class="ag__avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <path d={SPARKLES} stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="ag__who">
+                <span class="ag__contact">{title}</span>
+                <span class="ag__state">{wa ? 'online' : 'AI assistant'}</span>
+              </span>
+            </div>
+
+            <div class="ag__chats">
+              {examples.map(({ messages }, e) => (
+                <ol class="ag__chat" aria-label={count > 1 ? `Example ${e + 1} of ${count}` : undefined}>
+                  {messages.map((message, i) => (
+                    <li
+                      class={message.from === 'user' ? 'ag__msg ag__msg--out' : 'ag__msg ag__msg--in'}
+                      style={`--i: ${i}`}
+                      data-reveal={reveal && version === first && e === 0 ? 'fade-up' : undefined}
+                    >
+                      <div class="ag__bubble">
+                        {message.photo && (
+                          <span class="ag__photo" aria-hidden="true">
+                            <span>{message.photo}</span>
+                          </span>
+                        )}
+                        <span class="sr-only">
+                          {message.from === 'user' ? 'User: ' : 'Assistant: '}
+                          {message.photo && `(photo of "${message.photo}") `}
+                        </span>
+                        <span class="ag__words">{message.text}</span>
+                        {message.rows &&
+                          (wa ? (
+                            <span class="ag__lines">
+                              {message.rows.map(([label, value]) => (
+                                <span>
+                                  <strong>{label}:</strong> {value}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            <table class="ag__table">
+                              <tbody>
+                                {message.rows.map(([label, value]) => (
+                                  <tr>
+                                    <th scope="row">{label}</th>
+                                    <td>{value}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ))}
+                        {wa && (
+                          <span class="ag__time" aria-hidden="true">
+                            {timeOf(i, messages.length)}
+                          </span>
+                        )}
+                      </div>
+                      {message.replies && !wa && (
+                        <span class="ag__replies" aria-hidden="true">
+                          {message.replies.map((reply) => (
+                            <span>{reply}</span>
+                          ))}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              ))}
+            </div>
+            <figcaption class="sr-only">
+              {wa ? 'WhatsApp' : 'Web'} {count > 1 ? 'chats' : 'chat'} with made-up data
+            </figcaption>
+          </figure>
+        );
+      })
+    }
+  </div>
+
+  {
+    /* An arrow is one label per example, each pointing at its neighbour's
+       radio; the label for the example shown is the one that shows. */
+    count > 1 && (
+      <div class="ag__pager">
+        {examples.map((_, e) => (
+          <label
+            class="ag__step ag__step--back"
+            data-at={e + 1}
+            for={`eg-${uid}-${((e + count - 1) % count) + 1}`}
+            title="Previous example"
+            aria-hidden="true"
+          />
+        ))}
+        <div class="ag__pips" role="radiogroup" aria-label={`${name} examples`}>
+          {examples.map((_, e) => (
+            <label class="ag__pip">
+              <input
+                type="radio"
+                id={`eg-${uid}-${e + 1}`}
+                name={`eg-${uid}`}
+                value={e + 1}
+                checked={e === 0}
+                aria-label={`Example ${e + 1} of ${count}`}
+              />
+            </label>
+          ))}
+        </div>
+        {examples.map((_, e) => (
+          <label
+            class="ag__step"
+            data-at={e + 1}
+            for={`eg-${uid}-${((e + 1) % count) + 1}`}
+            title="Next example"
+            aria-hidden="true"
+          />
+        ))}
+      </div>
+    )
+  }
+</li>
+
+<style>
+  /* Plain declarations throughout, on purpose: Tailwind scans component files,
+     so a utility named here would ship in the shared stylesheet all 25 pages
+     load (CLAUDE.md, "This file is a build input"). */
+  .ag {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    background: var(--color-surface);
+  }
+
+  /* A step smaller on a phone, where the longest heading would otherwise lose
+     its line to the switch beside it. */
+  .ag__name {
+    color: var(--color-fg);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  @media (width >= 48rem) {
+    .ag__name {
+      font-size: 1.125rem;
+    }
+  }
+
+  .ag__text {
+    margin-top: 0.25rem;
+    color: var(--color-fg-muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  /* The grid is WorkShowcase's: two cards to a row from 48rem; from 80rem six
+     tracks, so a card takes two of them, or three where it shares its row with
+     one other. */
+  @media (48rem <= width < 80rem) {
+    .ag--whole {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (width >= 80rem) {
+    .ag {
+      grid-column: span 2;
+    }
+
+    .ag--half {
+      grid-column: span 3;
+    }
+  }
+
+  /* ---- The switch and the two versions ---------------------------------- */
+
+  /* The box grows to the card's height, so the screens in one row end level,
+     and both versions share its one cell, so it keeps the taller one's. */
+  .ag__box {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Heading and switch share a line, the switch always top right; a long
+     heading wraps beside it rather than pushing it down. */
+  .ag__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .ag__top .ag__name {
+    min-width: 0;
+  }
+
+  .ag__switch {
+    display: flex;
+    flex: none;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border-radius: 999px;
+    background: var(--color-surface-2);
+  }
+
+  .ag__seg {
+    position: relative;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+  }
+
+  /* The radio stays in the page for the keyboard and screen readers; the label
+     is what shows. */
+  .ag__seg input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .ag__seg:has(input:checked) {
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+    color: var(--color-fg);
+  }
+
+  .ag__seg:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* What shows: the chosen version's screen and, inside it, the chosen chat.
+     Everything else keeps its place in the layout, unseen and unread. A chat
+     on show hands --ag-anim, the name of the entrance, to its messages. */
+  @supports selector(:has(*)) {
+    .ag__screen,
+    .ag__chat {
+      --ag-anim: none;
+      visibility: hidden;
+    }
+
+    .ag:has(input[value='web']:checked) .ag__screen--web,
+    .ag:has(input[value='whatsapp']:checked) .ag__screen--wa {
+      --ag-anim: ag-arrive;
+      visibility: inherit;
+    }
+
+    .ag__chat:only-child,
+    .ag:has(input[value='1']:checked) .ag__chat:nth-child(1),
+    .ag:has(input[value='2']:checked) .ag__chat:nth-child(2),
+    .ag:has(input[value='3']:checked) .ag__chat:nth-child(3) {
+      --ag-anim: inherit;
+      visibility: inherit;
+    }
+  }
+
+  @supports not selector(:has(*)) {
+    .ag__screen ~ .ag__screen,
+    .ag__chat ~ .ag__chat,
+    .ag .ag__switch,
+    .ag .ag__pager {
+      display: none;
+    }
+  }
+
+  /* The screen fills what is left of the card, and the chat sits at its
+     foot, the way a chat app stacks messages. */
+  .ag__screen {
+    display: flex;
+    flex-direction: column;
+    grid-area: 1 / 1;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background-color: var(--chat-bg);
+    background-image: var(--chat-wallpaper);
+    background-size: var(--chat-wallpaper-size);
+  }
+
+  .ag__status,
+  .ag__browser {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    height: 1.75rem;
+    padding: 0 0.875rem 0 1rem;
+    background: var(--chat-bar);
+    color: var(--chat-bar-fg);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+
+  .ag__browser {
+    padding: 0 0.75rem;
+    background: var(--chat-chrome);
+  }
+
+  .ag__sys {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .ag__sys svg {
+    height: 0.5625rem;
+    width: auto;
+  }
+
+  .ag__dots {
+    display: flex;
+    gap: 0.3125rem;
+  }
+
+  .ag__dots span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--chat-chrome-dot);
+  }
+
+  .ag__address {
+    flex: 1;
+    max-width: 14rem;
+    height: 0.875rem;
+    margin-right: auto;
+    border-radius: 999px;
+    background: var(--chat-chrome-pill);
+  }
+
+  .ag__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--chat-rule);
+    background: var(--chat-web-bar);
+  }
+
+  .ag__screen--wa .ag__bar {
+    padding-left: 0.375rem;
+  }
+
+  .ag__back {
+    width: 1.125rem;
+    height: 1.125rem;
+    color: var(--chat-bar-fg);
+  }
+
+  .ag__avatar {
+    display: grid;
+    place-items: center;
+    width: 1.875rem;
+    height: 1.875rem;
+    border-radius: 999px;
+    background: var(--chat-avatar);
+    color: var(--chat-avatar-fg);
+  }
+
+  .ag__avatar svg {
+    width: 1.0625rem;
+    height: 1.0625rem;
+  }
+
+  .ag__who {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+
+  .ag__contact {
+    color: var(--chat-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .ag__state {
+    color: var(--chat-meta);
+    font-size: 0.6875rem;
+  }
+
+  /* ---- Messages --------------------------------------------------------- */
+
+  .ag__chats {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ag__chat {
+    display: flex;
+    flex-direction: column;
+    grid-area: 1 / 1;
+    justify-content: flex-end;
+    gap: 0.4375rem;
+    margin: 0;
+    padding: 0.875rem 0.75rem 1rem;
+    list-style: none;
+  }
+
+  /* Longhands only: the minifier turns an animation shorthand that has no
+     name into "none" and drops the rest of it. */
+  .ag__msg {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-width: 88%;
+    animation-name: var(--ag-anim, none);
+    animation-duration: 0.4s;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
+    animation-delay: calc(0.1s + var(--i) * 0.3s);
+    animation-fill-mode: backwards;
+  }
+
+  /* A closed section holds its entrances back, so they play when it opens. */
+  :global(details:not([open])) .ag__msg {
+    animation-name: none;
+  }
+
+  .ag__msg--in {
+    align-self: flex-start;
+    transform-origin: 0 100%;
+  }
+
+  .ag__msg--out {
+    align-self: flex-end;
+    transform-origin: 100% 100%;
+  }
+
+  @keyframes ag-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.97);
+    }
+  }
+
+  /* The global reduced-motion rule shortens durations but not delays, which
+     would leave messages hidden for a moment; switch the entrance off. */
+  @media (prefers-reduced-motion: reduce) {
+    .ag__msg {
+      animation: none;
+    }
+  }
+
+  .ag__bubble {
+    --ag-room: 0;
+    position: relative;
+    margin: 0;
+    padding: 0.4375rem 0.6875rem 0.375rem;
+    border-radius: 0.875rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.08);
+  }
+
+  /* Room for the WhatsApp time at the end of the text, the way chat apps do
+     it: an empty spacer follows the last word and the time is pinned over it.
+     When the last line has no room, the spacer and the time drop to a line of
+     their own, so the text stays left-aligned. The room is the time's
+     measured width plus a small gap: 20px for a time, 39px with the ticks.
+     A web chat shows no times, so it has no spacer at all: even at zero
+     width, one after a table would open an empty line under it. */
+  .ag__screen--wa .ag__bubble {
+    --ag-room: 1.625rem;
+  }
+
+  .ag__screen--wa .ag__msg--out .ag__bubble {
+    --ag-room: 2.75rem;
+  }
+
+  .ag__screen--wa .ag__bubble::after,
+  .ag__lines span:last-child::after {
+    content: '';
+    display: inline-block;
+    width: var(--ag-room);
+  }
+
+  /* Rows end in a line of their own, so there the spacer follows that line. */
+  .ag__screen--wa .ag__bubble:has(.ag__lines)::after {
+    content: none;
+  }
+
+  .ag__words {
+    white-space: pre-line;
+  }
+
+  .ag__msg--in .ag__bubble {
+    background: var(--chat-in);
+    color: var(--chat-text);
+  }
+
+  .ag__msg--out .ag__bubble {
+    background: var(--chat-out);
+    color: var(--chat-out-text);
+  }
+
+  /* WhatsApp's tail: a small triangle in the bubble's own colour at its top
+     corner. The web chat keeps plain rounded bubbles. */
+  .ag__screen--wa .ag__bubble::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 0.5rem;
+    height: 0.75rem;
+    background: inherit;
+  }
+
+  .ag__screen--wa .ag__msg--in .ag__bubble {
+    border-top-left-radius: 0;
+  }
+
+  .ag__screen--wa .ag__msg--in .ag__bubble::before {
+    left: -0.4375rem;
+    clip-path: polygon(0 0, 100% 0, 100% 100%);
+  }
+
+  .ag__screen--wa .ag__msg--out .ag__bubble {
+    border-top-right-radius: 0;
+  }
+
+  .ag__screen--wa .ag__msg--out .ag__bubble::before {
+    right: -0.4375rem;
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+
+  /* Label and value pairs: a ruled table on the web. Spacing 0 rather than
+     joined borders, so each cell draws its own rule. */
+  .ag__table {
+    width: 100%;
+    margin-top: 0.375rem;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .ag__table th,
+  .ag__table td {
+    padding: 0.3125rem 0;
+    border-top: 1px solid var(--chat-rule);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .ag__table th {
+    padding-right: 1rem;
+    color: var(--chat-meta);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .ag__table td {
+    color: var(--chat-text);
+  }
+
+  /* ...and one line each on WhatsApp, the label in bold, as the agents send
+     it there. */
+  .ag__lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-top: 0.25rem;
+  }
+
+  .ag__lines strong {
+    font-weight: 600;
+  }
+
+  .ag__time {
+    position: absolute;
+    right: 0.625rem;
+    bottom: 0.3125rem;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    color: var(--chat-meta);
+    font-size: 0.6875rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* The user's messages carry WhatsApp's blue "read" ticks. */
+  .ag__msg--out .ag__time::after {
+    --ag-ticks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 11' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 6.2 4 9.2 10.6 1.8M7.4 8.4 8.2 9.2 14.8 1.8'/%3E%3C/svg%3E");
+    content: '';
+    width: 1rem;
+    height: 0.6875rem;
+    background: var(--chat-tick);
+    -webkit-mask: var(--ag-ticks) center / contain no-repeat;
+    mask: var(--ag-ticks) center / contain no-repeat;
+  }
+
+  /* A made-up photo: a soft picture with the label on it, like a sign on a
+     wall. Drawn, so there is no image to download and nothing real shown. */
+  .ag__photo {
+    display: grid;
+    place-items: center;
+    min-width: 7.5rem;
+    height: 5.625rem;
+    margin: -0.125rem -0.3125rem 0.375rem;
+    border-radius: 0.625rem;
+    background: linear-gradient(
+      150deg,
+      color-mix(in oklab, var(--color-fg) 30%, var(--color-surface)),
+      color-mix(in oklab, var(--color-fg) 12%, var(--color-surface))
+    );
+  }
+
+  .ag__photo span {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .ag__replies {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .ag__replies span {
+    flex: 1 1 0;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.75rem;
+    background: var(--chat-in);
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.08);
+    color: var(--chat-button);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* On the web, quick replies are outlined buttons rather than WhatsApp's
+     raised strips. */
+  .ag__screen--web .ag__replies span {
+    border: 1px solid color-mix(in oklab, var(--chat-button) 40%, transparent);
+    box-shadow: none;
+  }
+
+  /* ---- The pager --------------------------------------------------------- */
+
+  .ag__pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    margin: -0.375rem 0 -0.5rem;
+  }
+
+  .ag__pips {
+    display: flex;
+  }
+
+  /* A dot per example, in a finger-sized label; the one on show is a pill. */
+  .ag__pip {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 2rem;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+
+  .ag__pip::after {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border: 1.5px solid var(--color-fg-meta);
+    border-radius: 999px;
+    transition:
+      width 0.2s,
+      background-color 0.2s;
+  }
+
+  .ag__pip input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .ag__pip:has(input:checked)::after {
+    width: 1.25rem;
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+
+  .ag__pip:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  .ag__step {
+    display: none;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .ag__step:hover {
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  .ag__step::after {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border: solid currentColor;
+    border-width: 2px 2px 0 0;
+    transform: translateX(-0.125rem) rotate(45deg);
+  }
+
+  .ag__step--back::after {
+    transform: translateX(0.125rem) rotate(-135deg);
+  }
+
+  .ag:has(input[value='1']:checked) .ag__step[data-at='1'],
+  .ag:has(input[value='2']:checked) .ag__step[data-at='2'],
+  .ag:has(input[value='3']:checked) .ag__step[data-at='3'] {
+    display: grid;
+  }
+
+  /* ---- Chat colours ----------------------------------------------------- */
+
+  /* The web version: the site's own theme tokens, so it follows all nine
+     themes in the site's accent (the author's call, 23 Nov 2026, after trying
+     it in WhatsApp's colours too). */
+  .ag__screen--web {
+    --chat-bg: var(--color-band);
+    --chat-wallpaper: radial-gradient(
+      color-mix(in oklab, var(--color-fg) 9%, transparent) 1px,
+      transparent 1.5px
+    );
+    --chat-wallpaper-size: 0.875rem 0.875rem;
+    --chat-chrome: var(--color-surface-2);
+    --chat-chrome-dot: var(--color-line-strong);
+    --chat-chrome-pill: var(--color-surface);
+    --chat-web-bar: var(--color-surface);
+    --chat-avatar: var(--color-accent);
+    --chat-avatar-fg: var(--color-on-invert);
+    --chat-in: var(--color-surface);
+    --chat-out: var(--color-accent);
+    --chat-out-text: var(--color-on-invert);
+    --chat-text: var(--color-fg);
+    --chat-meta: var(--color-fg-meta);
+    --chat-rule: var(--color-line);
+    --chat-button: var(--color-accent);
+  }
+
+  /* The WhatsApp version: WhatsApp's own colours, because the author asked
+     for it to look like the real app (23 Nov 2026). The one place on the site
+     drawn in literal colours rather than theme tokens: WhatsApp's light
+     palette under all eight light themes, its dark palette under the site's
+     dark theme, every value in these two blocks. The wallpaper is a faint
+     drawn doodle tile, like the app's, as an inline SVG with no file to
+     fetch; one per palette, since a data URI cannot read a variable. */
+  .ag__screen--wa {
+    --chat-bg: #efeae2;
+    --chat-wallpaper-size: 5.5rem 5.5rem;
+    --chat-wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='88' viewBox='0 0 88 88'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='0.07' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='15' cy='15' r='5'/%3E%3Cpath d='M56 9a6 6 0 0 1 0 12'/%3E%3Cpath d='M32 40l4 4 8-8'/%3E%3Cpath d='M70 50c-2-3-6-3-7 0s7 7 7 7 8-4 7-7-5-3-7 0z'/%3E%3Cpath d='M9 64h10M14 59v10'/%3E%3Cpath d='M38 72c3-4 6 4 9 0s6 4 9 0'/%3E%3Crect x='66' y='70' width='10' height='8' rx='2'/%3E%3C/g%3E%3C/svg%3E");
+    --chat-bar: #008069;
+    --chat-bar-fg: #ffffff;
+    --chat-in: #ffffff;
+    --chat-out: #d9fdd3;
+    --chat-out-text: #111b21;
+    --chat-text: #111b21;
+    --chat-meta: #667781;
+    --chat-rule: rgb(17 27 33 / 0.1);
+    --chat-tick: #53bdeb;
+    --chat-button: #008069;
+  }
+
+  :global(:root.dark) .ag__screen--wa {
+    --chat-bg: #0b141a;
+    --chat-wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='88' viewBox='0 0 88 88'%3E%3Cg fill='none' stroke='%23fff' stroke-opacity='0.05' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='15' cy='15' r='5'/%3E%3Cpath d='M56 9a6 6 0 0 1 0 12'/%3E%3Cpath d='M32 40l4 4 8-8'/%3E%3Cpath d='M70 50c-2-3-6-3-7 0s7 7 7 7 8-4 7-7-5-3-7 0z'/%3E%3Cpath d='M9 64h10M14 59v10'/%3E%3Cpath d='M38 72c3-4 6 4 9 0s6 4 9 0'/%3E%3Crect x='66' y='70' width='10' height='8' rx='2'/%3E%3C/g%3E%3C/svg%3E");
+    --chat-bar: #202c33;
+    --chat-bar-fg: #e9edef;
+    --chat-in: #202c33;
+    --chat-out: #005c4b;
+    --chat-out-text: #e9edef;
+    --chat-text: #e9edef;
+    --chat-meta: #8696a0;
+    --chat-rule: rgb(233 237 239 / 0.12);
+    --chat-tick: #53bdeb;
+    --chat-button: #00a884;
+  }
+
+  /* The phone version's top: the app's teal bar, everything on it white. */
+  .ag__screen--wa .ag__bar {
+    border-bottom-color: transparent;
+    background: var(--chat-bar);
+  }
+
+  .ag__screen--wa .ag__contact {
+    color: var(--chat-bar-fg);
+  }
+
+  .ag__screen--wa .ag__state {
+    color: color-mix(in oklab, var(--chat-bar-fg) 80%, transparent);
+  }
+
+  .ag__screen--wa .ag__avatar {
+    background: color-mix(in oklab, var(--chat-bar-fg) 22%, transparent);
+    color: var(--chat-bar-fg);
+  }
+</style>

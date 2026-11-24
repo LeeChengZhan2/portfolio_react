@@ -1,0 +1,156 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import WorkShow from './WorkShow.astro';
+
+type Built = NonNullable<NonNullable<CollectionEntry<'work'>['data']['showcase']>['built']>;
+
+interface Props {
+  steps: Built['steps'];
+}
+
+const { steps } = Astro.props;
+---
+
+{/* "My part" as a numbered flow (the author's ask, 24 Nov 2026): what they
+    do with a client's data, in order. Each step is its number, a title, one
+    line, and a picture of the step (WorkShow), so the titles down the left
+    read as the whole story in five lines. From
+    64rem the text sits left and the picture right, with a rule joining the
+    numbers; below, the picture follows its text.
+
+    An ordered list, so the order reaches a screen reader; the drawn number is
+    hidden from it. The text and the picture each carry the site's fade-up
+    reveal, and nothing inside them does, so nothing animates twice. */}
+<ol class="fl">
+  {
+    steps.map((step, s) => (
+      <li class="fl__step">
+        <div class="fl__info" data-reveal="fade-up">
+          <span class="fl__num" aria-hidden="true">
+            {String(s + 1).padStart(2, '0')}
+          </span>
+          <h4 class="fl__title">{step.title}</h4>
+          <p class="fl__text">{step.text}</p>
+        </div>
+        <div class="fl__show" data-reveal="fade-up">
+          <WorkShow show={step.show} uid={`s${s}`} />
+        </div>
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  /* Plain declarations throughout, on purpose: Tailwind scans component files,
+     so a utility named here would ship in the shared stylesheet all 25 pages
+     load (CLAUDE.md, "This file is a build input"). */
+  .fl {
+    --fl-gap: 2.5rem;
+    --fl-num: 2.5rem;
+    display: grid;
+    gap: var(--fl-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fl__step {
+    position: relative;
+    display: grid;
+    gap: 1rem;
+  }
+
+  /* The number beside the title, and the line under both. */
+  .fl__info {
+    display: grid;
+    grid-template-columns: var(--fl-num) minmax(0, 1fr);
+    column-gap: 0.875rem;
+    align-items: center;
+  }
+
+  .fl__num {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: var(--fl-num);
+    height: var(--fl-num);
+    border: 2px solid var(--color-accent);
+    border-radius: 999px;
+    background: var(--color-band);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .fl__title {
+    color: var(--color-fg);
+    font-size: 1.1875rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  .fl__text {
+    grid-column: 2;
+    margin-top: 0.375rem;
+    color: var(--color-fg-muted);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  /* The picture, on a raised panel like the agent cards. */
+  .fl__show {
+    padding: 1rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    background: var(--color-surface);
+  }
+
+  @media (width >= 48rem) {
+    .fl__show {
+      padding: 1.25rem;
+    }
+
+    .fl__title {
+      font-size: 1.3125rem;
+    }
+  }
+
+  /* From 64rem: text left, picture right, and a rule from each number down
+     to the next. The text starts level with the top of its picture. */
+  @media (width >= 64rem) {
+    .fl {
+      --fl-gap: 3.5rem;
+      --fl-num: 2.75rem;
+    }
+
+    .fl__step {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      align-items: start;
+      gap: 3rem;
+    }
+
+    .fl__info {
+      align-items: start;
+      padding-top: 0.25rem;
+    }
+
+    .fl__title {
+      padding-top: 0.375rem;
+    }
+
+    .fl__step:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      top: calc(var(--fl-num) + 0.25rem);
+      bottom: calc(-1 * var(--fl-gap) - 0.25rem);
+      left: calc(var(--fl-num) / 2 - 1px);
+      width: 2px;
+      background: var(--color-line-strong);
+    }
+  }
+</style>

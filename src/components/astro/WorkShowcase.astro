@@ -1,0 +1,1033 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import WorkAgentDemo from './WorkAgentDemo.astro';
+import WorkPicture from './WorkPicture.astro';
+import WorkSteps from './WorkSteps.astro';
+import { formatYears } from '../../lib/content';
+
+type Data = CollectionEntry<'work'>['data'];
+
+interface Props {
+  data: Data;
+  showcase: NonNullable<Data['showcase']>;
+}
+
+const { data, showcase } = Astro.props;
+const { platform } = showcase;
+
+const where = [data.company, showcase.location].filter(Boolean).join(', ');
+const years = data.current ? `${data.year} – present` : formatYears(data);
+const hasTech = showcase.tech ? showcase.tech.length > 0 : data.stack.length > 0;
+const hasActions = Boolean(data.repo || data.external || data.doc);
+// "aibe.now" from "https://aibe.now/": the button names the site by its host,
+// so the label cannot disagree with the link.
+const siteLabel = data.site ? new URL(data.site).host.replace(/^www\./, '') : '';
+// An agent with features gets a block of its own, a card per feature; the
+// rest share one grid, collapsed under "More agents I built". The grid is two
+// cards to a row, three from 80rem, and no row ends in a hole: where the last
+// row of three would be short, the cards left over sit two to a row, half each
+// (`half`), and a lone last card of two takes its whole row (`whole`).
+const agents = showcase.agents ?? [];
+const featureAgents = agents.filter((agent) => agent.features);
+const cardAgents = agents.filter((agent) => agent.examples);
+// Work that is not agents: where it fits, then the author's steps as a flow.
+const { built } = showcase;
+const spanOf = (i: number, count: number) => {
+  const halves = [0, 4, 2][count % 3];
+  return { half: i >= count - halves, whole: i === count - 1 && count % 2 === 1 };
+};
+// "...buildings, *just by asking.*" -> odd parts are the accent phrase.
+const headline = platform ? platform.headline.split(/\*([^*]+)\*/) : [];
+
+// Heroicons 24/outline, as in the header.
+const CHEVRON_DOWN = 'm19.5 8.25-7.5 7.5-7.5-7.5';
+---
+
+{/* The opt-in product layout for a work page (frontmatter `showcase`), in
+    the order the author asked for (23 Nov 2026). Open by default is the
+    author's own work only, as their git history shows it:
+
+    1. First view: the title, the role, what they did (the markdown body) and
+       the tools, grouped under plain-English labels so a reader who does not
+       know the names still sees what each one is for.
+    2. The agents they built, in cards with example chats (WorkAgentDemo). The
+       ones without features are collapsed, with their names on the header.
+       Work that is not agents (`built`) gets "What I built" here instead,
+       for a reader who knows nothing about the field: where the project fits
+       (WorkPicture), then the author's part as a numbered flow, a picture
+       for each step (WorkSteps).
+
+    Below, a collapsed <details> holds the whole team project: its numbers on
+    the header, its headline and what it does inside. Nothing in either
+    <details> carries a reveal: content inside a closed one has no layout, so a
+    scroll trigger measured there would fire at the wrong place or never. The
+    chats in there play their own CSS entrance when it opens.
+
+    Public facts only, as on every work page: what it does, the author's part,
+    the numbers and the tech, never how it is built. */}
+<article class="sc">
+  <section class="sc-hero">
+    <div class="sc-wrap">
+      <div class="sc-kicker">
+        <a href="/work" class="sc-back">&larr; Work</a>
+        {data.current && <span class="sc-badge">Current</span>}
+      </div>
+
+      <h1 class="sc-title" data-reveal="split-lines">{data.title}</h1>
+
+      {/* The entry's own summary, the same line its cards on / and /work show. */}
+      <p class="sc-summary" data-reveal="fade-up">{data.summary}</p>
+
+      <p class="sc-role" data-reveal="fade-up">
+        <strong>{data.role}</strong>
+        <span>{where && `${where} · `}{years}</span>
+      </p>
+
+      {/* The product's own site, as the page's one button up here (the
+          author's pick, 24 Nov 2026). Styled as the outside links at the
+          foot of the page are. */}
+      {
+        data.site && (
+          <div class="sc-visit" data-reveal="fade-up">
+            <a href={data.site} target="_blank" rel="noopener noreferrer" class="sc-action">Visit {siteLabel} <span aria-hidden="true">&#8599;</span></a>
+          </div>
+        )
+      }
+
+      <div class="sc-hero__grid">
+        <div class="sc-body" data-reveal="fade-up">
+          <slot />
+        </div>
+
+        {
+          hasTech && (
+            <div data-reveal="fade-up">
+              <h2 class="sc-label">Stack</h2>
+              {showcase.tech ? (
+                <dl class="sc-stack">
+                  {showcase.tech.map((row) => (
+                    <div>
+                      <dt>{row.group}</dt>
+                      <dd>
+                        <ul class="sc-chips">
+                          {row.items.map((name) => (
+                            <li>{name}</li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <ul class="sc-chips">
+                  {data.stack.map((name) => (
+                    <li>{name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        }
+      </div>
+    </div>
+  </section>
+
+  {
+    built && (
+      <section class="sc-band" aria-labelledby="sc-built">
+        <div class="sc-wrap sc-wrap--wide">
+          <div class="sc-head">
+            <h2 class="sc-label" id="sc-built">What I built</h2>
+          </div>
+          <div class="sc-sub">
+            <div class="sc-sub__head">
+              <h3 class="sc-sub__title">Where it fits</h3>
+            </div>
+            <WorkPicture steps={built.picture} />
+          </div>
+          <div class="sc-sub">
+            <div class="sc-sub__head">
+              <h3 class="sc-sub__title">My part</h3>
+            </div>
+            <WorkSteps steps={built.steps} />
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    agents.length > 0 && (
+      <section class="sc-band" aria-labelledby="sc-agents">
+        <div class="sc-wrap sc-wrap--wide">
+          <div class="sc-head">
+            <h2 class="sc-label" id="sc-agents">Agents I built</h2>
+            <p class="sc-note">Example chats · made-up data</p>
+          </div>
+          {featureAgents.map((agent, a) => {
+            const features = agent.features ?? [];
+            return (
+              <div class="sc-sub">
+                <div class="sc-sub__head">
+                  <h3 class="sc-sub__title">{agent.name}</h3>
+                  <p class="sc-sub__text">{agent.text}</p>
+                  {agent.link && (
+                    <p class="sc-sub__more">
+                      <a href={agent.link}>{agent.linkText ?? 'See more'} <span aria-hidden="true">&rarr;</span></a>
+                    </p>
+                  )}
+                </div>
+                <ul class="sc-agents">
+                  {features.map((feature, f) => (
+                    <WorkAgentDemo
+                      name={feature.name}
+                      text={feature.text}
+                      title={agent.name}
+                      examples={feature.examples}
+                      first={feature.channel ?? agent.channel}
+                      uid={`f${a}-${f}`}
+                      {...spanOf(f, features.length)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+
+          {cardAgents.length > 0 && (
+            <details class="sc-sub sc-more" open={featureAgents.length === 0}>
+              <summary class="sc-fold">
+                <h3 class="sc-sub__title">{featureAgents.length > 0 ? 'More agents I built' : 'The agents'}</h3>
+                <span class="sc-fold__names">
+                  {cardAgents.map((agent) => (
+                    <span>{agent.name}</span>
+                  ))}
+                </span>
+                <span class="sc-fold__chev" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d={CHEVRON_DOWN} stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+              </summary>
+              <ul class="sc-agents">
+                {cardAgents.map((agent, c) => (
+                  <WorkAgentDemo
+                    name={agent.name}
+                    text={agent.text}
+                    title={agent.name}
+                    examples={agent.examples ?? []}
+                    first={agent.channel}
+                    uid={`a${c}`}
+                    reveal={false}
+                    {...spanOf(c, cardAgents.length)}
+                  />
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    (platform || hasActions) && (
+      <section class="sc-platform">
+        <div class="sc-wrap">
+          {platform && (
+            <details class="sc-details">
+              <summary class="sc-fold">
+                <h2 class="sc-details__title">
+                  {platform.title}
+                  {platform.tag && <span class="sc-details__tag">{platform.tag}</span>}
+                </h2>
+                {data.highlights.length > 0 && (
+                  <span class="sc-details__stats">
+                    {data.highlights.map((item) => (
+                      <span>
+                        <strong>{item.value}</strong> {item.label}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                <span class="sc-fold__chev" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d={CHEVRON_DOWN} stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+              </summary>
+
+              <div class="sc-details__body">
+                <p class="sc-headline">{headline.map((part, i) => (i % 2 === 1 ? <em>{part}</em> : part))}</p>
+                {platform.note && <p class="sc-pnote">{platform.note}</p>}
+                <div class="sc-groups">
+                  {platform.groups.map((group) => (
+                    <div class="sc-group">
+                      <h3 class="sc-group__name">{group.name}</h3>
+                      <ul class="sc-list">
+                        {group.items.map((item) => (
+                          <li>
+                            {item.text}
+                            {item.mine && <span class="sc-mine">Mine</span>}
+                            {item.shared && <span class="sc-mine sc-mine--shared">Shared</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                {(platform.channels || platform.tech) && (
+                  <div class="sc-extras">
+                    {platform.channels && platform.channels.length > 0 && (
+                      <div>
+                        <h3 class="sc-label">Where people use it</h3>
+                        <ul class="sc-chips">
+                          {platform.channels.map((name) => (
+                            <li>{name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {platform.tech && platform.tech.length > 0 && (
+                      <div>
+                        <h3 class="sc-label">Also in the team's stack</h3>
+                        <ul class="sc-chips">
+                          {platform.tech.map((name) => (
+                            <li>{name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {hasActions && (
+            <div class="sc-actions">
+              {data.external && (
+                <a href={data.external} target="_blank" rel="noopener noreferrer" class="sc-action">
+                  View publication
+                </a>
+              )}
+              {data.repo && (
+                <a href={data.repo} target="_blank" rel="noopener noreferrer" class="sc-action">
+                  View on GitHub
+                </a>
+              )}
+              {data.doc && (
+                <a href={data.doc} download class="sc-action sc-action--ghost">
+                  Download report
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+</article>
+
+<style>
+  /* Plain declarations throughout, on purpose: Tailwind scans component files,
+     so a utility named here would ship in the shared stylesheet all 25 pages
+     load (CLAUDE.md, "This file is a build input"). Colours are theme tokens,
+     and the breakpoints are the site's: 40rem, 48rem and 64rem. */
+  .sc-wrap {
+    width: 100%;
+    max-width: 64rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  @media (width >= 64rem) {
+    .sc-wrap {
+      padding: 0 3rem;
+    }
+  }
+
+  /* The agents section runs wider than the text around it, so its cards can
+     sit three to a row from 80rem (the author's ask, 23 Nov 2026). */
+  .sc-wrap--wide {
+    max-width: 80rem;
+  }
+
+  /* ---- 1. First view: role, what I did, stack ---------------------------- */
+
+  /* Spacing on a phone is tight on purpose: the author wants the role, what
+     they did and the whole stack inside the first 844px screen at 390px. */
+  .sc-hero {
+    padding: 1.25rem 0 3rem;
+  }
+
+  @media (width >= 64rem) {
+    .sc-hero {
+      padding: 3.5rem 0 5rem;
+    }
+  }
+
+  .sc-kicker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .sc-back {
+    color: var(--color-fg-meta);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .sc-back:hover {
+    color: var(--color-accent);
+  }
+
+  .sc-badge {
+    padding: 0.125rem 0.625rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 30%, transparent);
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .sc-title {
+    margin-bottom: 0.625rem;
+    color: var(--color-fg);
+    font-size: clamp(1.75rem, 1.2rem + 2.4vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    text-wrap: balance;
+  }
+
+  .sc-summary {
+    max-width: 46rem;
+    margin-bottom: 0.875rem;
+    color: var(--color-fg-muted);
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  /* Role on its own line on a phone; one line, dot-separated, from 40rem. */
+  .sc-role {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-bottom: 1.5rem;
+    color: var(--color-fg-muted);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  .sc-role strong {
+    color: var(--color-fg);
+    font-weight: 600;
+  }
+
+  @media (width >= 40rem) {
+    .sc-role {
+      flex-direction: row;
+      flex-wrap: wrap;
+      column-gap: 0.5rem;
+      margin-bottom: 2.75rem;
+    }
+
+    .sc-role strong::after {
+      content: '·';
+      margin-left: 0.5rem;
+      color: var(--color-fg-faint);
+      font-weight: 400;
+    }
+  }
+
+  /* The product's site under the role line. The role line gives up part of
+     its gap so the button sits with it, and the button keeps the gap before
+     "What I did". A button rather than a word in the title or a link at the
+     top right: the author tried both, and neither looked right. */
+  .sc-role:has(+ .sc-visit) {
+    margin-bottom: 1rem;
+  }
+
+  .sc-visit {
+    display: flex;
+    margin-bottom: 1.5rem;
+  }
+
+  @media (width >= 40rem) {
+    .sc-role:has(+ .sc-visit) {
+      margin-bottom: 1.25rem;
+    }
+
+    .sc-visit {
+      margin-bottom: 2.75rem;
+    }
+  }
+
+  .sc-hero__grid {
+    display: grid;
+    gap: 1.75rem;
+  }
+
+  @media (width >= 48rem) {
+    .sc-hero__grid {
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      align-items: start;
+      gap: 3.5rem;
+    }
+  }
+
+  .sc-label,
+  .sc-body :global(h2) {
+    margin-bottom: 0.75rem;
+    color: var(--color-fg-meta);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* The markdown body: the author's part, as numbered rows. The numbers are
+     a CSS counter, so the entry stays an ordinary bullet list.
+     --sc-nudge centres the 13px row number on the first 1.5-high text line. */
+  .sc-body :global(ul) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: part;
+  }
+
+  .sc-body :global(li) {
+    --sc-row: 0.625rem;
+    --sc-nudge: 0.22rem;
+    position: relative;
+    padding: var(--sc-row) 0 var(--sc-row) 2.5rem;
+    border-top: 1px solid var(--color-line);
+    color: var(--color-fg-body);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+    counter-increment: part;
+  }
+
+  @media (width >= 48rem) {
+    .sc-body :global(li) {
+      --sc-row: 1rem;
+      --sc-nudge: 0.31rem;
+      font-size: 1.0625rem;
+    }
+
+    .sc-label,
+    .sc-body :global(h2) {
+      margin-bottom: 1rem;
+    }
+  }
+
+  .sc-body :global(li:last-child) {
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .sc-body :global(li)::before {
+    content: counter(part, decimal-leading-zero);
+    position: absolute;
+    top: calc(var(--sc-row) + var(--sc-nudge));
+    left: 0;
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.2;
+  }
+
+  .sc-body :global(strong) {
+    color: var(--color-fg);
+    font-weight: 600;
+  }
+
+  .sc-body :global(p) {
+    margin-bottom: 1rem;
+    color: var(--color-fg-body);
+    line-height: 1.7;
+  }
+
+  .sc-body :global(a) {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
+    text-underline-offset: 2px;
+  }
+
+  /* The tools, one row per plain-English group, ruled like the rows beside
+     them. The labels share one column so the names line up down the list. */
+  .sc-stack {
+    margin: 0;
+  }
+
+  .sc-stack > div {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.75rem;
+    padding: 0.3125rem 0;
+    border-top: 1px solid var(--color-line);
+  }
+
+  @media (width >= 48rem) {
+    .sc-stack > div {
+      grid-template-columns: 6.25rem minmax(0, 1fr);
+      padding: 0.5rem 0;
+    }
+  }
+
+  .sc-stack > div:last-child {
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .sc-stack dt {
+    color: var(--color-fg-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3125rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* The site's chip, a step up on a wide screen, where the stack is a
+     headline fact. At 390px the smaller size keeps each group on one line. */
+  .sc-chips li {
+    padding: 0.1875rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  @media (width >= 48rem) {
+    .sc-chips li {
+      padding: 0.25rem 0.625rem;
+      font-size: 0.8125rem;
+    }
+  }
+
+  /* ---- 2. The agents I built ------------------------------------------- */
+
+  .sc-band {
+    padding: 3.5rem 0;
+    background: var(--color-band);
+  }
+
+  @media (width >= 64rem) {
+    .sc-band {
+      padding: 5rem 0;
+    }
+  }
+
+  .sc-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  /* A step darker than elsewhere: fg-meta is under 4.5:1 on the band. */
+  .sc-head .sc-label {
+    margin-bottom: 0;
+    color: var(--color-fg-muted);
+  }
+
+  .sc-note {
+    color: var(--color-fg-muted);
+    font-size: 0.8125rem;
+  }
+
+  .sc-sub + .sc-sub {
+    margin-top: 3rem;
+  }
+
+  .sc-sub__head {
+    margin-bottom: 1.25rem;
+  }
+
+  .sc-sub__title {
+    color: var(--color-fg);
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .sc-sub__text {
+    max-width: 44rem;
+    margin-top: 0.5rem;
+    color: var(--color-fg-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  /* A page the agent's line points to, set like a picture step's link
+     (WorkPicture): building operations links to the data platform it reads. */
+  .sc-sub__more {
+    margin-top: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  .sc-sub__more a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s;
+  }
+
+  .sc-sub__more a:hover {
+    text-decoration-color: var(--color-accent);
+  }
+
+  .sc-agents {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (width >= 48rem) {
+    .sc-agents {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.25rem;
+    }
+  }
+
+  /* Six tracks: a card spans two, or three (WorkAgentDemo). */
+  @media (width >= 80rem) {
+    .sc-agents {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
+
+  /* ---- The header of a collapsed section -------------------------------- */
+
+  /* A title, one line of facts and a chevron. The facts (the agents' names,
+     the platform's number) stay readable while it is closed. */
+  .sc-fold {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 1.25rem;
+    border-radius: 1.25rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .sc-fold::-webkit-details-marker {
+    display: none;
+  }
+
+  .sc-fold :is(h2, h3) {
+    transition: color 0.15s;
+  }
+
+  .sc-fold:hover :is(h2, h3) {
+    color: var(--color-accent);
+  }
+
+  .sc-fold:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sc-fold__names {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1;
+    gap: 0.125rem 0.5rem;
+    color: var(--color-fg-muted);
+    font-size: 0.9375rem;
+  }
+
+  .sc-fold__names span:not(:last-child)::after {
+    content: '·';
+    margin-left: 0.5rem;
+    color: var(--color-fg-faint);
+  }
+
+  .sc-fold__chev {
+    display: grid;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+    transition: transform 0.2s;
+  }
+
+  .sc-fold__chev svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  details[open] > .sc-fold .sc-fold__chev {
+    transform: rotate(180deg);
+  }
+
+  @media (width >= 48rem) {
+    .sc-fold {
+      padding: 1.5rem 1.75rem;
+    }
+  }
+
+  /* The other agents: the header is the panel, the cards sit below it on the
+     band, so no card ends up inside another. */
+  .sc-more > .sc-fold {
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+  }
+
+  .sc-more[open] > .sc-fold {
+    margin-bottom: 1.25rem;
+  }
+
+  /* ---- 3. The whole project, collapsed --------------------------------- */
+
+  .sc-platform {
+    padding: 3.5rem 0 4.5rem;
+  }
+
+  @media (width >= 64rem) {
+    .sc-platform {
+      padding: 5rem 0 6rem;
+    }
+  }
+
+  .sc-details {
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    background: var(--color-surface);
+  }
+
+  .sc-details__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    color: var(--color-fg);
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .sc-details__tag {
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 999px;
+    color: var(--color-fg-meta);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .sc-details__stats {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1;
+    gap: 0.25rem 1.25rem;
+    color: var(--color-fg-muted);
+    font-size: 0.9375rem;
+  }
+
+  .sc-details__stats strong {
+    color: var(--color-fg);
+    font-weight: 700;
+  }
+
+  .sc-details__body {
+    padding: 1.5rem 1.25rem 1.75rem;
+    border-top: 1px solid var(--color-line);
+  }
+
+  @media (width >= 48rem) {
+    .sc-details__body {
+      padding: 2rem 1.75rem 2.25rem;
+    }
+  }
+
+  .sc-headline {
+    max-width: 40rem;
+    margin-bottom: 1.75rem;
+    color: var(--color-fg);
+    font-size: clamp(1.5rem, 1.1rem + 1.8vw, 2.25rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+
+  .sc-headline em {
+    color: var(--color-accent);
+    font-style: normal;
+  }
+
+  /* Who built what, one line under the headline; the headline then closes
+     up to it. */
+  .sc-headline:has(+ .sc-pnote) {
+    margin-bottom: 0.75rem;
+  }
+
+  .sc-pnote {
+    max-width: 40rem;
+    margin-bottom: 1.75rem;
+    color: var(--color-fg-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  /* The platform's areas: one ruled group each, two to a row from 48rem. */
+  .sc-groups {
+    display: grid;
+    gap: 1.5rem 2.5rem;
+  }
+
+  @media (width >= 48rem) {
+    .sc-groups {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .sc-group {
+    padding-top: 0.875rem;
+    border-top: 1px solid var(--color-line);
+  }
+
+  .sc-group__name {
+    margin-bottom: 0.625rem;
+    color: var(--color-fg);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .sc-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sc-mine {
+    margin-left: 0.5rem;
+    padding: 0.0625rem 0.4375rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Work the author did with someone else: the same badge, outlined and in
+     the muted text colour, so "Mine" stays the one that stands out. */
+  .sc-mine--shared {
+    padding: 0 0.375rem;
+    border: 1px solid var(--color-line-strong);
+    background: transparent;
+    color: var(--color-fg-muted);
+  }
+
+  .sc-extras {
+    display: grid;
+    gap: 1.5rem 2.5rem;
+    margin-top: 2rem;
+  }
+
+  @media (width >= 48rem) {
+    .sc-extras {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .sc-list li {
+    position: relative;
+    padding-left: 1.25rem;
+    color: var(--color-fg-body);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .sc-list li::before {
+    content: '';
+    position: absolute;
+    top: 0.55em;
+    left: 0.125rem;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+  }
+
+  .sc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-line);
+  }
+
+  .sc-action {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    background: var(--color-invert);
+    color: var(--color-on-invert);
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 0.15s;
+  }
+
+  .sc-action:hover {
+    background: var(--color-accent);
+  }
+
+  .sc-action--ghost {
+    border: 1px solid var(--color-line-strong);
+    background: transparent;
+    color: var(--color-fg);
+  }
+
+  .sc-action--ghost:hover {
+    border-color: var(--color-accent);
+    background: transparent;
+    color: var(--color-accent);
+  }
+</style>
