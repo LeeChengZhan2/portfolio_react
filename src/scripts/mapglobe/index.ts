@@ -1,14 +1,10 @@
 /**
  * Page wiring for the MapLibre earth on /about/travel-preview.
  *
- * Same shape as src/scripts/globe/index.ts on purpose — the two sections are
- * meant to be compared, so anything that differs between them should be a real
- * difference rather than an accident of how they were wired.
- *
- * Everything expensive is deferred: MapLibre, the style and the same ~1.1 MB of
- * local geometry the three.js globe reads sit behind a dynamic import that does
- * not fire until the stage is a screen away. A visitor who never scrolls past
- * the first earth pays nothing for the second.
+ * Everything expensive is deferred: MapLibre, its worker, the style and every
+ * geometry file sit behind a dynamic import that does not fire until the stage
+ * is a screen away. A visitor who reads the timeline and leaves pays nothing
+ * for the map.
  *
  * A delegated listener, not an island.
  */
@@ -753,6 +749,12 @@ if (section && stage && labelLayer) {
     }
     closeInfoMenu();
 
+    /* Everything below acts on THIS section's map. The showcase section further
+       down the page shares the engine, so the route cards it builds carry the
+       same `data-mapglobe-trail` attribute — and without this, a click on one
+       of them would re-aim the map above it instead (24 Nov 2026). */
+    if (!target || !section.contains(target)) return;
+
     const modeButton = target?.closest<HTMLElement>('[data-mapglobe-mode]');
     if (modeButton && isMode(modeButton.dataset.mapglobeMode)) {
       mode = modeButton.dataset.mapglobeMode;
@@ -1076,7 +1078,7 @@ if (section && stage && labelLayer) {
       setStatus('ready', '');
     } catch (error) {
       // A map that fails is not a page that fails. The timeline above it is the
-      // content; both earths are illustrations of it.
+      // content; the map is an illustration of it.
       section!.dataset.state = 'failed';
       setStatus('failed', 'The map could not be drawn. The trips above are unaffected.');
       console.error('mapglobe: failed to start', error);

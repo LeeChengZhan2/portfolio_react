@@ -2,23 +2,30 @@
 import { getEntry, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import TravelContent from '../../components/astro/TravelContent.astro';
-import GlobeStage from '../../components/astro/GlobeStage.astro';
 import trails from '../../data/trails.json';
 import MapGlobeStage from '../../components/astro/MapGlobeStage.astro';
-import MapUxPreview from '../../components/astro/MapUxPreview.astro';
-import type { GlobeTrip } from '../../scripts/globe/engine';
+import MapShowcase, { type ShowcaseTrip } from '../../components/astro/MapShowcase.astro';
 import type { MapTrip } from '../../scripts/mapglobe/engine';
-import { getSections, getTrips, tripYear, walkedOn as walkedOnTrips } from '../../lib/content';
+import {
+  formatTripDates,
+  getSections,
+  getTrips,
+  tripPhotos,
+  tripYear,
+  walkedOn as walkedOnTrips,
+} from '../../lib/content';
 
 /**
- * /about/travel with a 3D earth under the timeline — six stylised looks behind
- * a switcher, so they can be judged in the real page instead of from
- * screenshots.
+ * /about/travel with the MapLibre earth under the timeline, so it can be judged
+ * in the real page instead of from screenshots.
+ *
+ * It used to hold two more sections: a three.js earth in six looks, and a
+ * mock-up of three ways to navigate the map. Both were removed on 24 Nov 2026
+ * at the author's call — MapLibre is the earth that stays.
  *
  * Throwaway, like /theme-preview: noindex, out of the sitemap, and reachable
- * only from a small link on /about/travel. When a look is chosen, move
- * GlobeStage onto the real page and delete this file, the switcher, and the
- * link.
+ * only from a small link on /about/travel. When the earth is ready, move
+ * MapGlobeStage onto the real page and delete this file and the link.
  *
  * The body is the same TravelContent the real page renders, so "all the travel
  * information" here cannot fall behind what /about/travel says.
@@ -45,7 +52,7 @@ const prev = sections[index - 1];
 const next = sections[index + 1];
 
 /**
- * What the globe needs about each trip: a label, a date and somewhere to go.
+ * What the map needs about each trip: a label, a date and somewhere to go.
  * Positions are not here — they come from the built-up footprint in
  * public/globe/visited.json, keyed by the same id, so a marker can never sit
  * somewhere the highlighted area is not.
@@ -55,23 +62,12 @@ const next = sections[index + 1];
  * a trip in the sequence. Undated trips say so rather than showing nothing —
  * tripYear returns null below year precision.
  */
-const globeTrips: GlobeTrip[] = trips.map((trip) => ({
+const mapTrips: MapTrip[] = trips.map((trip) => ({
   id: trip.id,
   label: trip.data.title.split(',')[0]!.trim(),
   when: tripYear(trip.data) ?? 'Undated',
   href: `/about/travel/${trip.id}`,
 }));
-
-/**
- * Both earths now read exactly the same trip array, so `MapTrip` and `GlobeTrip`
- * are the same shape and this is an alias rather than a second mapping.
- *
- * It carried one field more until 3 Sep 2026 — `country`, which the MapLibre
- * atlas used to pick the country labels it drew in the accent. That highlight
- * came off at the author's request (the footprints already say where the trips
- * are), and the field went with it rather than being left as data nothing reads.
- */
-const mapTrips: MapTrip[] = globeTrips;
 
 /**
  * Which recorded routes were walked on which trip, from the dates alone.
@@ -88,11 +84,32 @@ const mapTrips: MapTrip[] = globeTrips;
 const walkedOn: Record<string, string[]> = Object.fromEntries(
   [...walkedOnTrips(trips, trails)].map(([id, routes]) => [id, routes.map((route) => route.id)]),
 );
+
+/**
+ * The redesigned section underneath needs more about each trip than the map
+ * does — the dates to place it on its timeline, the country and the summary
+ * for its panel, and the photo for its wall: the `cover` the timeline above
+ * draws, or a cover.* dropped into the trip's folder (see `tripPhotos`).
+ * Dates are formatted by the same lib/content.ts helpers the timeline uses, so
+ * the two cannot print a trip differently.
+ */
+const photos = await tripPhotos(trips);
+const showcaseTrips: ShowcaseTrip[] = trips.map((trip) => ({
+  id: trip.id,
+  label: trip.data.title.split(',')[0]!.trim(),
+  country: trip.data.country ?? null,
+  when: tripYear(trip.data) ?? 'Undated',
+  dates: formatTripDates(trip.data) ?? 'Dates to confirm',
+  start: trip.data.start ?? null,
+  summary: trip.data.summary ?? null,
+  href: `/about/travel/${trip.id}`,
+  cover: photos.get(trip.id),
+}));
 ---
 
 <BaseLayout
   title="Travel — globe preview"
-  description="The travel timeline with a 3D earth under it, in six styles."
+  description="The travel timeline with a 3D earth under it: the places visited and the routes walked."
   noindex
 >
   <Fragment slot="head">
@@ -114,17 +131,19 @@ const walkedOn: Record<string, string[]> = Object.fromEntries(
     prev={prev}
     next={next}
   >
+    {/* Keep the <a> on the same line as the words before it: Astro drops the
+        whitespace between a text node and a tag that opens the next line, and
+        this sentence shipped as "butthe real travel page" that way. */}
     <p class="preview-flag" slot="header-extra">
       <span class="preview-flag__tag">Preview</span>
       <span>
-        Six globe styles, one at a time. Not linked from anywhere but
-        <a href="/about/travel">the real travel page</a>.
+        The travel page with a map under the timeline. Not linked from anywhere but <a
+        href="/about/travel">the real travel page</a>.
       </span>
     </p>
 
-    <GlobeStage slot="after-timeline" trips={globeTrips} />
     <MapGlobeStage slot="after-timeline" trips={mapTrips} walkedOn={walkedOn} />
-    <MapUxPreview slot="after-timeline" trips={mapTrips} />
+    <MapShowcase slot="after-timeline" trips={showcaseTrips} walkedOn={walkedOn} />
 
     <Content slot="essay" />
   </TravelContent>
@@ -132,9 +151,8 @@ const walkedOn: Record<string, string[]> = Object.fromEntries(
 
 <script>
   import '../../scripts/trips-view';
-  import '../../scripts/globe';
   import '../../scripts/mapglobe';
-  import '../../scripts/map-ux-preview';
+  import '../../scripts/mapglobe/showcase';
 </script>
 
 <style>

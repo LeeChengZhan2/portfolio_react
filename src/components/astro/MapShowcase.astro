@@ -1,0 +1,3106 @@
+---
+/**
+ * THE SHOWCASE — the MapLibre earth with a redesigned frontend, directly under
+ * the original section on /about/travel-preview so the two can be compared on
+ * one page (24 Nov 2026, author's request: "duplicate the MapLibre section
+ * below it and re-design the frontend — an impressive version").
+ *
+ * Same engine (src/scripts/mapglobe/engine.ts), same data, same colour
+ * contract. What changed is everything the reader touches, and every change
+ * traces to the design research done for it (recorded in CLAUDE.md):
+ *
+ *   - ONE MAP, NO TABS. World, then a place, then a trail, entered from the map
+ *     or the timeline, with a breadcrumb as the way back. Layers live behind
+ *     one button.
+ *   - ONE PHOTO AT A TIME INSTEAD OF FIGURES (25–26 Nov 2026, author's
+ *     request). One line, then the trips' photos in one frame, taking turns —
+ *     no title, no counts and no dates anywhere a glance lands: "I just want
+ *     to show I like to travel at a glance with the earth view." No title
+ *     because "everyone know this is trips". Where the photos come from is
+ *     tripPhotos() in lib/content.ts.
+ *   - TWO VIEWS, TWO SUBJECTS. Globe is the trips: their photos, and the
+ *     earth with the places on it. Terrain is the trails: every route at once
+ *     (the engine's terrain mode and its overview, never one route nobody
+ *     picked), and the panel turns into a wall of route outlines.
+ *   - A TOUR. The trips in the order they happened, one camera flight each,
+ *     with a caption, and pause / previous / next / end at every step — only
+ *     ever started by the reader (WCAG 2.2.2).
+ *   - A FLYOVER. A trail flown in 3D: an eased follow camera over the real
+ *     terrain, the line drawing itself on, the profile's playhead keeping pace.
+ *     Pause, speed, scrub and re-centre, after Strava, AllTrails and Komoot;
+ *     any gesture pauses it.
+ *   - A CHRONOLOGY, KEPT FOR THE AUTHOR. One timeline that every trip and
+ *     every local trail sits on, out of sight with nothing on the page that
+ *     says it exists. It slides up when a mouse reaches the foot of the map
+ *     (25 Nov 2026: "I want to remain this for me only ... user no need to
+ *     know about the timeline"). Touch never meets it.
+ *   - SOLID PANELS FOR TEXT, GLASS ONLY FOR SMALL CONTROLS. Text never floats
+ *     on hillshade. The detail panel docks to the right on a desktop and is a
+ *     bottom sheet with three heights on a phone, so the map stays visible.
+ *
+ * Not an island: src/scripts/mapglobe/showcase.ts is a few hundred bytes that
+ * import the app and the engine when the stage is a screen away.
+ *
+ * Every rule below is a plain declaration on the theme tokens — no `@apply` —
+ * so nothing in this file can add to the stylesheet all 25 pages share.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+import type { MapTrail } from '../../scripts/mapglobe/engine';
+import trails from '../../data/trails.json';
+
+export interface ShowcaseTrip {
+  id: string;
+  label: string;
+  country: string | null;
+  when: string;
+  dates: string;
+  start: string | null;
+  summary: string | null;
+  href: string;
+  /** The trip's photo, for the wall. Build-time only: it never reaches the
+      app's payload. */
+  cover?: CollectionEntry<'trips'>['data']['cover'];
+}
+
+interface Props {
+  trips: ShowcaseTrip[];
+  walkedOn: Record<string, string[]>;
+}
+
+const { trips, walkedOn } = Astro.props;
+const routes = trails as MapTrail[];
+
+/* ---- what kind of walk each trail is (25 Nov 2026) ------------------------ */
+/** A hike that gains this much is a climb — up a mountain rather than along a
+    path. The routes split cleanly on it: Belumut, Pulai and Lambak gain 529 m
+    and more, the Changping valley legs and Cape Krathing 316 m and less. The
+    manifest only knows hike and run, so the third kind is decided here, once,
+    and handed to the app and the engine rather than worked out again. Above
+    the timeline, which marks its trails by kind too. */
+const CLIMB_ASCENT_M = 400;
+type TrailKind = 'climb' | 'hike' | 'run';
+const KINDS: TrailKind[] = ['climb', 'hike', 'run'];
+const KIND_NAME: Record<TrailKind, string> = { climb: 'Climbs', hike: 'Hikes', run: 'Runs' };
+const kindOf = (route: MapTrail): TrailKind =>
+  route.kind === 'run' ? 'run' : (route.ascent ?? 0) >= CLIMB_ASCENT_M ? 'climb' : 'hike';
+
+/* ---- the chronology ------------------------------------------------------ */
+const DAY = 86_400_000;
+/** A partial date's place on the axis: a month-precision trip sits mid-month,
+    a year-precision one mid-year — never on a day nobody wrote down. */
+const at = (value: string): number => {
+  const [y, m, d] = value.split('-').map(Number);
+  if (m === undefined) return Date.UTC(y!, 6, 1);
+  if (d === undefined) return Date.UTC(y!, m - 1, 15);
+  return Date.UTC(y!, m - 1, d);
+};
+
+const onTrips = new Set(Object.values(walkedOn).flat());
+// A trail walked on a trip is reached through that trip; the timeline carries
+// the trips and the trails that belong to no trip — the six near home.
+const local = routes.filter((route) => !onTrips.has(route.id));
+const dated = trips.filter((trip): trip is ShowcaseTrip & { start: string } => trip.start !== null);
+const times = [...dated.map((trip) => at(trip.start)), ...local.map((route) => at(route.date))];
+const t0 = Math.min(...times) - 40 * DAY;
+const t1 = Math.max(...times) + 40 * DAY;
+const pct = (t: number): number => ((t - t0) / (t1 - t0)) * 100;
+
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+interface Tick {
+  kind: 'trip' | TrailKind;
+  id: string;
+  label: string;
+  sub: string;
+  aria: string;
+  t: number;
+}
+
+const ticks: Tick[] = [
+  ...dated.map((trip): Tick => {
+    const n = (walkedOn[trip.id] ?? []).length;
+    const walked = n ? ` · ${plural(n, 'trail')}` : '';
+    return {
+      kind: 'trip',
+      id: trip.id,
+      label: trip.label,
+      sub: `${trip.dates}${walked}`,
+      aria: `${trip.label}${trip.country ? `, ${trip.country}` : ''}: ${trip.dates}${walked ? `, ${plural(n, 'trail')}` : ''}`,
+      t: at(trip.start),
+    };
+  }),
+  ...local.map(
+    (route): Tick => ({
+      kind: kindOf(route),
+      id: route.id,
+      label: route.label,
+      sub: `${route.when} · ${route.km.toFixed(1)} km`,
+      aria: `${route.label}, ${kindOf(route)}: ${route.when}, ${route.km.toFixed(1)} km`,
+      t: at(route.date),
+    }),
+  ),
+].sort((a, b) => a.t - b.t);
+
+const firstYear = new Date(t0).getUTCFullYear();
+const lastYear = new Date(t1).getUTCFullYear();
+const years: { label: string; pct: number }[] = [];
+for (let y = firstYear + 1; y <= lastYear; y++) years.push({ label: String(y), pct: pct(Date.UTC(y, 0, 1)) });
+
+/* ---- the trail outlines, for the Terrain view's panel --------------------- */
+/* Each route drawn as its own shape: read at build time off the same geometry
+   file the map fetches, flattened by the cosine of its latitude so a walk is
+   not stretched east to west, fitted into a 100-unit square, and thinned to
+   what a tile 5rem across can show. Nothing here is fetched at runtime, and a
+   file that cannot be read leaves its tile with a name and no outline. */
+const SHAPE_PAD = 6;
+
+/** Ramer–Douglas–Peucker: keep only the points that bend the line. */
+function thin(points: [number, number][], tolerance: number): [number, number][] {
+  if (points.length < 3) return points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const spans: [number, number][] = [[0, points.length - 1]];
+  while (spans.length) {
+    const [a, b] = spans.pop()!;
+    const [ax, ay] = points[a]!;
+    const [bx, by] = points[b]!;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length = Math.hypot(dx, dy);
+    let far = -1;
+    let farthest = tolerance;
+    for (let i = a + 1; i < b; i++) {
+      const [px, py] = points[i]!;
+      // A span whose two ends are one point has no line to measure from, so
+      // the distance is to that point. A walk that finishes where it started
+      // begins as one. Measured off a line of no length instead, every point
+      // scores zero and the whole shape is thinned away to a dot — which is
+      // what happened to the city outlines this panel drew until 25 Nov 2026.
+      const off = length ? Math.abs(dx * (py - ay) - dy * (px - ax)) / length : Math.hypot(px - ax, py - ay);
+      if (off > farthest) {
+        far = i;
+        farthest = off;
+      }
+    }
+    if (far > 0) {
+      keep[far] = 1;
+      spans.push([a, far], [far, b]);
+    }
+  }
+  return points.filter((_, i) => keep[i]);
+}
+
+/** In the 100-unit square, where a unit is about half a pixel on a tile. */
+const TOLERANCE = 0.5;
+
+/** A walk's line of [lon, lat], fitted into the 100-unit square. */
+function shapeOf(line: [number, number][]): { d: string; start: [number, number] } | null {
+  if (line.length < 2) return null;
+  const k = Math.cos((line.reduce((sum, [, lat]) => sum + lat, 0) / line.length) * (Math.PI / 180));
+  const xs = line.map(([lon]) => lon * k);
+  const ys = line.map(([, lat]) => -lat);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const scale = (100 - 2 * SHAPE_PAD) / (Math.max(x1 - x0, y1 - y0) || 1);
+  const ox = (100 - (x1 - x0) * scale) / 2;
+  const oy = (100 - (y1 - y0) * scale) / 2;
+  const points = thin(
+    line.map(([lon, lat]): [number, number] => [ox + (lon * k - x0) * scale, oy + (-lat - y0) * scale]),
+    TOLERANCE,
+  );
+  return {
+    d: points.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(''),
+    start: points[0]!,
+  };
+}
+
+function outlineOf(id: string): { d: string; start: [number, number] } | null {
+  try {
+    return shapeOf(JSON.parse(readFileSync(join(process.cwd(), 'public', 'globe', 'trails', `${id}.json`), 'utf8')));
+  } catch {
+    return null;
+  }
+}
+
+/* The manifest's own order within each kind: newest first. */
+const outlines = routes.map((route) => ({ route, outline: outlineOf(route.id) }));
+
+/* ---- the reel, for the Globe view's panel --------------------------------- */
+/* The order the photos come round in: newest first, which is the order
+   getTrips() hands them over in, but the trips with a photo together and ahead
+   of the ones still waiting for theirs. */
+const reel = [...trips.filter((trip) => trip.cover), ...trips.filter((trip) => !trip.cover)];
+
+/* A sign for each kind: a summit flag on a peak, a walker with a pole, a runner.
+   One drawing per kind, as 16-unit strokes, painted everywhere as a CSS mask
+   filled with the text colour. The drawings reach the CSS as custom
+   properties set on the section, so the panel, the filter, the trail panel
+   and the cards on the map all draw the same one — including the cards the
+   engine builds and the panels the app builds, which no markup here reaches. */
+const KIND_ICON: Record<TrailKind, string[]> = {
+  climb: ['M1.5 14.25 6.75 5.5 9.1 9.35 10.75 6.9 14.5 14.25Z', 'M6.75 5.5V1.5', 'M6.75 1.6 10.25 2.75 6.75 3.9'],
+  hike: [
+    'M9.6 2.3a1.3 1.3 0 1 1-2.6 0 1.3 1.3 0 1 1 2.6 0Z',
+    'M8 4.4 7.1 8.7',
+    'M7.1 8.7 8.6 11.4 8.9 14.6',
+    'M7.1 8.7 6 11.6 4.6 14.6',
+    'M7.8 5.2 10.4 7.3',
+    'M7.7 5.3 5.7 7.4',
+    'M10.9 5.6 11.6 14.6',
+  ],
+  run: [
+    'M11.7 2.4a1.3 1.3 0 1 1-2.6 0 1.3 1.3 0 1 1 2.6 0Z',
+    'M9.6 4.5 7.6 8.6',
+    'M7.6 8.6 10.3 9.9 9.5 13.9',
+    'M7.6 8.6 5.9 11.2 3.1 11.6',
+    'M9.3 5.2 11.3 6.6 12.9 5.6',
+    'M9.1 5.4 7 5.9 5.7 7.8',
+  ],
+};
+const iconUrl = (kind: TrailKind): string => {
+  const paths = KIND_ICON[kind].map((d) => `<path d="${d}"/>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+};
+const kindIcons = KINDS.map((kind) => `--xp-icon-${kind}:${iconUrl(kind)}`).join(';');
+
+/* ---- what the app reads --------------------------------------------------- */
+const payload = {
+  trips: trips.map(({ start: _start, cover: _cover, ...trip }) => ({ ...trip, routes: walkedOn[trip.id] ?? [] })),
+  tour: [...dated].sort((a, b) => at(a.start) - at(b.start)).map((trip) => trip.id),
+  trails: routes,
+  walkedOn,
+  trailKinds: Object.fromEntries(routes.map((route) => [route.id, kindOf(route)])),
+};
+---
+
+<section class="xp" data-xp aria-label="Trips and trails" data-state="loading" style={kindIcons}>
+  <p class="xp-tag">
+    <span class="xp-tag__chip">Redesign</span>
+    <span>The map above, rebuilt on the same engine and data with a new frontend.</span>
+  </p>
+
+  <div class="xp-stage" data-xp-stage>
+    {/* Two faces, one per view: the trips while the globe is up, the trails
+        while the terrain is. CSS swaps them off the section's data-view, which
+        the app sets; with no app the globe's face is the one that shows. No
+        buttons on either (25 Nov 2026, author's call): the tiles are the way
+        in, and the tour and the flyover are a choice inside, not a pitch.
+
+        NO TITLE (25 Nov 2026, author's request): "dont put trips word because
+        everyone know this is trips". The same is true of "Trails", so neither
+        is shown; both stay as headings for a screen reader, out of sight. Each
+        face has one line instead, in the same hand and at the same size on
+        both: right above the photo on the Globe, at the top on the Terrain. A
+        wordless version, with the names
+        hidden until hovered, was tried the same day and judged ugly: "still
+        can put the desc".
+
+        Hovering a tile or the photo lights its place's card on the map, and
+        hovering a card lights its tile or brings up its photo
+        (showcase-app.ts), so the panel and the place on the globe can be
+        matched up without reading either.
+
+        The header is a full-height column with the face at its top. The
+        engine clears a reserved box by its shape (framePadding in engine.ts):
+        taller than wide is cleared sideways, anything else vertically. Sized
+        to its content, the Trails face is no longer taller than wide once the
+        filter hides a row, and by the engine's arithmetic the overview fit
+        then fails its 45% test at 1440 and falls back to plain padding. A
+        column is taller than wide at every stage height. It lets pointer
+        events through to the map below the face. */}
+    <header class="xp-hero" data-xp-hero data-mapglobe-reserve>
+      <div class="xp-hero__face xp-hero__face--globe">
+        <h2 class="xp-sr" id="xp-trips-title">Trips</h2>
+        <p class="xp-hero__lede">Pick a memory to fly there.</p>
+        {/* ONE PHOTO AT A TIME (26 Nov 2026, author's request): "I no need to
+            show all trips and photo at a glance ... show only 1 or few frame
+            at 1 time and use animation to swap it. Show the picture in so
+            small frame also weird." A wall of nine tiles had been tried small,
+            then at the column's width, and read as an index squeezed beside
+            the earth either way. The globe already shows every trip as a
+            card; this panel is for the pictures.
+
+            So: one frame the column's width, the photo in it drifting slowly
+            and swapping for the next on its own (showcase-app.ts runs it).
+            Pointing at a trip's card on the globe brings that trip's photo up,
+            and pointing at the photo lights the card, so the globe is the
+            index and this is the picture. A click on either flies there.
+
+            The caption is the place and its country and nothing else. Each
+            trip's summary is about WHEN — the season, the month — which the
+            author keeps off anything a glance lands on.
+
+            PHOTOS ONLY (25 Nov 2026): "dont show the trips area It should
+            display the photo". A trip with no photo yet holds its frame with
+            the hatching the travel timeline uses, never a drawing of the
+            city's built-up area. The earth has not moved through any of this:
+            it is placed by the column, and the column is unchanged.
+
+            How a photo gets in is tripPhotos() in lib/content.ts, and for the
+            author src/assets/travel/README.md. The photo is decoration inside
+            a button its caption already labels, so its alt is empty. */}
+        <div class="xp-reel" data-xp-reel role="region" aria-roledescription="carousel" aria-labelledby="xp-trips-title">
+          <div class="xp-reel__slides">
+            {
+              reel.map((trip, i) => (
+                <div
+                  class="xp-reel__slide"
+                  role="group"
+                  aria-roledescription="slide"
+                  aria-label={`${i + 1} of ${reel.length}`}
+                  data-xp-slide={trip.id}
+                  data-active={i === 0 ? '' : undefined}
+                  inert={i !== 0}
+                >
+                  <button type="button" class="xp-reel__card" data-xp-trip={trip.id}>
+                    <span class="xp-reel__frame">
+                      {trip.cover ? (
+                        <Image
+                          src={trip.cover}
+                          alt=""
+                          width={800}
+                          widths={[400, 800]}
+                          sizes="(max-width: 52rem) min(34rem, calc(100vw - 2rem)), 22rem"
+                          class="xp-reel__img"
+                        />
+                      ) : (
+                        <span class="xp-reel__hold">Photo to come</span>
+                      )}
+                    </span>
+                    <span class="xp-reel__dwell" aria-hidden="true">
+                      <span data-xp-reel-dwell />
+                    </span>
+                    <span class="xp-reel__caption">
+                      <span class="xp-reel__place">{trip.label}</span>
+                      {trip.country && (
+                        <span class="xp-reel__country">
+                          <span class="xp-sr">, </span>
+                          {trip.country}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              ))
+            }
+          </div>
+          <div class="xp-reel__controls">
+            <button type="button" class="xp-icon-btn" data-xp-reel-step="-1" aria-label="Previous photo">
+              <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="M10 3.5 5.5 8l4.5 4.5"></path></svg>
+            </button>
+            <button type="button" class="xp-icon-btn xp-reel__pause" data-xp-reel-pause aria-pressed="false" aria-label="Pause the photos">
+              <svg class="xp-icon xp-reel__when-playing" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 3h2.6v10H4.5zM8.9 3h2.6v10H8.9z"></path></svg>
+              <svg class="xp-icon xp-reel__when-paused" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 2.8v10.4L13 8 4.5 2.8Z"></path></svg>
+            </button>
+            <button type="button" class="xp-icon-btn" data-xp-reel-step="1" aria-label="Next photo">
+              <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="m6 3.5 4.5 4.5L6 12.5"></path></svg>
+            </button>
+          </div>
+        </div>
+        {/* THE LINE (27 Nov 2026, the author's pick from a mixer of words,
+            size, typeface and place): "Pick a memory to fly there.",
+            handwritten, right above the photo. The Terrain face's line takes
+            the same hand and size and keeps its place at the top. The photo
+            does not move for it ("dont change the photo location"): the line
+            hangs off the top edge of this face, out of the flow, so the photo
+            stays level with the middle of the globe. Before this it was "Pick
+            a trip to fly there." in the site's own sans at the top of the
+            column; before that "Pick a trip to fly there, or spin the globe.",
+            over the photo and then under the place's name; and for one round
+            nothing, which left the face looking empty. */}
+      </div>
+      <div class="xp-hero__face xp-hero__face--terrain">
+        <h2 class="xp-sr">Trails</h2>
+        <p class="xp-hero__lede">Pick a trail to fly down to it.</p>
+        {/* A row per kind under its own sign — climbs, hikes, runs — and a tile
+            per route in it, drawn as its own outline in the accent, the shape
+            of the walk where a trip's tile has its photo. The Terrain filter
+            hides a whole row when its kind is switched off. */}
+        {
+          KINDS.map((kind) => {
+            const members = outlines.filter(({ route }) => kindOf(route) === kind);
+            return (
+              members.length > 0 && (
+                <div class="xp-kinds" role="group" aria-labelledby={`xp-kind-${kind}`} data-xp-kind-group={kind}>
+                  <h3 class="xp-kinds__title" id={`xp-kind-${kind}`}>
+                    <span class="xp-kind" data-kind={kind} aria-hidden="true" />
+                    {KIND_NAME[kind]}
+                  </h3>
+                  <ul class="xp-wall">
+                    {members.map(({ route, outline }) => (
+                      <li>
+                        <button type="button" class="xp-wall__tile xp-wall__tile--trail" data-xp-trail={route.id} data-kind={kind}>
+                          {outline && (
+                            <svg class="xp-wall__outline" viewBox="0 0 100 100" aria-hidden="true">
+                              <path class="xp-wall__route" d={outline.d} />
+                              <circle class="xp-wall__start" cx={outline.start[0].toFixed(1)} cy={outline.start[1].toFixed(1)} r="4" />
+                            </svg>
+                          )}
+                          <span class="xp-wall__name">{route.label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            );
+          })
+        }
+      </div>
+    </header>
+
+    <div class="xp-viewport" data-xp-viewport>
+      {/* The first frame, before a single byte of map has arrived: a sphere
+          drawn in the theme's own colours, which the live globe crossfades
+          over. An SVG with `meet` sizing, so its circle is always 86% of the
+          smaller side — the same size the engine's home camera draws. */}
+      <svg class="xp-ghost" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+          <radialGradient id="xp-ghost-fill" cx="0.36" cy="0.32" r="0.75">
+            <stop offset="0" class="xp-ghost__hi"></stop>
+            <stop offset="1" class="xp-ghost__lo"></stop>
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="43" fill="url(#xp-ghost-fill)" class="xp-ghost__sphere"></circle>
+        <ellipse cx="50" cy="50" rx="43" ry="15" class="xp-ghost__line"></ellipse>
+        <ellipse cx="50" cy="50" rx="17" ry="43" class="xp-ghost__line"></ellipse>
+        <line x1="7" y1="50" x2="93" y2="50" class="xp-ghost__line"></line>
+      </svg>
+
+      <div class="xp-map" data-xp-map></div>
+      <div class="xp-labels" data-xp-labels></div>
+
+      <nav class="xp-crumbs" aria-label="Where you are on the map" data-xp-crumbs hidden></nav>
+
+      <div class="xp-controls" data-mapglobe-reserve>
+        <div class="xp-seg" role="radiogroup" aria-label="Map view">
+          <button type="button" role="radio" aria-checked="true" data-xp-view="globe">
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="xp-icon__stroke" cx="8" cy="8" r="6"></circle><path class="xp-icon__stroke" d="M2 8h12M8 2c2 2.2 2 9.8 0 12M8 2c-2 2.2-2 9.8 0 12"></path></svg>
+            <span>Globe</span>
+          </button>
+          <button type="button" role="radio" aria-checked="false" tabindex="-1" data-xp-view="survey">
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="M1.5 13 6 5.5l2.6 4L10.5 7l4 6Z"></path></svg>
+            <span>Terrain</span>
+          </button>
+        </div>
+        <span class="xp-controls__rule" aria-hidden="true"></span>
+        <div class="xp-layers-wrap">
+          <button
+            type="button"
+            class="xp-icon-btn"
+            aria-expanded="false"
+            aria-controls="xp-layers"
+            aria-label="Map layers"
+            title="Map layers"
+            data-xp-layers-toggle
+          >
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="M8 2 1.8 5.4 8 8.8l6.2-3.4L8 2ZM1.8 8.2 8 11.6l6.2-3.4M1.8 11 8 14.4l6.2-3.4"></path></svg>
+          </button>
+          <div class="xp-layers" id="xp-layers" data-xp-layers hidden>
+            {/* The Terrain view's own filter: which kinds of walk are on the
+                map and in the panel. The two groups after it are the Globe's;
+                CSS shows each set only in its own view. */}
+            <fieldset class="xp-layers__group xp-layers__group--terrain">
+              <legend>Show</legend>
+              {
+                KINDS.map((kind) => (
+                  <label class="xp-switch" data-kind={kind}>
+                    <span class="xp-switch__name">
+                      <span class="xp-kind" data-kind={kind} aria-hidden="true" />
+                      {KIND_NAME[kind]}
+                    </span>
+                    <input type="checkbox" data-xp-kind={kind} checked />
+                  </label>
+                ))
+              }
+            </fieldset>
+            <fieldset class="xp-layers__group xp-layers__group--globe">
+              <legend>On the map</legend>
+              <label class="xp-switch"><span>Trips</span><input type="checkbox" data-xp-content="trips" checked /></label>
+              <label class="xp-switch"><span>Trails</span><input type="checkbox" data-xp-content="trails" checked /></label>
+            </fieldset>
+            <fieldset class="xp-layers__group xp-layers__group--globe">
+              <legend>Detail</legend>
+              <label class="xp-switch"><span>Countries</span><input type="checkbox" data-xp-layer="countries" checked /></label>
+              <label class="xp-switch"><span>Cities</span><input type="checkbox" data-xp-layer="cities" /></label>
+              <label class="xp-switch"><span>Relief</span><input type="checkbox" data-xp-layer="relief" checked /></label>
+              <label class="xp-switch"><span>Peaks</span><input type="checkbox" data-xp-layer="peaks" /></label>
+              <label class="xp-switch"><span>Rivers &amp; lakes</span><input type="checkbox" data-xp-layer="water" /></label>
+            </fieldset>
+            <p class="xp-layers__keys">
+              <kbd>Esc</kbd> closes a panel or stops a flyover
+            </p>
+          </div>
+        </div>
+        <button type="button" class="xp-icon-btn" aria-label="Back to the whole globe" title="Back to the whole globe" data-xp-home>
+          <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="xp-icon__stroke" cx="8" cy="8" r="2.4"></circle><path class="xp-icon__stroke" d="M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5"></path></svg>
+        </button>
+        <button type="button" class="xp-icon-btn" aria-label="Full screen" aria-pressed="false" title="Full screen" data-xp-fullscreen>
+          <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"></path></svg>
+        </button>
+      </div>
+
+      <aside class="xp-sheet" data-xp-sheet data-mapglobe-reserve data-detent="peek" aria-labelledby="xp-sheet-title" hidden>
+        <div class="xp-sheet__bar">
+          <button type="button" class="xp-grabber" data-xp-grabber aria-label="Show more of the panel">
+            <span aria-hidden="true"></span>
+          </button>
+          <button type="button" class="xp-icon-btn xp-sheet__close" data-xp-close aria-label="Close the panel">
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="m4 4 8 8M12 4l-8 8"></path></svg>
+          </button>
+        </div>
+        <div class="xp-sheet__body" data-xp-sheet-body></div>
+      </aside>
+
+      <div class="xp-caption" data-xp-caption data-mapglobe-reserve hidden>
+        <p class="xp-caption__place" data-xp-caption-place></p>
+        <h3 class="xp-caption__title" data-xp-caption-title></h3>
+        <p class="xp-caption__text" data-xp-caption-text></p>
+        <div class="xp-caption__bar" data-xp-caption-bar aria-hidden="true"></div>
+        <div class="xp-caption__controls">
+          <button type="button" class="xp-icon-btn" aria-label="Previous trip" data-xp-tour-prev>
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="M10 3.5 5.5 8l4.5 4.5"></path></svg>
+          </button>
+          <button type="button" class="xp-icon-btn xp-icon-btn--solid" aria-label="Pause the journey" aria-pressed="false" data-xp-tour-pause>
+            <svg class="xp-icon xp-when-running" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 3h2.6v10H4.5zM8.9 3h2.6v10H8.9z"></path></svg>
+            <svg class="xp-icon xp-when-paused" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 2.8v10.4L13 8 4.5 2.8Z"></path></svg>
+          </button>
+          <button type="button" class="xp-icon-btn" aria-label="Next trip" data-xp-tour-next>
+            <svg class="xp-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__stroke" d="m6 3.5 4.5 4.5L6 12.5"></path></svg>
+          </button>
+          <span class="xp-spacer"></span>
+          <button type="button" class="xp-text-btn" data-xp-tour-end>End tour</button>
+        </div>
+      </div>
+
+      <div class="xp-hud" data-xp-hud data-mapglobe-reserve hidden>
+        <div class="xp-hud__top">
+          <p class="xp-hud__name" data-xp-hud-name></p>
+          <p class="xp-hud__clock"><span>Local time</span> <span class="xp-hud__time" data-xp-hud-clock>--:--</span></p>
+        </div>
+        <div class="xp-hud__nums">
+          <p><span class="xp-num" data-xp-hud-km>0.0</span> <span class="xp-hud__unit" data-xp-hud-total></span></p>
+          <p><span class="xp-num" data-xp-hud-ele>0</span> <span class="xp-hud__unit">m elevation</span></p>
+        </div>
+        <div
+          class="xp-hud__bar"
+          data-xp-hud-bar
+          role="slider"
+          tabindex="0"
+          aria-label="Flyover position"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        >
+          <span class="xp-hud__fill" aria-hidden="true"></span>
+        </div>
+        <div class="xp-hud__controls">
+          <button type="button" class="xp-icon-btn xp-icon-btn--solid" aria-label="Pause the flyover" data-xp-hud-pause>
+            <svg class="xp-icon xp-when-running" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 3h2.6v10H4.5zM8.9 3h2.6v10H8.9z"></path></svg>
+            <svg class="xp-icon xp-when-paused" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 2.8v10.4L13 8 4.5 2.8Z"></path></svg>
+          </button>
+          <button type="button" class="xp-text-btn xp-text-btn--chip" data-xp-hud-speed aria-label="Flyover speed: 1×">1×</button>
+          <button type="button" class="xp-text-btn xp-text-btn--chip" data-xp-hud-recentre hidden>Re-centre</button>
+          <span class="xp-spacer"></span>
+          <button type="button" class="xp-text-btn" data-xp-hud-stop>Stop</button>
+        </div>
+      </div>
+
+      <p class="xp-status" data-xp-status>Scroll on to load the map</p>
+    </div>
+
+    {/* The timeline is the author's own index, not something offered to
+        visitors (25 Nov 2026): nothing on the page says it is there. It slides
+        up while a mouse is at the foot of the map or on it — showcase-app.ts
+        decides that from the pointer, so no invisible strip sits over the map
+        catching clicks — and touch never meets it. Not reserved from the map:
+        a reservation would keep cards off the foot of the globe for a bar that
+        is not there. */}
+    <div class="xp-dock" data-xp-dock>
+      <div class="xp-chrono" id="xp-chrono" data-xp-chrono>
+        <button type="button" class="xp-play" data-xp-tour-start aria-label="Play the journey">
+          <svg class="xp-icon xp-when-idle" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 2.8v10.4L13 8 4.5 2.8Z"></path></svg>
+          <svg class="xp-icon xp-when-touring" viewBox="0 0 16 16" aria-hidden="true"><path class="xp-icon__fill" d="M4.5 3h2.6v10H4.5zM8.9 3h2.6v10H8.9z"></path></svg>
+        </button>
+        <p class="xp-chrono__readout" data-xp-readout aria-hidden="true">
+          <span data-xp-readout-label>The journey</span>
+          <small data-xp-readout-sub>Every trip and trail, in order</small>
+        </p>
+        <div class="xp-chrono__scroller">
+          <div class="xp-chrono__track">
+            <span class="xp-chrono__axis" aria-hidden="true"></span>
+            <span class="xp-chrono__fill" data-xp-progress aria-hidden="true"></span>
+            <span class="xp-chrono__year xp-chrono__year--first" aria-hidden="true">{firstYear}</span>
+            {
+              years.map((year) => (
+                <span class="xp-chrono__year" style={`left:${year.pct.toFixed(3)}%`} aria-hidden="true">
+                  {year.label}
+                </span>
+              ))
+            }
+            <ol class="xp-chrono__events" aria-label="Trips and trails, oldest first">
+              {
+                ticks.map((tick, index) => (
+                  <li class="xp-chrono__event" style={`left:${pct(tick.t).toFixed(3)}%`}>
+                    <button
+                      type="button"
+                      class={`xp-tick xp-tick--${tick.kind}`}
+                      data-xp-tick
+                      data-pct={pct(tick.t).toFixed(3)}
+                      data-label={tick.label}
+                      data-sub={tick.sub}
+                      aria-label={tick.aria}
+                      tabindex={index === 0 ? 0 : -1}
+                      {...(tick.kind === 'trip' ? { 'data-xp-trip': tick.id } : { 'data-xp-trail': tick.id })}
+                    >
+                      {tick.kind === 'trip' ? (
+                        <span class="xp-tick__mark" aria-hidden="true" />
+                      ) : (
+                        <span class="xp-tick__mark xp-kind" data-kind={tick.kind} aria-hidden="true" />
+                      )}
+                    </button>
+                  </li>
+                ))
+              }
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="xp-sr" aria-live="polite" data-xp-live></p>
+  <script type="application/json" data-xp-data set:html={JSON.stringify(payload)} is:inline />
+</section>
+
+<style>
+  .xp {
+    --xp-radius: 1.25rem;
+    --xp-panel-w: 24rem;
+    --xp-stage-h: clamp(38rem, calc(100svh - 7rem), 58rem);
+    /* The panel's column. Its right edge is what places the globe, so changing
+       it moves the earth. The placeholder globe is placed by the same width. */
+    --xp-hero-w: min(25rem, 32%);
+    --xp-mono: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+    --xp-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --xp-glass: color-mix(in oklab, var(--color-surface) 76%, transparent);
+    --xp-hairline: color-mix(in oklab, var(--color-line-strong) 85%, transparent);
+    --xp-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 10px 30px -14px rgb(0 0 0 / 0.28);
+    --xp-shadow-lg: 0 2px 6px rgb(0 0 0 / 0.06), 0 24px 60px -24px rgb(0 0 0 / 0.38);
+    /* A colour per kind of walk (25 Nov 2026), worn alongside its sign and
+       never instead of it. Under the engine's own name, because the engine
+       reads these to colour the routes on the map. One set for all eight light
+       themes and one for dark, measured against every theme: at least 4.5:1 on
+       a panel and 3:1 on the map's land in each. The lighter orange and green
+       first tried fell to 2.5:1 on the land of every light theme. */
+    --mapglobe-kind-climb: #ad390a;
+    --mapglobe-kind-hike: #166534;
+    --mapglobe-kind-run: #7e22ce;
+    margin-top: 5rem;
+    border-top: 1px solid var(--color-line);
+    padding-top: 3rem;
+  }
+
+  :global(:root.dark) .xp {
+    --mapglobe-kind-climb: #fb923c;
+    --mapglobe-kind-hike: #4ade80;
+    --mapglobe-kind-run: #c084fc;
+  }
+
+  /* Anything toggled with `hidden` here also sets `display`, and a class rule
+     beats the attribute's UA rule — the trap CLAUDE.md records for the index
+     rail. One rule settles it for the whole section. */
+  .xp [hidden] {
+    display: none !important;
+  }
+
+  .xp-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .xp-tag {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1.25rem;
+    font-size: 0.875rem;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-tag__chip {
+    border: 1px solid color-mix(in oklab, var(--color-accent) 40%, transparent);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    font-family: var(--xp-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  /* ---- the stage ------------------------------------------------------- */
+  /* Leaves the reading column, as the original frame does and for the same
+     reason — `left` and a translate, not `calc(50% - 50vw)`, because 100vw
+     includes the scrollbar. Taller than the original: tall enough to be the
+     section, short enough that it never slides under the sticky header. */
+  .xp-stage {
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(calc(100vw - 2rem), 104rem);
+    height: var(--xp-stage-h);
+    border-radius: var(--xp-radius);
+    overflow: hidden;
+    background: var(--color-band);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--xp-shadow-lg);
+  }
+
+  .xp-stage:fullscreen {
+    left: 0;
+    transform: none;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .xp-viewport {
+    position: absolute;
+    inset: 0;
+  }
+
+  .xp-map {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    scale: 0.985;
+    transition:
+      opacity 0.8s var(--xp-ease),
+      scale 1s var(--xp-ease);
+  }
+
+  .xp[data-state='ready'] .xp-map {
+    opacity: 1;
+    scale: 1;
+  }
+
+  .xp-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* Where the live globe will be: in the space right of the headline, at 86%
+     of that space's smaller side — the same rule homeCamera() applies. The
+     width is given, not left to `right`: an SVG is as wide as its own shape
+     makes it, so pinned at both sides it sat at the left and the globe came up
+     somewhere else. */
+  .xp-ghost {
+    --xp-ghost-x: calc(3rem + var(--xp-hero-w));
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--xp-ghost-x);
+    width: calc(100% - var(--xp-ghost-x));
+    height: 100%;
+    transition: opacity 0.8s var(--xp-ease);
+  }
+
+  .xp[data-state='ready'] .xp-ghost {
+    opacity: 0;
+  }
+
+  .xp-ghost__hi {
+    stop-color: color-mix(in oklab, var(--color-band) 55%, var(--color-surface));
+  }
+
+  .xp-ghost__lo {
+    stop-color: color-mix(in oklab, var(--color-band) 84%, var(--color-fg) 10%);
+  }
+
+  .xp-ghost__sphere {
+    stroke: color-mix(in oklab, var(--color-fg) 9%, transparent);
+    stroke-width: 0.2;
+  }
+
+  .xp-ghost__line {
+    fill: none;
+    stroke: color-mix(in oklab, var(--color-fg) 7%, transparent);
+    stroke-width: 0.18;
+  }
+
+  .xp-status {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 42%;
+    margin: 0;
+    text-align: center;
+    font-family: var(--xp-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .xp[data-state='ready'] .xp-status {
+    display: none;
+  }
+
+  .xp[data-state='failed'] .xp-status {
+    letter-spacing: normal;
+    text-transform: none;
+    font-size: 0.875rem;
+  }
+
+  /* ---- the hero -------------------------------------------------------- */
+  /* Set straight on the stage's ground, with no box: the home camera centres
+     the globe in the space to its right (padding, in showcase-app.ts), so on a
+     desktop nothing is ever under it to need one.
+
+     A full-height column with the face at its top, so the box the engine
+     reserves is taller than wide whatever the face holds; see the note in the
+     markup. It passes pointer events through, so the map below the face can
+     still be dragged; only the face takes them. */
+  .xp-hero {
+    position: absolute;
+    z-index: 3;
+    top: 1.5rem;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    width: var(--xp-hero-w);
+    padding: 1.4rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    transition:
+      opacity 0.24s var(--xp-ease),
+      translate 0.24s var(--xp-ease);
+  }
+
+  .xp-hero__face {
+    pointer-events: auto;
+  }
+
+  /* The trips stand beside the middle of the globe. The face is only as tall as
+     what is in it, so the map above and below can still be dragged. Its line
+     hangs off its top edge, so the face is what the line is placed against. */
+  .xp-hero__face--globe {
+    position: relative;
+    margin-block: auto;
+  }
+
+  .xp[data-hero='hidden'] .xp-hero {
+    opacity: 0;
+    translate: 0 -0.5rem;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  /* Caveat, a handwriting face, for the panel's one line and nothing else: the
+     site's only web font. Served from this site rather than from Google, so
+     the top of the page still contacts no third party, and only on this page,
+     since only this component asks for it. Medium, cut by Google Fonts to
+     English letters and punctuation (the range below), 44.5 KB: their Latin
+     cut is 50.9 KB and adds accented letters nobody types here. An accented
+     letter falls back to the next face in the stack, one letter at a time.
+     Copyright 2014 The Caveat Project Authors, SIL Open Font License 1.1
+     (scripts.sil.org/OFL); the notice is also inside the file. */
+  @font-face {
+    font-family: 'Caveat';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../../assets/fonts/caveat-500.woff2') format('woff2');
+    unicode-range: U+20-7E, U+A0, U+B7, U+2013-2014, U+2018-2019, U+201C-201D, U+2026;
+  }
+
+  /* The face's one line, and its first now that no title sits over it. Both
+     faces set it alike, handwritten in the darkest ink (27 Nov 2026, the
+     author's pick). Caveat's letters are small for their size, so 1.23rem
+     reads about as large as the sans would at 0.85rem. */
+  .xp-hero__lede {
+    margin: 0;
+    max-width: 22rem;
+    font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+    font-size: 1.23rem;
+    font-weight: 500;
+    line-height: 1.15;
+    text-wrap: balance;
+    color: var(--color-fg);
+  }
+
+  /* The Globe face's line stands right above the photo, the gap under it the
+     same 1.1rem the Terrain face leaves between its line and the trails. Hung
+     off the face's top edge and out of the flow, so the photo stays where it
+     is, level with the middle of the globe. */
+  .xp-hero__face--globe > .xp-hero__lede {
+    position: absolute;
+    bottom: calc(100% + 1.1rem);
+    left: 0;
+    right: 0;
+  }
+
+  /* One face per view; the globe's is the default, so a page whose script
+     never ran shows the trips. */
+  .xp-hero__face--terrain,
+  .xp[data-view='survey'] .xp-hero__face--globe {
+    display: none;
+  }
+
+  .xp[data-view='survey'] .xp-hero__face--terrain {
+    display: block;
+  }
+
+  /* The trails' wall: square tiles four across, a row per kind. */
+  .xp-wall {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 1.35rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* ---- the reel: the trips' photos, one at a time ------------------------ */
+  /* One frame the column's width, so the panel still ends where the Terrain
+     view's does, at the edge the globe is centred from. 4:3, the shape most
+     travel photos are taken in. */
+  .xp-reel {
+    position: relative;
+  }
+
+  /* Every slide in one grid cell, so the reel is as tall as its tallest
+     caption and nothing under it moves when a long name comes round. */
+  .xp-reel__slides {
+    display: grid;
+  }
+
+  /* The photos cross-fade. The captions trade places faster, the old one gone
+     before the new one rises, so two names are never seen over each other. */
+  .xp-reel__slide {
+    grid-area: 1 / 1;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.9s var(--xp-ease),
+      visibility 0s linear 0.9s;
+  }
+
+  /* `inherit`, never `visible`: the panel is put away with visibility while a
+     trip is open, and a slide that said `visible` would stay clickable and
+     focusable inside it, invisible at opacity 0. */
+  .xp-reel__slide[data-active] {
+    opacity: 1;
+    visibility: inherit;
+    transition: opacity 0.9s var(--xp-ease);
+  }
+
+  .xp-reel__card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .xp-reel__frame {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    transition:
+      border-color 0.18s var(--xp-ease),
+      box-shadow 0.18s var(--xp-ease);
+  }
+
+  /* Hovered, or lit because its card on the globe is pointed at. */
+  .xp-reel__card:hover .xp-reel__frame,
+  .xp-reel__card.xp-lit .xp-reel__frame {
+    border-color: var(--color-accent);
+  }
+
+  .xp-reel__card:focus-visible {
+    outline: none;
+  }
+
+  .xp-reel__card:focus-visible .xp-reel__frame {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* The trip whose panel is open, where the reel stays in view: on a phone it
+     sits above the map rather than being put away. */
+  .xp-reel__card[aria-current='true'] .xp-reel__frame {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent);
+  }
+
+  /* A frame waiting for its photo: the travel timeline's 8px diagonal rule,
+     which reads as a space being held where a flat one reads as a failed
+     load. One large frame of it is texture; nine small ones were a wall of
+     nothing. */
+  .xp-reel__hold {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: var(--xp-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-muted);
+    background-image: repeating-linear-gradient(-45deg, transparent 0 7px, var(--color-line) 7px 8px);
+  }
+
+  /* The timing. Each slide's bar fills over the dwell, and the bar ending is
+     what turns the reel (animationend, in showcase-app.ts); the photo drifts a
+     little closer over the same span. Both are set on every slide, paused,
+     and run only on the slide showing while the reel plays: a photo fading
+     out keeps the scale it had rather than snapping back, and one attribute
+     stops both where they are. Longhands, as everywhere an animation here is
+     paused and resumed. */
+  /* The bar stops short of the right edge: the controls sit at its end, on its
+     line, so the timing and the button that stops it read as one player. */
+  .xp-reel__dwell {
+    display: block;
+    height: 2px;
+    margin: 0.9rem 7.25rem 0 0;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--color-line);
+  }
+
+  .xp-reel__dwell > span {
+    display: block;
+    height: 100%;
+    background: var(--color-accent);
+    transform-origin: left;
+    transform: scaleX(0);
+    animation-name: xp-reel-dwell;
+    animation-duration: 6.5s;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    animation-play-state: paused;
+  }
+
+  .xp-reel__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: 50% 60%;
+    animation-name: xp-reel-drift;
+    animation-duration: 9s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards;
+    animation-play-state: paused;
+  }
+
+  .xp-reel[data-playing] .xp-reel__slide[data-active] .xp-reel__dwell > span,
+  .xp-reel[data-playing] .xp-reel__slide[data-active] .xp-reel__img {
+    animation-play-state: running;
+  }
+
+  @keyframes xp-reel-dwell {
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes xp-reel-drift {
+    to {
+      scale: 1.06;
+    }
+  }
+
+  /* The place, with its country over it as the eyebrow. The country comes
+     second in the markup, so a screen reader hears "Chengdu, China". On the
+     stage's band, so the eyebrow is fg-muted: fg-meta is 4.39:1 there in
+     Classic. The whole width is the name's: the controls are on the line
+     above, and clear of it. */
+  .xp-reel__caption {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 0.3rem;
+    margin-top: 1.2rem;
+    opacity: 0;
+    translate: 0 0.3rem;
+    transition:
+      opacity 0.25s var(--xp-ease),
+      translate 0.25s var(--xp-ease);
+  }
+
+  .xp-reel__slide[data-active] .xp-reel__caption {
+    opacity: 1;
+    translate: none;
+    transition:
+      opacity 0.5s var(--xp-ease) 0.25s,
+      translate 0.5s var(--xp-ease) 0.25s;
+  }
+
+  .xp-reel__country {
+    font-family: var(--xp-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-muted);
+  }
+
+  .xp-reel__place {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--color-fg);
+    transition: color 0.18s var(--xp-ease);
+  }
+
+  .xp-reel__card:hover .xp-reel__place {
+    color: var(--color-accent);
+  }
+
+  /* At the end of the bar, centred on it. The photo's height is three
+     quarters of the reel's width, and a padding percentage is a share of the
+     width, so the padding is what puts the buttons on the bar's line at every
+     width — and they never depend on how tall a caption is. The box lies over
+     the photo, so it lets the pointer through to it; only the buttons take it.
+     Shown once the app is running them; until then, and with no script, the
+     first photo simply stands still. */
+  .xp-reel__controls {
+    --xp-reel-frame: 75%;
+    position: absolute;
+    top: 0;
+    right: -0.35rem;
+    display: flex;
+    padding-top: calc(var(--xp-reel-frame) + 0.9rem + 1px - 1.125rem);
+    pointer-events: none;
+  }
+
+  .xp-reel__controls > * {
+    pointer-events: auto;
+  }
+
+  .xp-reel:not([data-live]) .xp-reel__controls,
+  .xp-reel:not([data-live]) .xp-reel__dwell {
+    visibility: hidden;
+  }
+
+  .xp-reel__when-paused,
+  .xp-reel[data-reader-paused] .xp-reel__when-playing {
+    display: none;
+  }
+
+  .xp-reel[data-reader-paused] .xp-reel__when-paused {
+    display: block;
+  }
+
+  /* Under reduced motion it never moves on its own, so there is nothing to
+     pause and no dwell to show; the arrows step it. The bar keeps its line,
+     so the arrows stay where they are. Scoped under the reel, because the
+     shared button rule further down sets `display` too and would win. */
+  @media (prefers-reduced-motion: reduce) {
+    .xp-reel .xp-reel__pause {
+      display: none;
+    }
+
+    .xp-reel .xp-reel__dwell {
+      visibility: hidden;
+    }
+  }
+
+  .xp-wall__tile {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      border-color 0.18s var(--xp-ease),
+      box-shadow 0.18s var(--xp-ease),
+      translate 0.18s var(--xp-ease);
+  }
+
+  /* Hovered, or lit because its card on the map is hovered. */
+  .xp-wall__tile:hover,
+  .xp-wall__tile.xp-lit {
+    border-color: var(--xp-kind-colour, var(--color-accent));
+    translate: 0 -2px;
+  }
+
+  .xp-wall__tile:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* The trail whose panel is open, marked where the wall stays in view — on a
+     phone it sits above the map rather than being put away. */
+  .xp-wall__tile[aria-current='true'] {
+    border-color: var(--xp-kind-colour, var(--color-accent));
+    box-shadow: 0 0 0 1px var(--xp-kind-colour, var(--color-accent));
+  }
+
+  .xp-wall__name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.3rem 0.5rem 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 1.15;
+    text-align: left;
+    color: var(--color-fg);
+  }
+
+  /* A trail's tile is its own outline, in its kind's colour. The outline keeps
+     to the top half: a name runs to two lines
+     ("Muluozi – / Wuguishi") and starts just past the middle, and a route
+     drawn under it would be crossed by its own name. There is no picture
+     under the name, so it needs no fade. */
+  .xp-wall__outline {
+    position: absolute;
+    left: 12%;
+    top: 8%;
+    width: 76%;
+    height: 47%;
+    overflow: visible;
+  }
+
+  .xp-wall__route {
+    fill: none;
+    stroke: var(--xp-kind-colour, var(--color-accent));
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .xp-wall__start {
+    fill: var(--xp-kind-colour, var(--color-accent));
+    stroke: var(--color-surface);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* A row per kind of walk, under its sign and its name. */
+  .xp-kinds {
+    margin-top: 1.1rem;
+  }
+
+  .xp-kinds .xp-wall {
+    margin-top: 0;
+  }
+
+  .xp-kinds__title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 650;
+    color: var(--color-fg);
+  }
+
+  .xp-kinds__title .xp-kind {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  /* A kind's sign: its drawing (a custom property on the section, written by
+     the frontmatter) as a mask, filled with its kind's colour. Global because
+     the app's panels and the engine's cards carry it too. */
+  .xp :global(.xp-kind) {
+    display: inline-block;
+    flex: none;
+    width: 1em;
+    height: 1em;
+    background: var(--xp-kind-colour, currentColor);
+    -webkit-mask: var(--xp-kind-icon) center / contain no-repeat;
+    mask: var(--xp-kind-icon) center / contain no-repeat;
+  }
+
+  /* Anything marked with a kind takes its drawing and its colour: the signs
+     themselves, a trail's tile, a filter switch, a route's card on the map. */
+  .xp :global([data-kind='climb']),
+  .xp :global([data-mapglobe-kind='climb']) {
+    --xp-kind-icon: var(--xp-icon-climb);
+    --xp-kind-colour: var(--mapglobe-kind-climb);
+  }
+
+  .xp :global([data-kind='hike']),
+  .xp :global([data-mapglobe-kind='hike']) {
+    --xp-kind-icon: var(--xp-icon-hike);
+    --xp-kind-colour: var(--mapglobe-kind-hike);
+  }
+
+  .xp :global([data-kind='run']),
+  .xp :global([data-mapglobe-kind='run']) {
+    --xp-kind-icon: var(--xp-icon-run);
+    --xp-kind-colour: var(--mapglobe-kind-run);
+  }
+
+  /* Forced colours repaint backgrounds, and a mask is painted with one. */
+  @media (forced-colors: active) {
+    .xp :global(.xp-kind) {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+  }
+
+  /* ---- buttons --------------------------------------------------------- */
+  /* `:global` under the section root, because the panel builds its buttons
+     and icons in script — and an element made by script never carries the
+     scope attribute Astro adds to this file's own markup. */
+  .xp :global(.xp-btn) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1.1rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color 0.18s var(--xp-ease),
+      border-color 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp :global(.xp-btn:hover) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .xp :global(.xp-btn--primary) {
+    background: var(--color-invert);
+    border-color: var(--color-invert);
+    color: var(--color-on-invert);
+  }
+
+  .xp :global(.xp-btn--primary:hover) {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-invert);
+  }
+
+  .xp :global(.xp-btn--ghost) {
+    background: transparent;
+  }
+
+  .xp :global(.xp-btn__arrow) {
+    transition: translate 0.18s var(--xp-ease);
+  }
+
+  .xp :global(.xp-btn:hover .xp-btn__arrow) {
+    translate: 0.15rem 0;
+  }
+
+  .xp :global(.xp-icon) {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+
+  .xp :global(.xp-icon__fill) {
+    fill: currentColor;
+  }
+
+  .xp :global(.xp-icon__stroke) {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .xp-icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    transition:
+      background-color 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp-icon-btn:hover {
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  .xp-icon-btn--solid {
+    background: var(--color-invert);
+    color: var(--color-on-invert);
+  }
+
+  .xp-icon-btn--solid:hover {
+    background: var(--color-accent);
+    color: var(--color-on-invert);
+  }
+
+  .xp-text-btn {
+    height: 2.25rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    transition:
+      background-color 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp-text-btn:hover {
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  .xp-text-btn--chip {
+    min-width: 2.75rem;
+    border: 1px solid var(--color-line-strong);
+    font-family: var(--xp-mono);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .xp-spacer {
+    flex: 1;
+  }
+
+  .xp :global(:is(button, a, [tabindex]):focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Play and pause share a button; the state picks the glyph. */
+  .xp-when-paused,
+  .xp-when-touring {
+    display: none;
+  }
+
+  .xp[data-paused='true'] [data-xp-tour-pause] .xp-when-running,
+  .xp[data-fly-paused='true'] [data-xp-hud-pause] .xp-when-running,
+  .xp[data-activity='tour'] .xp-play .xp-when-idle {
+    display: none;
+  }
+
+  .xp[data-paused='true'] [data-xp-tour-pause] .xp-when-paused,
+  .xp[data-fly-paused='true'] [data-xp-hud-pause] .xp-when-paused,
+  .xp[data-activity='tour'] .xp-play .xp-when-touring {
+    display: block;
+  }
+
+  .xp[data-activity='tour'][data-paused='true'] .xp-play .xp-when-touring {
+    display: none;
+  }
+
+  .xp[data-activity='tour'][data-paused='true'] .xp-play .xp-when-idle {
+    display: block;
+  }
+
+  /* ---- controls: glass, because they are small and say little ---------- */
+  .xp-controls {
+    position: absolute;
+    z-index: 4;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    border-radius: 999px;
+    background: var(--xp-glass);
+    backdrop-filter: blur(14px) saturate(1.3);
+    border: 1px solid var(--xp-hairline);
+    box-shadow: var(--xp-shadow);
+    transition: right 0.32s var(--xp-ease);
+  }
+
+  .xp-controls__rule {
+    width: 1px;
+    height: 1.25rem;
+    margin: 0 0.2rem;
+    background: var(--color-line-strong);
+  }
+
+  .xp-seg {
+    display: flex;
+    padding: 2px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-surface-2) 85%, transparent);
+  }
+
+  .xp-seg button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2rem;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    transition:
+      background-color 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp-seg button[aria-checked='true'] {
+    background: var(--color-surface);
+    color: var(--color-fg);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.14);
+  }
+
+  .xp-layers-wrap {
+    position: relative;
+  }
+
+  /* One popover, two sets of switches. Terrain mode draws the trails and the
+     relief and nothing the Globe's switches govern, so on the terrain the
+     popover is the trails filter instead. */
+  .xp-layers__group--terrain,
+  .xp[data-view='survey'] .xp-layers__group--globe {
+    display: none;
+  }
+
+  .xp[data-view='survey'] .xp-layers__group--terrain {
+    display: block;
+  }
+
+  .xp-switch__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .xp-switch__name .xp-kind {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .xp-layers {
+    position: absolute;
+    top: calc(100% + 0.6rem);
+    right: -0.3rem;
+    width: 16rem;
+    padding: 1rem 1.1rem 0.9rem;
+    border-radius: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--xp-shadow-lg);
+    animation: xp-drop 0.2s var(--xp-ease);
+  }
+
+  .xp-layers__group {
+    margin: 0 0 0.75rem;
+    padding: 0;
+    border: 0;
+  }
+
+  .xp-layers__group legend {
+    margin-bottom: 0.3rem;
+    font-family: var(--xp-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    font-size: 0.875rem;
+    color: var(--color-fg);
+    cursor: pointer;
+  }
+
+  .xp-switch input {
+    appearance: none;
+    position: relative;
+    width: 2rem;
+    height: 1.15rem;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--color-line-strong);
+    cursor: pointer;
+    transition: background-color 0.18s var(--xp-ease);
+  }
+
+  .xp-switch input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(1.15rem - 4px);
+    height: calc(1.15rem - 4px);
+    border-radius: 50%;
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+    transition: translate 0.18s var(--xp-ease);
+  }
+
+  .xp-switch input:checked {
+    background: var(--xp-kind-colour, var(--color-accent));
+  }
+
+  .xp-switch input:checked::after {
+    translate: 0.85rem 0;
+  }
+
+  .xp-switch input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .xp-switch input:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .xp-layers__keys {
+    margin: 0.4rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-line);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-layers__keys kbd {
+    display: inline-block;
+    min-width: 1.2rem;
+    padding: 0 0.25rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 0.3rem;
+    font-family: var(--xp-mono);
+    font-size: 0.66rem;
+    text-align: center;
+    color: var(--color-fg-body);
+  }
+
+  /* ---- breadcrumb ------------------------------------------------------ */
+  .xp-crumbs {
+    position: absolute;
+    z-index: 4;
+    top: 1rem;
+    left: 1rem;
+    max-width: calc(100% - var(--xp-panel-w) - 24rem);
+    animation: xp-drop 0.22s var(--xp-ease);
+  }
+
+  /* Built in script, so global for the same reason as the buttons above. */
+  .xp-crumbs :global(ol) {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 0.3rem;
+    list-style: none;
+    border-radius: 999px;
+    background: var(--xp-glass);
+    backdrop-filter: blur(14px) saturate(1.3);
+    border: 1px solid var(--xp-hairline);
+    box-shadow: var(--xp-shadow);
+  }
+
+  .xp-crumbs :global(li) {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .xp-crumbs :global(li + li::before) {
+    content: '›';
+    margin: 0 0.1rem;
+    color: var(--color-fg-faint);
+  }
+
+  .xp-crumbs :global(.xp-crumb) {
+    overflow: hidden;
+    padding: 0.4rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color-fg-muted);
+  }
+
+  .xp-crumbs :global(button.xp-crumb) {
+    cursor: pointer;
+    transition:
+      background-color 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp-crumbs :global(button.xp-crumb:hover) {
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  .xp-crumbs :global(.xp-crumb[aria-current]) {
+    color: var(--color-fg);
+  }
+
+  /* ---- the panel: solid, because it carries text ----------------------- */
+  .xp-sheet {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--xp-panel-w);
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-line);
+    box-shadow: -24px 0 48px -36px rgb(0 0 0 / 0.45);
+    animation: xp-panel 0.32s var(--xp-ease);
+  }
+
+  .xp-sheet__bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .xp-grabber {
+    display: none;
+  }
+
+  .xp-sheet__body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.25rem 1.6rem 1.75rem;
+  }
+
+  .xp-sheet__body :global(.xp-sheet__eyebrow) {
+    margin: 0 0 0.55rem;
+    font-family: var(--xp-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  /* A trail's kind leads its eyebrow, and a trip's walks carry theirs. */
+  .xp-sheet__body :global(.xp-sheet__eyebrow .xp-kind) {
+    width: 1.35em;
+    height: 1.35em;
+    margin-right: 0.45rem;
+    vertical-align: -0.38em;
+  }
+
+  .xp-sheet__body :global(.xp-route__name .xp-kind) {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin-right: 0.45rem;
+    vertical-align: -0.16em;
+  }
+
+  .xp-sheet__body :global(.xp-sheet__title) {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: var(--color-fg);
+  }
+
+  .xp-sheet__body :global(.xp-sheet__title:focus) {
+    outline: none;
+  }
+
+  .xp-sheet__body :global(.xp-sheet__title:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 4px;
+    border-radius: 2px;
+  }
+
+  .xp-sheet__body :global(.xp-sheet__meta) {
+    margin: 0.45rem 0 0;
+    font-size: 0.9rem;
+    color: var(--color-fg-muted);
+  }
+
+  .xp-sheet__body :global(.xp-sheet__text) {
+    margin: 1rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--color-fg-body);
+  }
+
+  .xp-sheet__body :global(.xp-sheet__block) {
+    margin-top: 1.5rem;
+  }
+
+  .xp-sheet__body :global(.xp-sheet__label) {
+    margin: 0;
+    font-family: var(--xp-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-sheet__body :global(.xp-sheet__note) {
+    margin: 1rem 0 0;
+    font-size: 0.8rem;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-sheet__body :global(.xp-sheet__actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+
+  .xp-sheet__body :global(.xp-figures) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    margin: 1.25rem 0 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: var(--color-line);
+  }
+
+  .xp-sheet__body :global(.xp-figures__cell) {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 0.35rem;
+    padding: 0.85rem 0.95rem;
+    background: var(--color-surface);
+  }
+
+  .xp-sheet__body :global(.xp-figures dt) {
+    font-family: var(--xp-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-sheet__body :global(.xp-figures dd) {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--color-fg);
+  }
+
+  .xp-sheet__body :global(.xp-figures__unit) {
+    margin-left: 0.2rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--color-fg-muted);
+  }
+
+  .xp-sheet__body :global(.xp-routes) {
+    margin: 0.6rem 0 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-line);
+  }
+
+  .xp-sheet__body :global(.xp-route) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--color-line);
+    text-align: left;
+    color: var(--color-fg);
+    cursor: pointer;
+  }
+
+  .xp-sheet__body :global(.xp-route__name) {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .xp-sheet__body :global(.xp-route__meta) {
+    font-family: var(--xp-mono);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-sheet__body :global(.xp-route__go) {
+    color: var(--color-fg-faint);
+    transition:
+      translate 0.18s var(--xp-ease),
+      color 0.18s var(--xp-ease);
+  }
+
+  .xp-sheet__body :global(.xp-route:hover .xp-route__go) {
+    translate: 0.2rem 0;
+    color: var(--color-accent);
+  }
+
+  .xp-sheet__body :global(.xp-route:hover .xp-route__name) {
+    color: var(--color-accent);
+  }
+
+  /* ---- the elevation profile ------------------------------------------- */
+  .xp-sheet__body :global(.xp-plot) {
+    margin: 1.4rem 0 0;
+  }
+
+  .xp-sheet__body :global(.xp-plot__wait) {
+    margin: 0;
+    padding: 2.6rem 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-sheet__body :global(.xp-plot__box) {
+    position: relative;
+    height: 7.5rem;
+    cursor: crosshair;
+    touch-action: pan-y;
+    border-bottom: 1px solid var(--color-line-strong);
+  }
+
+  .xp-sheet__body :global(.xp-plot__svg) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .xp-sheet__body :global(.xp-plot__stop-top) {
+    stop-color: var(--color-accent);
+    stop-opacity: 0.26;
+  }
+
+  .xp-sheet__body :global(.xp-plot__stop-bottom) {
+    stop-color: var(--color-accent);
+    stop-opacity: 0;
+  }
+
+  .xp-sheet__body :global(.xp-plot__done) {
+    fill: var(--color-accent);
+    fill-opacity: 0.22;
+  }
+
+  .xp-sheet__body :global(.xp-plot__line) {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .xp-sheet__body :global(.xp-plot__peak) {
+    position: absolute;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 2px solid var(--color-accent);
+    translate: -50% -50%;
+    pointer-events: none;
+  }
+
+  .xp-sheet__body :global(.xp-plot__cursor) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--color-fg);
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .xp-sheet__body :global(.xp-plot__dot) {
+    position: absolute;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: var(--color-fg);
+    border: 2px solid var(--color-surface);
+    translate: -50% -50%;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .xp-sheet__body :global(.xp-plot__tip) {
+    position: absolute;
+    top: -0.35rem;
+    translate: -50% -100%;
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.35rem;
+    background: var(--color-invert);
+    color: var(--color-on-invert);
+    font-family: var(--xp-mono);
+    font-size: 0.64rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .xp-sheet__body :global(.xp-plot__axis) {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.45rem;
+    font-family: var(--xp-mono);
+    font-size: 0.6rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-meta);
+  }
+
+  /* ---- the tour's caption ---------------------------------------------- */
+  .xp-caption {
+    position: absolute;
+    z-index: 4;
+    left: 1.5rem;
+    bottom: 1.5rem;
+    width: min(25rem, calc(100% - 3rem));
+    padding: 1.1rem 1.2rem 0.85rem;
+    border-radius: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--xp-shadow-lg);
+    animation: xp-rise 0.32s var(--xp-ease);
+  }
+
+  /* The country, as the eyebrow. The tour used to count its steps here
+     ("01 / 08") and give the dates under the name; both went with the
+     author's "no need to mention when and how many". */
+  .xp-caption__place {
+    margin: 0;
+    font-family: var(--xp-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-caption__place:empty {
+    display: none;
+  }
+
+  .xp-caption__title {
+    margin: 0.35rem 0 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--color-fg);
+  }
+
+  .xp-caption__text {
+    margin: 0.7rem 0 0;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--color-fg-body);
+  }
+
+  .xp-caption__text:empty {
+    display: none;
+  }
+
+  .xp-caption__bar {
+    position: relative;
+    height: 2px;
+    margin-top: 0.95rem;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--color-line);
+  }
+
+  .xp-caption__bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform-origin: left;
+    transform: scaleX(var(--xp-dwell, 0));
+    background: var(--color-accent);
+  }
+
+  .xp-caption__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.7rem;
+  }
+
+  /* ---- the flyover HUD ------------------------------------------------- */
+  .xp-hud {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: 1.5rem;
+    translate: -50% 0;
+    width: min(34rem, calc(100% - 3rem));
+    padding: 0.95rem 1.1rem 0.75rem;
+    border-radius: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--xp-shadow-lg);
+    animation: xp-rise 0.32s var(--xp-ease);
+  }
+
+  .xp-hud__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .xp-hud__name {
+    margin: 0;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color-fg);
+  }
+
+  .xp-hud__clock {
+    margin: 0;
+    font-family: var(--xp-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-hud__time {
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+
+  .xp-hud__nums {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.75rem;
+    margin-top: 0.45rem;
+  }
+
+  .xp-hud__nums p {
+    margin: 0;
+  }
+
+  .xp-num {
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+
+  .xp-hud__unit {
+    font-size: 0.8rem;
+    color: var(--color-fg-muted);
+  }
+
+  .xp-hud__bar {
+    position: relative;
+    height: 1.25rem;
+    margin-top: 0.4rem;
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .xp-hud__bar::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 3px;
+    background: var(--color-line);
+  }
+
+  .xp-hud__fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 3px;
+    margin-top: -1.5px;
+    width: calc(var(--xp-fly, 0) * 100%);
+    border-radius: 3px;
+    background: var(--color-accent);
+  }
+
+  .xp-hud__fill::after {
+    content: '';
+    position: absolute;
+    right: -0.4rem;
+    top: 50%;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-top: -0.4rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-surface);
+  }
+
+  .xp-hud__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+  }
+
+  /* ---- the chronology -------------------------------------------------- */
+  /* A drawer below the foot of the stage, pushed down by its own height so
+     nothing of it shows, and slid up while the app says a mouse is there
+     (`data-chrono`). It sits flush with the frame's bottom edge so that it
+     slides up UNDER a pointer resting at the foot: the drawer arrives where
+     the pointer already is, and stays. With a gap down there the pointer
+     would be left on the map below it and the drawer would fold again. */
+  .xp-dock {
+    --xp-chrono-h: 5rem;
+    position: absolute;
+    z-index: 3;
+    left: 1rem;
+    right: 1rem;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    translate: 0 var(--xp-chrono-h);
+    transition:
+      translate 0.32s var(--xp-ease),
+      right 0.32s var(--xp-ease);
+  }
+
+  /* Hidden as well as out of frame while folded, so its marks are out of the
+     tab order and the accessibility tree whenever it is not on screen. The
+     visibility waits for the slide on the way down, so the drawer is seen to
+     close rather than vanishing. */
+  .xp-chrono {
+    position: relative;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    height: var(--xp-chrono-h);
+    padding: 0 1rem 0 0.75rem;
+    border-radius: 1rem 1rem 0 0;
+    background: color-mix(in oklab, var(--color-surface) 94%, transparent);
+    border: 1px solid var(--color-line);
+    border-bottom: 0;
+    box-shadow: var(--xp-shadow);
+    pointer-events: auto;
+    visibility: hidden;
+    transition: visibility 0s linear 0.32s;
+  }
+
+  .xp[data-chrono='open'] .xp-dock {
+    translate: 0 0;
+  }
+
+  .xp[data-chrono='open'] .xp-chrono {
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  /* A tour and a flyover each have their own panel along the foot, and
+     neither needs the timeline. */
+  .xp[data-activity='tour'] .xp-dock,
+  .xp[data-activity='fly'] .xp-dock {
+    display: none;
+  }
+
+  .xp-play {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    background: var(--color-invert);
+    color: var(--color-on-invert);
+    cursor: pointer;
+    transition: background-color 0.18s var(--xp-ease);
+  }
+
+  .xp-play:hover {
+    background: var(--color-accent);
+  }
+
+  .xp-chrono__readout {
+    flex: none;
+    width: 12.5rem;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .xp-chrono__readout span {
+    display: block;
+    overflow: hidden;
+    font-size: 0.875rem;
+    font-weight: 650;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color-fg);
+  }
+
+  .xp-chrono__readout small {
+    display: block;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    font-family: var(--xp-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-chrono__scroller {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .xp-chrono__scroller::-webkit-scrollbar {
+    display: none;
+  }
+
+  .xp-chrono__track {
+    position: relative;
+    height: 100%;
+    min-width: 30rem;
+    margin: 0 0.75rem;
+  }
+
+  .xp-chrono__axis {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 52%;
+    height: 1px;
+    background: var(--color-line-strong);
+  }
+
+  .xp-chrono__fill {
+    position: absolute;
+    left: 0;
+    top: 52%;
+    height: 2px;
+    margin-top: -0.5px;
+    width: var(--xp-progress, 0%);
+    background: var(--color-accent);
+    transition: width 0.9s var(--xp-ease);
+  }
+
+  /* Years above the axis, trips on it, trails below it: three bands that can
+     never overprint one another, at any width. */
+  .xp-chrono__year {
+    position: absolute;
+    top: 0.4rem;
+    translate: -50% 0;
+    font-family: var(--xp-mono);
+    font-size: 0.6rem;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg-meta);
+  }
+
+  .xp-chrono__year::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 0.3rem);
+    width: 1px;
+    height: 0.35rem;
+    background: var(--color-line-strong);
+  }
+
+  .xp-chrono__year--first {
+    left: 0;
+    translate: 0 0;
+  }
+
+  .xp-chrono__year--first::before {
+    display: none;
+  }
+
+  .xp-chrono__events {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .xp-chrono__event {
+    position: absolute;
+    top: 52%;
+  }
+
+  /* A 1.5rem hit area around a much smaller mark: the marks have to be small
+     to sit apart on a phone, and a target has to be large enough to press. */
+  .xp-tick {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    translate: -50% -50%;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  /* Trails hang below the axis and trips sit on it: two kinds of thing told
+     apart by place and by shape, never by colour alone. */
+  .xp-tick--climb,
+  .xp-tick--hike,
+  .xp-tick--run {
+    top: 0.95rem;
+  }
+
+  .xp-tick__mark {
+    display: block;
+    transition:
+      scale 0.18s var(--xp-ease),
+      background-color 0.18s var(--xp-ease);
+  }
+
+  .xp-tick--trip .xp-tick__mark {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-surface);
+  }
+
+  /* A trail's mark is its kind's sign, in its colour, as everywhere else
+     on the stage; it was a grey triangle or diamond until 25 Nov 2026. */
+  .xp-tick--climb .xp-tick__mark,
+  .xp-tick--hike .xp-tick__mark,
+  .xp-tick--run .xp-tick__mark {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .xp-tick:hover .xp-tick__mark,
+  .xp-tick:focus-visible .xp-tick__mark {
+    scale: 1.35;
+  }
+
+  .xp-tick[aria-current] .xp-tick__mark {
+    scale: 1.45;
+  }
+
+  .xp-tick--trip[aria-current] .xp-tick__mark {
+    box-shadow:
+      0 0 0 3px var(--color-surface),
+      0 0 0 5px color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+
+  /* Room for the panel: on a desktop it docks over the right of the stage,
+     and everything along the foot ends where it begins. */
+  .xp[data-sheet='open'] .xp-dock,
+  .xp[data-sheet='open'] .xp-controls {
+    right: calc(var(--xp-panel-w) + 1rem);
+  }
+
+  .xp[data-sheet='open'] .xp-hud {
+    left: calc((100% - var(--xp-panel-w)) / 2);
+  }
+
+  /* ---- what the engine draws on the map -------------------------------- */
+  /* Global because engine.ts builds these as MapLibre markers; scoped to the
+     viewport so the original section's own cards are untouched. */
+  .xp-viewport :global(.mapglobe__label) {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.32rem 0.65rem 0.32rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line-strong);
+    background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+    box-shadow: 0 6px 18px -10px rgb(0 0 0 / 0.45);
+    color: var(--color-fg);
+    font: inherit;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      border-color 0.18s var(--xp-ease),
+      background-color 0.18s var(--xp-ease),
+      box-shadow 0.18s var(--xp-ease),
+      filter 0.18s var(--xp-ease);
+  }
+
+  .xp-viewport :global(.mapglobe__label::after) {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 1px;
+    height: 0.5rem;
+    background: color-mix(in oklab, var(--color-fg) 30%, transparent);
+  }
+
+  .xp-viewport :global(.mapglobe__label:hover) {
+    border-color: var(--color-accent);
+  }
+
+  .xp-viewport :global(.mapglobe__label-name) {
+    font-size: 0.75rem;
+    font-weight: 650;
+    color: var(--color-fg);
+  }
+
+  /* The card's second line is the year, or a count — "2026", "6 routes",
+     "2 trips · 3 routes". This section names places and nothing else (25 Nov
+     2026, author's request), so the line is not drawn. Hidden here rather than
+     left out by the engine, which the original section above still needs it
+     from; `display: none` also takes it out of the card's accessible name. */
+  .xp-viewport :global(.mapglobe__label-when) {
+    display: none;
+  }
+
+  /* A route's card carries the sign of its kind — the engine writes the kind
+     as data-mapglobe-kind. An area card stands for walks of several kinds and
+     carries none. */
+  .xp-viewport :global([data-mapglobe-kind] .mapglobe__label-name::before) {
+    content: '';
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    margin-right: 0.3rem;
+    vertical-align: -0.15em;
+    background: var(--xp-kind-colour, currentColor);
+    -webkit-mask: var(--xp-kind-icon) center / contain no-repeat;
+    mask: var(--xp-kind-icon) center / contain no-repeat;
+  }
+
+  /* The accent dot is for the places visited and nothing else. */
+  .xp-viewport :global([data-mapglobe-trip] .mapglobe__label-name::before) {
+    content: '';
+    display: inline-block;
+    width: 0.42rem;
+    height: 0.42rem;
+    margin-right: 0.38rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    vertical-align: 0.06em;
+  }
+
+  .xp-viewport :global(.mapglobe__label--current) {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+
+  .xp-viewport :global(.mapglobe__label--current .mapglobe__label-name) {
+    color: var(--color-on-invert);
+  }
+
+  /* On the selected card, whose ground is the accent, the sign takes the
+     card's text colour: a kind colour on the accent would fight it. */
+  .xp-viewport :global(.mapglobe__label--current .mapglobe__label-name::before) {
+    background: currentColor;
+  }
+
+  .xp-viewport :global(.mapglobe__label:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* A memory pointed at in the sheet: its card answers where it is, and every
+     other card falls back. Faded with `filter`, never `opacity`: MapLibre
+     writes each marker's opacity inline as it hides the ones round the back
+     of the globe, and that would beat any rule here. */
+  .xp-viewport :global(.xp-spotting .mapglobe__label:not(.xp-lit)) {
+    filter: opacity(0.3);
+  }
+
+  .xp-viewport :global(.mapglobe__label.xp-lit) {
+    border-color: var(--color-accent);
+    box-shadow:
+      0 0 0 3px color-mix(in oklab, var(--color-accent) 22%, transparent),
+      0 6px 18px -10px rgb(0 0 0 / 0.45);
+  }
+
+  /* Not on the selected card, whose ground is already the accent. */
+  .xp-viewport :global(.mapglobe__label.xp-lit:not(.mapglobe__label--current) .mapglobe__label-name) {
+    color: var(--color-accent);
+  }
+
+  .xp-viewport :global(.xp-arriving [data-mapglobe-trip]) {
+    animation: xp-pop 0.55s var(--xp-ease) backwards;
+  }
+
+  /* The atlas names: halo type, as in the original section, because names set
+     straight on the land are what make a map read as a map. */
+  .xp-viewport :global(.mapglobe__place) {
+    --halo: var(--color-bg);
+    display: block;
+    font-size: 0.64rem;
+    font-weight: 400;
+    white-space: nowrap;
+    color: var(--color-fg-meta);
+    pointer-events: none;
+    text-shadow:
+      1px 0 0 var(--halo),
+      -1px 0 0 var(--halo),
+      0 1px 0 var(--halo),
+      0 -1px 0 var(--halo),
+      0 0 3px var(--halo),
+      0 0 6px var(--halo);
+  }
+
+  .xp-viewport :global(.mapglobe__place--country) {
+    font-family: var(--xp-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .xp-viewport :global(.mapglobe__place--peak) {
+    color: var(--color-fg-body);
+  }
+
+  .xp-viewport :global(.mapglobe__place-mark) {
+    margin-right: 0.125rem;
+    font-size: 0.72em;
+    vertical-align: middle;
+  }
+
+  .xp-viewport :global(.mapglobe__place-sub) {
+    margin-left: 1px;
+    font-family: var(--xp-mono);
+    font-size: 0.85em;
+  }
+
+  /* The attribution is a licence requirement and stays visible, toned to the
+     page. It sits in the corner while the timeline is folded and rides up
+     above the timeline when it opens. */
+  .xp-viewport :global(.maplibregl-ctrl-bottom-right) {
+    transition:
+      right 0.32s var(--xp-ease),
+      bottom 0.32s var(--xp-ease);
+  }
+
+  @media (min-width: 52.0625rem) {
+    .xp[data-chrono='open'] .xp-viewport :global(.maplibregl-ctrl-bottom-right) {
+      bottom: 5.5rem;
+    }
+  }
+
+  .xp[data-sheet='open'] .xp-viewport :global(.maplibregl-ctrl-bottom-right) {
+    right: var(--xp-panel-w);
+  }
+
+  .xp-viewport :global(.maplibregl-ctrl-attrib) {
+    border-radius: 999px 0 0 999px;
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    color: var(--color-fg-meta);
+    font-family: var(--xp-mono);
+    font-size: 0.6rem;
+  }
+
+  .xp-viewport :global(.maplibregl-ctrl-attrib a) {
+    color: var(--color-fg-meta);
+  }
+
+  /* MapLibre's own button is a black disc, which on the dark theme is nothing
+     at all — and once the map has been dragged that disc is all that is left
+     of the credit. Drawn from the tokens instead, it holds in every theme. */
+  .xp-viewport :global(.maplibregl-ctrl-attrib-button) {
+    background: none;
+  }
+
+  .xp-viewport :global(.maplibregl-ctrl-attrib-button::before) {
+    content: 'i';
+    position: absolute;
+    inset: 4px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-fg-meta);
+    color: var(--color-bg);
+    font-family: var(--xp-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  /* ---- motion ---------------------------------------------------------- */
+  @keyframes xp-panel {
+    from {
+      opacity: 0;
+      translate: 1.25rem 0;
+    }
+  }
+
+  @keyframes xp-rise {
+    from {
+      opacity: 0;
+      translate: 0 0.6rem;
+    }
+  }
+
+  .xp-hud {
+    animation-name: xp-rise-centred;
+  }
+
+  @keyframes xp-rise-centred {
+    from {
+      opacity: 0;
+      translate: -50% 0.6rem;
+    }
+  }
+
+  @keyframes xp-drop {
+    from {
+      opacity: 0;
+      translate: 0 -0.35rem;
+    }
+  }
+
+  @keyframes xp-pop {
+    from {
+      opacity: 0;
+      scale: 0.6;
+    }
+  }
+
+  @keyframes xp-sheet {
+    from {
+      translate: 0 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .xp *,
+    .xp *::before,
+    .xp *::after {
+      animation: none !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .xp-controls,
+    .xp-crumbs :global(ol) {
+      background: var(--color-surface);
+      backdrop-filter: none;
+    }
+  }
+
+  /* ---- phones ---------------------------------------------------------- */
+  /* The headline and the timeline leave the map: above and below it, in the
+     page's flow, so the map keeps its whole frame. The panel becomes a bottom
+     sheet with three heights — peek, half, full — and the map stays usable
+     behind it at all three. */
+  @media (max-width: 52rem) {
+    .xp {
+      --xp-panel-w: 100%;
+    }
+
+    .xp-stage {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: calc(100vw - 1.5rem);
+      height: auto;
+      overflow: visible;
+      background: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .xp-hero {
+      position: static;
+      display: block;
+      width: auto;
+      padding: 0 0.25rem;
+      pointer-events: auto;
+    }
+
+    /* In the page's flow above the map the Globe face's line goes back into
+       the flow: still right above the photo, and leading the face as the
+       Terrain face's line does, with the same gap under it. */
+    .xp-hero__face--globe > .xp-hero__lede {
+      position: static;
+      margin-bottom: 1.1rem;
+    }
+
+    /* Above the map, the photo is wider than it is on a desktop so the map
+       under it is in view sooner, and no wider than a reading column. */
+    .xp-reel {
+      max-width: 34rem;
+    }
+
+    .xp-reel__frame {
+      aspect-ratio: 16 / 9;
+    }
+
+    .xp-reel__controls {
+      --xp-reel-frame: 56.25%;
+    }
+
+    .xp[data-hero='hidden'] .xp-hero {
+      opacity: 1;
+      translate: none;
+      pointer-events: auto;
+      visibility: visible;
+    }
+
+    .xp-viewport {
+      position: relative;
+      inset: auto;
+      height: min(68svh, 34rem);
+      min-height: 24rem;
+      overflow: hidden;
+      border-radius: 1.1rem;
+      border: 1px solid var(--color-line);
+      background: var(--color-band);
+    }
+
+    /* A column down the right edge rather than a row across the top, so the
+       breadcrumb has the width of the frame to say where the reader is. */
+    .xp-controls {
+      top: 0.6rem;
+      right: 0.6rem;
+      flex-direction: column;
+      border-radius: 1.2rem;
+    }
+
+    .xp-controls__rule {
+      width: 1.25rem;
+      height: 1px;
+      margin: 0.15rem 0;
+    }
+
+    .xp-seg {
+      flex-direction: column;
+      border-radius: 1rem;
+    }
+
+    .xp-seg button span {
+      display: none;
+    }
+
+    .xp-seg button {
+      justify-content: center;
+      width: 2.1rem;
+      padding: 0;
+    }
+
+    .xp-layers {
+      top: 0;
+      right: calc(100% + 0.6rem);
+    }
+
+    .xp-crumbs {
+      top: 0.6rem;
+      left: 0.6rem;
+      max-width: calc(100% - 4.4rem);
+    }
+
+    .xp-crumbs :global(.xp-crumb) {
+      padding: 0.4rem 0.5rem;
+      font-size: 0.75rem;
+    }
+
+    .xp-ghost {
+      --xp-ghost-x: 0px;
+    }
+
+    .xp[data-sheet='open'] .xp-controls {
+      right: 0.6rem;
+    }
+
+    .xp-sheet {
+      top: auto;
+      left: 0;
+      width: auto;
+      height: var(--xp-sheet-h, 9rem);
+      border-left: 0;
+      border-top: 1px solid var(--color-line);
+      border-radius: 1.1rem 1.1rem 0 0;
+      box-shadow: 0 -18px 40px -28px rgb(0 0 0 / 0.45);
+      transition: height 0.28s var(--xp-ease);
+      animation: xp-sheet 0.3s var(--xp-ease);
+    }
+
+    .xp-sheet[data-detent='peek'] {
+      --xp-sheet-h: 9.25rem;
+    }
+
+    .xp-sheet[data-detent='half'] {
+      --xp-sheet-h: 58%;
+    }
+
+    /* Full still leaves the breadcrumb and the credit their two lines. */
+    .xp-sheet[data-detent='full'] {
+      --xp-sheet-h: calc(100% - 5.6rem);
+    }
+
+    /* A peek shows the name and the figures; whatever is below them fades out
+       rather than being cut through the middle of a line. */
+    .xp-sheet[data-detent='peek'] .xp-sheet__body {
+      overflow: hidden;
+      mask-image: linear-gradient(to bottom, #000 72%, transparent);
+    }
+
+    .xp-sheet__bar {
+      position: relative;
+      justify-content: flex-end;
+      padding: 0.35rem 0.5rem 0;
+    }
+
+    .xp-grabber {
+      position: absolute;
+      left: 50%;
+      top: 0.2rem;
+      translate: -50% 0;
+      display: grid;
+      place-items: center;
+      width: 4rem;
+      height: 1.6rem;
+      cursor: pointer;
+    }
+
+    .xp-grabber span {
+      width: 2.5rem;
+      height: 0.3rem;
+      border-radius: 999px;
+      background: var(--color-line-strong);
+    }
+
+    .xp-sheet__body {
+      padding: 0 1.1rem 1.25rem;
+    }
+
+    .xp-sheet__body :global(.xp-sheet__title) {
+      font-size: 1.35rem;
+    }
+
+    .xp-sheet__body :global(.xp-figures) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 0.8rem;
+    }
+
+    .xp-sheet__body :global(.xp-figures__cell) {
+      padding: 0.6rem 0.55rem;
+    }
+
+    .xp-sheet__body :global(.xp-figures dd) {
+      font-size: 1.05rem;
+    }
+
+    .xp-sheet__body :global(.xp-figures dt) {
+      font-size: 0.5rem;
+      letter-spacing: 0.08em;
+    }
+
+    .xp-sheet__body :global(.xp-sheet__meta) {
+      font-size: 0.8rem;
+    }
+
+    .xp[data-sheet='open'] .xp-hud {
+      left: 0.6rem;
+    }
+
+    .xp[data-activity='fly'] .xp-sheet {
+      display: none;
+    }
+
+    .xp-caption,
+    .xp-hud {
+      left: 0.6rem;
+      right: 0.6rem;
+      bottom: 0.6rem;
+      width: auto;
+      translate: none;
+    }
+
+    .xp-hud {
+      animation-name: xp-rise;
+    }
+
+    .xp-caption__text {
+      display: none;
+    }
+
+    /* The timeline is the author's, woken by a mouse at the foot of the map;
+       a phone has neither, so it is not here at all. */
+    .xp-dock {
+      display: none;
+    }
+
+    /* Top left, on the line under the breadcrumb. Along the bottom the credit
+       is covered by the panel at half height, by the tour's caption and by the
+       flyover's readout — and it has to stay readable for as long as
+       Mapterhorn's relief is on the map, which is now from the first view. */
+    .xp-viewport :global(.maplibregl-ctrl-bottom-right),
+    .xp[data-sheet='open'] .xp-viewport :global(.maplibregl-ctrl-bottom-right) {
+      top: 3.5rem;
+      right: auto;
+      bottom: auto;
+      left: 0;
+    }
+
+    .xp-viewport :global(.maplibregl-ctrl-attrib) {
+      margin: 0;
+      border-radius: 0 999px 999px 0;
+    }
+  }
+</style>

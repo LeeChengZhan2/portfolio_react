@@ -1,13 +1,11 @@
 ---
 /**
- * The MapLibre earth — the second section on /about/travel-preview, sitting
- * directly under GlobeStage so the two renderers can be compared in the same
- * page, in the same theme, on the same data.
+ * The MapLibre earth — the one map on /about/travel-preview, under the
+ * timeline. A three.js earth sat above it for comparison until 24 Nov 2026,
+ * when the author chose this one and the other was removed.
  *
- * The comparison is deliberately narrow. Both earths read the same
- * public/globe/land.json and the same visited footprints, and both derive every
- * colour through src/scripts/globe/palette.ts. What differs is what each one
- * can DO, which is what the three modes are — in switcher order, which is also
+ * Every colour is derived through src/scripts/globe/palette.ts, so the map
+ * follows all nine themes. The three modes, in switcher order, which is also
  * the order they contain one another:
  *
  *   combined — "All", and where the page opens (14 Sep 2026). Both halves on
@@ -49,15 +47,12 @@
  * modes.ts. "Trips" and "Trails" are both already taken by data types here:
  * a MapTrip is one visited city, a MapTrail is one recorded route.
  *
- * Both modes are things the three.js engine cannot grow into: its normal map
- * stores a shading vector rather than a height, and it has no names at all.
- *
  * Not an island. See src/scripts/mapglobe/index.ts — a dynamic import behind an
  * IntersectionObserver, the same deferral `client:visible` would give without
  * pulling React onto the page.
  *
- * Throwaway, like the section above it. When one of the two wins, delete the
- * loser and this whole preview route with it.
+ * It lives on a throwaway preview route for now. When it moves onto
+ * /about/travel, the preview route and the link to it go.
  */
 import type { MapTrail, MapTrip } from '../../scripts/mapglobe/engine';
 /**
@@ -214,7 +209,7 @@ const MODES = [
  * filter nobody can reach.
  */
 const CONTENT_COPY: Record<MapContent, { name: string; hint: string }> = {
-  trips: { name: 'Trips', hint: 'The eight visited places, picked out in the accent.' },
+  trips: { name: 'Trips', hint: 'The visited places, picked out in the accent.' },
   trails: {
     name: 'Trails',
     hint: 'The ten recorded routes, grouped by area. Click one to fly to it.',
@@ -343,7 +338,8 @@ const routeHint = (route: MapTrail): string =>
  * being used as a menu. The rail is the menu, so the map does not have to be.
  *
  * The nesting is the relationship the site records nowhere else. It was a
- * hardcoded table in the interaction mock-up below, offered as an argument;
+ * hardcoded table in an interaction mock-up (removed 24 Nov 2026), offered as
+ * an argument;
  * `walkedOn` in src/lib/content.ts derives it from the dates now, and this is
  * the first thing to render it.
  * -------------------------------------------------------------------------- */
@@ -410,13 +406,12 @@ const placeMeta = (group: IndexGroup): string =>
 
 <section class="mapglobe" data-mapglobe aria-labelledby="mapglobe-heading">
   <div class="mapglobe__head">
-    <p class="mapglobe__eyebrow">The alternative · MapLibre GL JS 6.6.0</p>
-    <h2 id="mapglobe-heading" class="mapglobe__title">The same earth, and a mountain</h2>
+    <p class="mapglobe__eyebrow">MapLibre GL JS 6.6.0</p>
+    <h2 id="mapglobe-heading" class="mapglobe__title">The earth, and a mountain</h2>
     <p class="mapglobe__intro">
-      The same eight footprints and the same coastline file as the earth above, drawn by a map
-      engine instead of a custom renderer &mdash; so the only thing this comparison is testing is
-      whether it <em>looks</em> like it belongs on the page. What it buys in exchange is the three
-      tabs above the frame, and it opens on the one that shows everything. <strong
+      The same trips as the timeline above, on the earth they happened on, with every route
+      I have recorded beside them. Each highlighted area is the city&rsquo;s real built-up
+      footprint, not a pin dropped on a coordinate. It opens on the tab that shows everything. <strong
       >All</strong> puts both halves on one globe &mdash; every place visited and every route
       walked, each
       behind its own chip, over the same five layers &mdash; so the routes can be read in the
@@ -437,7 +432,7 @@ const placeMeta = (group: IndexGroup): string =>
       the routes left off and a filter row over it, and it starts quiet &mdash; country
       boundaries and country names, nothing else. Add city names, shaded relief, named peaks or
       rivers and lakes a chip at a time; each layer is only downloaded once you ask for it, and
-      the eight footprints stay picked out in the page&rsquo;s own accent whatever you switch on
+      the footprints stay picked out in the page&rsquo;s own accent whatever you switch on
       or off. <strong>Trails</strong> opens on
       all {routes.length} of them at once &mdash; every hike and half marathon recorded so far
       &mdash; grouped into the places they were walked, because six are inside one corner of
@@ -466,7 +461,7 @@ const placeMeta = (group: IndexGroup): string =>
   {/*
     aria-checked ships as the default on every item and the script corrects it
     on load: a static build cannot know what the visitor stored. Same reasoning
-    as GlobeStage and ThemePicker.
+    as ThemePicker.
   */}
   <div class="switch switch--wide" role="radiogroup" aria-label="Map mode">
     {MODES.map((mode) => (
@@ -862,15 +857,15 @@ const placeMeta = (group: IndexGroup): string =>
   </div>
 
   <p class="mapglobe__note">
-    Colours come from the same palette module the earth above uses, so both follow the theme
-    picker. Nothing is fetched from a third party when this page opens on <strong>All</strong>,
+    Every colour here is taken from the page you are reading &mdash; switch theme and the map
+    follows. This map fetches nothing from a third party when it opens on <strong>All</strong>,
     or when you switch to <strong>Trips</strong> &mdash; the
     coastline, the footprints, the boundaries, every name and the routes themselves are local
     files, and so are the
     peaks, rivers and lakes. The single exception is <strong>Relief</strong>, which reads
     elevation tiles from Mapterhorn; it is off until you switch it on, and it is the whole of <strong>Trails</strong> and of the Terrain view, which cannot preserve the property.
     Nothing else is requested until you ask for it &mdash; not the
-    tiles, not the layers, and not the geometry of a route you have not looked at.
+    tiles, and not the layers.
   </p>
 
   {/* The trips, handed to the script as data rather than fetched again. */}
@@ -925,7 +920,7 @@ const placeMeta = (group: IndexGroup): string =>
   }
 
   /* Inert without JS, and an inert control is worse than no control. Same
-     `html.js` gate as GlobeStage, TripsViewToggle and ThemePicker. */
+     `html.js` gate as TripsViewToggle and ThemePicker. */
   .switch {
     @apply hidden;
   }
@@ -2337,8 +2332,9 @@ const placeMeta = (group: IndexGroup): string =>
     }
   }
 
-  /* Matches GlobeStage exactly — same breakout, same heights. The two frames
-     have to be the same size or the comparison is about scale rather than look.
+  /* The one thing on this page that leaves the reading column. The map is the
+     section, and at the column's 48rem it was a postcard of the earth. Text
+     stays in the column; only the frame breaks out.
 
      left/transform rather than `margin-inline: calc(50% - 50vw)`: 100vw
      includes the scrollbar, so the usual full-bleed trick overflows by its
@@ -2372,8 +2368,8 @@ const placeMeta = (group: IndexGroup): string =>
 
   /* Built by engine.ts as MapLibre markers rather than rendered here, so the
      selectors have to be global — Astro's scoping only reaches markup in this
-     file. Styled to match GlobeStage's labels so the two earths read as the
-     same page rather than two widgets. */
+     file. A translucent card rather than a solid chip, so a label reads as
+     part of the page rather than of a widget. */
   .mapglobe__frame :global(.mapglobe__label) {
     @apply flex flex-col rounded border border-line-strong px-2 py-1 leading-tight whitespace-nowrap no-underline;
     background: color-mix(in oklab, var(--color-bg) 82%, transparent);

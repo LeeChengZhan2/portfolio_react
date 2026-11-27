@@ -1,13 +1,12 @@
 /**
- * The MapLibre earth — the alternative to src/scripts/globe/, sitting under it
- * on /about/travel-preview so the two can be judged side by side.
+ * The MapLibre earth on /about/travel-preview: BOTH a stylised globe of the
+ * places visited AND a real terrain surface the recorded GPS tracks are draped
+ * on.
  *
- * It exists to answer one question the three.js globe cannot: what it would
- * cost to have BOTH a stylised globe of the places visited AND a real terrain
- * surface a recorded GPS track can be draped on. See the decision memo — the
- * three.js engine's normal map is ~20 km/px and stores a shading vector rather
- * than a height, so a track has nothing to sit on. That is the whole reason
- * this file exists; the globe half is here only so the comparison is fair.
+ * The second half is why this engine won. It was built beside a three.js earth
+ * (removed 24 Nov 2026, the author's call) whose normal map was ~20 km/px and
+ * stored a shading vector rather than a height, so a track had nothing to sit
+ * on.
  *
  * `terrain` mode carries the author's own recorded routes — see MapTrail and
  * scripts/build-trails.mjs. It used to also accept a GPX dropped on the frame,
@@ -16,25 +15,26 @@
  * The parser, its ascent threshold and the drop target are all gone — git
  * history has them if a "bring your own track" mode is ever wanted again.
  *
- * Deliberately the same shape as the three.js engine, so the comparison is
- * about looks and capability rather than plumbing:
+ * Two things it is built around:
  *
  *   - Not an island. A dynamic import behind an IntersectionObserver, exactly
  *     as src/scripts/mapglobe/index.ts does it. No React anywhere near it.
- *   - Colours are derived, never chosen. It imports the SAME palette.ts the
- *     three.js globe uses, so both earths step the same perceptual distances
- *     off the same ground in all nine themes. A theme change is a handful of
- *     setPaintProperty calls instead of two uniform writes.
- *   - The coastline is the SAME public/globe/land.json. Feeding both renderers
- *     identical data is what makes a look comparison mean anything.
+ *   - Colours are derived, never chosen. src/scripts/globe/palette.ts steps a
+ *     fixed perceptual distance off whatever is painted behind the map, so it
+ *     sits correctly in all nine themes. A theme change is a handful of
+ *     setPaintProperty calls.
  *
  * One property worth protecting, and the reason terrain is a separate mode
  * rather than a layer: entering `explore` makes NO third-party network request.
  * Its two default chips are local files, so every byte comes from
- * public/globe/. Only Relief and `terrain` mode reach for DEM tiles, and only
- * once the visitor asks for them. public/globe/README.md claims "nothing is
- * fetched from a third party at runtime" — this keeps that true everywhere
- * except where the reader has pressed the control that cannot hold it.
+ * public/globe/. Only Relief and `terrain` mode reach for DEM tiles, so in the
+ * original section they are asked for only once the visitor asks for them.
+ *
+ * THE SHOWCASE GIVES THAT UP ON PURPOSE (24 Nov 2026, author's request): it
+ * hands the engine `relief` among its opening layers, so its tiles are asked
+ * for as soon as that map starts. The engine's side of the bargain is
+ * unchanged — nothing is declared, so nothing is fetched, until a layer that
+ * needs it is switched on. What a page opens with is the page's decision.
  */
 
 // Named imports, not a default: maplibre-gl v6 has no default export.
@@ -43,6 +43,7 @@ import {
   Marker,
   LngLatBounds,
   setWorkerUrl,
+  type ExpressionSpecification,
   type GeoJSONSource,
   type HillshadeLayerSpecification,
   type StyleSpecification,
@@ -84,7 +85,7 @@ import {
 
 export type { MapContent, MapLayer, MapMode, MapView };
 
-/** One visited city, as the page hands it over. Same shape as GlobeTrip. */
+/** One visited city, as the page hands it over. */
 export interface MapTrip {
   id: string;
   label: string;
@@ -143,6 +144,13 @@ export interface MapTrail {
 /** Matches public/globe/visited.json. `at` is [lat, lon]; `ring` is [lon, lat]. */
 interface VisitedFeature {
   ring: [number, number][];
+  /**
+   * Further outlines, for a trip whose cities do not share one built-up area.
+   * Seoul and Busan are 325 km apart (25 Nov 2026); every other trip is a
+   * single ring, Guangzhou and Shenzhen because their conurbation is
+   * continuous. `at` and `span` are taken over every outline together.
+   */
+  more?: [number, number][][];
   at: [number, number];
   span: number;
 }
@@ -179,6 +187,30 @@ interface AtlasPeak {
   z: number;
 }
 
+/** Where the camera is, in the four numbers that say so. */
+export interface CameraState {
+  center: [number, number];
+  zoom: number;
+  pitch: number;
+  bearing: number;
+}
+
+/** How `flyToTrip` arrives. Every field has a default tuned for the globe. */
+export interface FlyOptions {
+  zoom?: number;
+  pitch?: number;
+  bearing?: number;
+  /** Milliseconds. 0 is a cut, which is what reduced motion asks for. */
+  duration?: number;
+  /**
+   * Screen pixels to shift the trip from the centre of the frame — away from
+   * an open panel, so the place is framed beside it rather than under it.
+   * MapLibre's `offset`, and deliberately not `padding`: padding persists on
+   * the camera and would offset every fit the engine makes afterwards.
+   */
+  offset?: [number, number];
+}
+
 export interface MapGlobe {
   setMode(mode: MapMode): void;
   /** Which of the five optional layers the globe modes draw. Terrain ignores it. */
@@ -213,8 +245,12 @@ export interface MapGlobe {
   /**
    * Terrain mode's other half: every route at once, grouped by area, with
    * nothing picked. This is where the mode opens unless a route was stored.
+   *
+   * Also the way INTO terrain mode from a globe mode, which is how the
+   * showcase's Terrain view uses it. `animate` false is a cut — the showcase
+   * passes it under reduced motion; the original section never passes it.
    */
-  showAllTrails(): Promise<void>;
+  showAllTrails(animate?: boolean): Promise<void>;
   /**
    * Aim one of `All`'s terrain views at a TRIP rather than at a route — the
    * ground a visited place sits on, with the walks taken there in frame.
@@ -249,6 +285,61 @@ export interface MapGlobe {
   colourTrack(values: number[] | null): void;
   refreshTheme(): void;
   destroy(): void;
+
+  /* ---- choreography, for the showcase section (24 Nov 2026) ----------------
+     Additive and unused by the original section. The showcase drives a guided
+     tour of the trips and a follow-camera flyover along a route, and both need
+     to move the camera themselves; these are the narrowest handles that allow
+     it without the page reaching into MapLibre. */
+
+  /**
+   * Fly the globe to one trip's footprint and resolve when the camera stops —
+   * however it stops, so a reader who grabs the map mid-flight cannot leave a
+   * caller waiting. Meant for the flat globe; the Terrain view has `showPlace`.
+   */
+  flyToTrip(id: string, options?: FlyOptions): Promise<void>;
+  /**
+   * Back to the globe's opening camera. `zoom` overrides the opening zoom,
+   * because a phone frame wants a smaller globe than a desktop one.
+   *
+   * `padding` moves the SPHERE, which `offset` cannot: on a globe an offset
+   * only turns the earth so a different longitude faces the middle, and the
+   * sphere itself stays centred in the frame. Padding moves the frame's centre.
+   * It persists on the camera, so whoever sets it must clear it before the
+   * engine fits anything — see `clearPadding`. `flyToTrip` clears it itself.
+   */
+  home(animate?: boolean, zoom?: number, padding?: Partial<Record<'top' | 'right' | 'bottom' | 'left', number>>): Promise<void>;
+  /** Ease the camera's padding back to none — before a fit, which would
+      otherwise frame its subject inside the padding as well as its own. */
+  clearPadding(duration: number): Promise<void>;
+  /**
+   * Draw the single track only up to `progress` (0–1), or the whole of it
+   * again with null. The flyover's draw-on; it outranks `colourTrack` while
+   * it is set, and survives a theme change like the colour ramp does.
+   */
+  revealTrack(progress: number | null): void;
+  camera(): CameraState;
+  jumpTo(camera: CameraState): void;
+  /** Ease to a camera and resolve when it arrives. 0 is a cut. */
+  easeTo(camera: CameraState, duration: number): Promise<void>;
+  /** Resolve once the map has drawn everything it was asked to, or after a
+      ceiling of a few seconds — never later, so a slow tile cannot hang a tour. */
+  settled(): Promise<void>;
+  /** Whether the 3D terrain mesh is attached right now. */
+  hasTerrain(): boolean;
+  /** Every name and card off the map, or back on it — for a camera that moves
+      itself frame by frame, where they cost more than everything else drawn. */
+  setQuiet(on: boolean): void;
+  /**
+   * Which routes the overview draws, by id, or null for all of them — the
+   * showcase's Terrain filter (25 Nov 2026). The lines, the start dots, the
+   * cards, the areas they group into and the overview's extent are all rebuilt
+   * from the routes left, so an area that loses every route loses its card and
+   * `showAllTrails` frames only what is shown. The camera is left where it is:
+   * whether a filter should re-frame is the page's call, and the showcase
+   * makes it with `showAllTrails` when no route is open.
+   */
+  setTrailFilter(ids: readonly string[] | null): void;
 }
 
 const DATA_BASE = '/globe';
@@ -641,15 +732,18 @@ type Ring = [number, number][];
 type FC = GeoJSON.FeatureCollection;
 
 /**
- * The coastline, as lines, from the ring file the three.js earth already uses.
+ * The coastline, as lines, from the ring file `land.json`.
  *
  * Two reasons it is not drawn from `land-polygons.json`. The polygon file closes
  * Antarctica with a synthetic edge running along the pole — required to fill the
  * continent, and wrong to stroke: as a line that edge is a circle of latitude,
  * and it drew a visible ring around the south pole. `land.json`'s Antarctic ring
  * is pure coast (-85.19 to -63.23) with no closure at all, so it is the right
- * geometry for a stroke. It is also already on this page for the other earth,
- * so on the preview it costs a cache hit rather than a download.
+ * geometry for a stroke. It used to be free here, because the three.js earth on
+ * the same page fetched it anyway; since that earth went (24 Nov 2026) it is a
+ * download of its own — 257 KB gzipped, the same land a second time. Deriving
+ * the strokes from the polygon file, minus the synthetic pole edge and the
+ * antimeridian cuts, would save it.
  *
  * The one thing it needs is the fix the polygon file exists for. Three rings jump
  * a full 360° of longitude where they cross the antimeridian — legal for lines on
@@ -716,11 +810,16 @@ function regionPolygons(trips: MapTrip[], visited: Record<string, VisitedFeature
     type: 'FeatureCollection',
     features: trips
       .filter((trip) => visited[trip.id])
-      .map((trip) => ({
-        type: 'Feature' as const,
-        properties: { id: trip.id, label: trip.label },
-        geometry: { type: 'Polygon' as const, coordinates: [visited[trip.id]!.ring] },
-      })),
+      .map((trip) => {
+        const { ring, more } = visited[trip.id]!;
+        return {
+          type: 'Feature' as const,
+          properties: { id: trip.id, label: trip.label },
+          geometry: more?.length
+            ? { type: 'MultiPolygon' as const, coordinates: [[ring], ...more.map((outline) => [outline])] }
+            : { type: 'Polygon' as const, coordinates: [ring] },
+        };
+      }),
   };
 }
 
@@ -741,8 +840,8 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
   return {
     version: 8,
     /* There is deliberately NO `glyphs` key here. No symbol layer exists, so no
-       glyph server is needed — city names are HTML markers instead, same as the
-       three.js engine, which also keeps them themeable from CSS.
+       glyph server is needed — city names are HTML markers instead, which also
+       keeps them themeable from CSS.
 
        It must be OMITTED, not set to `undefined`. MapLibre validates the style
        on the key's presence, so `glyphs: undefined` fails with
@@ -883,11 +982,11 @@ function buildStyle(p: Palette, land: FC, coast: FC, regions: FC): StyleSpecific
         source: 'cities',
         layout: { visibility: 'none' },
         paint: {
-          /* The coastline's colour, not `p.city`. `city` steps 0.30 off the
-             ground against land's 0.20 — a tenth of the ramp apart, which was
-             invisible the moment the hillshade started texturing the land under
-             it. A city dot is a mark of the same weight as a coastline, so it
-             takes the same step. */
+          /* The coastline's colour, not a step of its own. The palette's old
+             `city` step sat at 0.30 against land's 0.20 — a tenth of the ramp
+             apart, which was invisible the moment the hillshade started
+             texturing the land under it. A city dot is a mark of the same
+             weight as a coastline, so it takes the same step. */
           'circle-color': p.coast,
           /* Stops may be expressions as long as they contain no zoom of their
              own, which is what lets one layer scale with the camera AND
@@ -1029,8 +1128,8 @@ interface Shade {
  *
  * Terrain mode is one ridge filling the frame and can take a strong shade from a
  * conventional 45° sun. The globe is a whole hemisphere at roughly 20 km per
- * pixel — the same resolution as the three.js relief look — where the same
- * settings produce a globe with a suggestion of mountains on it. Same layer,
+ * pixel, where the same settings produce a globe with a suggestion of
+ * mountains on it. Same layer,
  * same source, two genuinely different jobs.
  *
  * The globe row was settled by shipping a ladder of five strengths and letting
@@ -1138,8 +1237,7 @@ function hillshadeLayer(p: Palette, s: Shade): HillshadeLayerSpecification {
     paint: {
       ...hillshadePaint(p, s),
       // North-west, which is the cartographic convention and not a preference:
-      // lit from below, the eye reads ridges as valleys. Same reasoning as the
-      // three.js relief look.
+      // lit from below, the eye reads ridges as valleys.
       'hillshade-illumination-direction': 315,
     },
   };
@@ -1367,6 +1465,30 @@ export interface MapGlobeOptions {
    * has changed.
    */
   onSubject?: (trail: MapTrail | null) => void;
+  /**
+   * What a trip's card on the map is. `link`, the default, goes to the trip's
+   * page — the original section's behaviour. `button` carries
+   * `data-mapglobe-trip` instead and leaves the click to the page, which is how
+   * the showcase section opens its own trip panel and flies there.
+   */
+  tripCards?: 'link' | 'button';
+  /**
+   * Where to look for `[data-mapglobe-reserve]` controls — the boxes cards are
+   * kept out from under and camera fits are padded clear of. Defaults to the
+   * host's parent, which is where the original section keeps every control.
+   * The showcase passes its whole stage, because on a desktop its title block
+   * and timeline float over the map from OUTSIDE the map's own wrapper, and on
+   * a phone the same two sit above and below it. Only boxes that overlap the
+   * map count either way.
+   */
+  reserveRoot?: HTMLElement;
+  /**
+   * What kind of walk a route is, as its card on the map says it — written to
+   * the card as `data-mapglobe-kind` for the page's CSS to draw a sign from.
+   * Defaults to the manifest's own `hike` / `run`. The showcase passes its
+   * three-way split, which tells a climb from a hike (25 Nov 2026).
+   */
+  trailKind?: (trail: MapTrail) => string;
 }
 
 export async function createMapGlobe({
@@ -1381,11 +1503,14 @@ export async function createMapGlobe({
   trail,
   walkedOn,
   onSubject,
+  tripCards = 'link',
+  reserveRoot,
+  trailKind = (route: MapTrail) => route.kind,
 }: MapGlobeOptions): Promise<MapGlobe> {
   /* land-polygons.json, NOT land.json. The ring file is coastline drawn as line
      geometry on a sphere, where a jump from longitude +179.87 to -180 wraps
-     invisibly around the back — correct for the three.js engine, and exactly
-     wrong here, because MapLibre reads rings in Mercator and draws that segment
+     invisibly around the back — correct for a stroke, and exactly wrong for a
+     fill, because MapLibre reads rings in Mercator and draws that segment
      as a line straight across the globe. See scripts/build-land.mjs. */
   const [land, landRings, visited] = await Promise.all([
     fetch(`${DATA_BASE}/land-polygons.json`).then((r) => r.json() as Promise<FC>),
@@ -1737,6 +1862,22 @@ export async function createMapGlobe({
     el.append(nameEl, subEl);
   }
 
+  /**
+   * What a card stands for, by id: its own trip or route, or everything an
+   * area or merged card lists in `data-mapglobe-members`. Written on those two
+   * kinds of card so a page can find the card a trip or route is drawn on
+   * whichever card that turns out to be — the showcase lights it when the
+   * reader points at the same place in its sheet (25 Nov 2026). A trip card
+   * built as a link carries no id, so in the original section a merged card
+   * lists only its routes; nothing there reads the attribute.
+   */
+  function cardMembers(el: HTMLElement): string[] {
+    const { mapglobeTrip, mapglobeTrail, mapglobeMembers } = el.dataset;
+    if (mapglobeTrip) return [mapglobeTrip];
+    if (mapglobeTrail) return [mapglobeTrail];
+    return mapglobeMembers ? mapglobeMembers.split(' ') : [];
+  }
+
   function cardLink(href: string, name: string, sub: string): HTMLElement {
     const el = document.createElement('a');
     el.href = href;
@@ -1756,8 +1897,11 @@ export async function createMapGlobe({
   /* ---- the trips --------------------------------------------------------- */
   for (const trip of shown) {
     const [lat, lon] = visited[trip.id]!.at;
+    const el =
+      tripCards === 'button' ? cardButton(trip.label, trip.when) : cardLink(trip.href, trip.label, trip.when);
+    if (tripCards === 'button') el.dataset.mapglobeTrip = trip.id;
     addLabel({
-      el: cardLink(trip.href, trip.label, trip.when),
+      el,
       at: [lon, lat],
       anchor: 'bottom',
       kind: 'trip',
@@ -1939,7 +2083,37 @@ export async function createMapGlobe({
    * anything away, then MAX_LABELS as the backstop at the zooms where none of
    * them has bitten yet.
    */
+  /** Every name off the map, while a camera moves itself frame by frame. */
+  let quiet = false;
+
+  /**
+   * Take the names off, or put them back. For the showcase's flyover, whose
+   * camera is a `jumpTo` per frame — and `jumpTo` fires `moveend`.
+   *
+   * That makes every frame the moment this file's own rule is about: retiering
+   * is "far too expensive per frame". MapLibre makes it far worse, because a
+   * marker over terrain reads the depth buffer back from the GPU to learn
+   * whether a hill hides it, and does so unthrottled on `moveend`. Measured on
+   * an Intel Arc laptop GPU: 18 cards, 67 forced readbacks a frame, 12 fps —
+   * against 55 for an ordinary drag over the same ground.
+   */
+  function setQuiet(on: boolean): void {
+    if (quiet === on) return;
+    quiet = on;
+    if (!on) {
+      retier();
+      return;
+    }
+    for (const label of labels) {
+      if (!label.on) continue;
+      label.on = false;
+      label.marker.remove();
+    }
+    useStacks(0);
+  }
+
   function retier(): void {
+    if (quiet) return;
     const wanted = new Set<Label>();
     const zoom = map.getZoom();
 
@@ -2049,7 +2223,7 @@ export async function createMapGlobe({
    * priority 0.
    *
    * Hidden rather than faded, because a label that cannot be read must not be
-   * clickable either — the same rule the three.js engine follows.
+   * clickable either.
    */
   /**
    * Boxes inside the frame that a label may not sit under.
@@ -2083,7 +2257,7 @@ export async function createMapGlobe({
   }
 
   function reserved(rect: DOMRect): Box[] {
-    const frame = host.parentElement;
+    const frame = reserveRoot ?? host.parentElement;
     if (!frame) return [];
 
     const boxes: Box[] = [];
@@ -2306,6 +2480,7 @@ export async function createMapGlobe({
   }
 
   function declutter(): void {
+    if (quiet) return;
     // A focused route carries no labels; the overview carries as many as the
     // trips do, and needs the same collision pass over them.
     if (current === 'terrain' && focused) {
@@ -2500,6 +2675,7 @@ export async function createMapGlobe({
         // The full list, but only when the card could not print it. A tooltip
         // repeating the label it is attached to is noise.
         slot.el.title = short ? names.join(' · ') : '';
+        slot.el.dataset.mapglobeMembers = members.flatMap((member) => cardMembers(member.label.el)).join(' ');
 
         const extent = new LngLatBounds();
         for (const part of parts) extent.extend(part.extent);
@@ -2564,8 +2740,7 @@ export async function createMapGlobe({
   map.on('render', declutter);
 
   /* ---- who gets the wheel ------------------------------------------------ */
-  /* Identical problem to the three.js globe, identical fix. MapLibre calls
-     preventDefault on the wheel, which stops the *browser* scrolling — but this
+  /* MapLibre calls preventDefault on the wheel, which stops the *browser* scrolling — but this
      site scrolls with Lenis, which has its own window listener that
      preventDefault does nothing about, so the page moved while the map zoomed.
      Lenis honours data-lenis-prevent on an ancestor of the event target.
@@ -2697,9 +2872,33 @@ export async function createMapGlobe({
    * routes would be claiming a selection that had not been made.
    */
   function paintTrails(): void {
-    const others = focused ? p.coast : p.visited;
+    const others = focused ? p.coast : kindPaint();
     map.setPaintProperty('trails-line', 'line-color', others);
     map.setPaintProperty('trail-start', 'circle-color', others);
+  }
+
+  /**
+   * The colour each route takes when nothing is singled out: the accent,
+   * unless the page has given each kind of walk a colour of its own, as
+   * `--mapglobe-kind-<kind>` on an ancestor of the map (the kind is
+   * `trailKind`'s answer). The showcase does, so a climb, a hike and a run are
+   * told apart on the map as they are in its panel (25 Nov 2026). The original
+   * section sets none and keeps the accent.
+   *
+   * Read off the page at every paint, and `refreshTheme` paints through
+   * `paintTrails`, so a theme change brings the kind colours with it like every
+   * other colour on this map.
+   */
+  function kindPaint(): string | ExpressionSpecification {
+    const style = getComputedStyle(host);
+    const pairs: string[] = [];
+    for (const kind of new Set(trails.map(trailKind))) {
+      const colour = style.getPropertyValue(`--mapglobe-kind-${kind}`).trim();
+      if (colour) pairs.push(kind, colour);
+    }
+    // Through `unknown`: the style spec types `match` as fixed label/output
+    // pairs, and a list built at runtime cannot be written that way.
+    return pairs.length ? (['match', ['get', 'kind'], ...pairs, p.visited] as unknown as ExpressionSpecification) : p.visited;
   }
 
   /**
@@ -3290,13 +3489,49 @@ export async function createMapGlobe({
       });
     }
 
-    if (!plots.length) return;
+    plotted = plots;
+    layoutOverview();
+  }
+
+  /** Every route that loaded, whatever the filter says. */
+  let plotted: Plot[] = [];
+
+  /** The routes the overview draws, or null for every one. See `setTrailFilter`. */
+  let trailFilter: Set<string> | null = null;
+
+  /**
+   * Draw the routes the filter leaves and work out which of them can share a
+   * card. Split from the fetch so that a filter can run it again over routes
+   * already in hand: grouping is decided by which routes are on the map, so
+   * hiding the runs has to re-group Johor rather than leave a card standing
+   * for six routes over three.
+   */
+  function layoutOverview(): void {
+    const filter = trailFilter;
+    const plots = filter ? plotted.filter((plot) => filter.has(plot.trail.id)) : plotted;
+
+    // The last layout's cards go; this one builds its own. Nothing else holds a
+    // label, so taking them out of the registry is the whole of it.
+    for (let i = labels.length - 1; i >= 0; i--) {
+      const label = labels[i]!;
+      if (label.kind !== 'trail' && label.kind !== 'cluster') continue;
+      if (label.on) label.marker.remove();
+      labels.splice(i, 1);
+    }
+
+    if (!plots.length) {
+      source('trails').setData(EMPTY);
+      source('trail-starts').setData(EMPTY);
+      overviewBounds = null;
+      retier();
+      return;
+    }
 
     source('trails').setData({
       type: 'FeatureCollection',
       features: plots.map((plot) => ({
         type: 'Feature',
-        properties: { id: plot.trail.id },
+        properties: { id: plot.trail.id, kind: trailKind(plot.trail) },
         geometry: { type: 'LineString', coordinates: plot.coords },
       })),
     });
@@ -3304,7 +3539,7 @@ export async function createMapGlobe({
       type: 'FeatureCollection',
       features: plots.map((plot) => ({
         type: 'Feature',
-        properties: { id: plot.trail.id },
+        properties: { id: plot.trail.id, kind: trailKind(plot.trail) },
         geometry: { type: 'Point', coordinates: plot.at },
       })),
     });
@@ -3374,6 +3609,7 @@ export async function createMapGlobe({
        moment the route is picked — three places, none of them costing a card. */
     const el = cardButton(trail.label, `${trail.km.toFixed(1)} km`);
     el.dataset.mapglobeTrail = trail.id;
+    el.dataset.mapglobeKind = trailKind(trail);
     el.title = `${trail.place} · ${trail.when}`;
 
     addLabel({
@@ -3410,6 +3646,7 @@ export async function createMapGlobe({
     const name = areaName(area.members.map((member) => member.trail.place));
     const el = cardButton(name, `${area.members.length} routes`);
     el.title = area.members.map((member) => member.trail.label).join(' · ');
+    el.dataset.mapglobeMembers = area.members.map((member) => member.trail.id).join(' ');
     el.addEventListener('click', () => {
       map.fitBounds(area.bounds, {
         padding: framePadding(),
@@ -3548,6 +3785,7 @@ export async function createMapGlobe({
   function placeBounds(trip: MapTrip): LngLatBounds | null {
     const ring = visited[trip.id]?.ring;
     const box = ring ? boundsOf(ring) : new LngLatBounds();
+    for (const outline of visited[trip.id]?.more ?? []) box.extend(boundsOf(outline));
     let known = Boolean(ring);
 
     for (const id of walkedOn[trip.id] ?? []) {
@@ -3605,13 +3843,26 @@ export async function createMapGlobe({
     attachTerrainWhenSettled();
   }
 
+  function setTrailFilter(ids: readonly string[] | null): void {
+    const next = ids ? new Set(ids) : null;
+    const same =
+      next === null
+        ? trailFilter === null
+        : trailFilter !== null && next.size === trailFilter.size && [...next].every((id) => trailFilter!.has(id));
+    if (same) return;
+    trailFilter = next;
+    // Before the routes have landed there is nothing to lay out yet; the first
+    // layout reads the filter when they do.
+    if (plotted.length) layoutOverview();
+  }
+
   /** Leave a route for the view of all of them. */
-  function showAllTrails(): Promise<void> {
+  function showAllTrails(animate = true): Promise<void> {
     focused = null;
     // The overview is every route and no place. A place left set here would be
     // where `All` flew to on the way back, which is not what was asked for.
     place = null;
-    applyMode('terrain', true);
+    applyMode('terrain', animate);
     return ensureAllTrails();
   }
 
@@ -3788,7 +4039,29 @@ export async function createMapGlobe({
       per tile. */
   const GRADIENT_STOPS = 48;
 
+  /** How much of the track the flyover has drawn, or null for all of it. */
+  let reveal: number | null = null;
+
   function paintGradient(): void {
+    if (reveal !== null) {
+      /* The walked part in the accent and the rest not at all. `step` rather
+         than `interpolate`, so the head of the line is a clean edge instead of
+         a fade. The casing underneath stays whole and becomes the way still to
+         go: its usual ground colour under the drawn part, and a faint accent
+         ahead of it — the ground colour alone read as a pale path in light and
+         as a black scar in dark. */
+      const at = Math.max(reveal, 1e-6);
+      map.setPaintProperty('track', 'line-gradient', ['step', ['line-progress'], p.visited, at, 'rgba(0, 0, 0, 0)']);
+      map.setPaintProperty('track-casing', 'line-gradient', [
+        'step',
+        ['line-progress'],
+        p.ground,
+        at,
+        mix(p.ground, p.visited, 0.38),
+      ]);
+      return;
+    }
+    map.setPaintProperty('track-casing', 'line-gradient', undefined);
     if (!trackSeries || trackSeries.length < 2) {
       /* `undefined` rather than `null`: MapLibre's `setPaintProperty` treats
          the two the same way — the property is unset and the layer falls back
@@ -3822,10 +4095,9 @@ export async function createMapGlobe({
 
   /* ---- theme -------------------------------------------------------------- */
   /* The site's theme controls only add and remove classes on <html>, so neither
-     side has to know about the other — same contract the three.js globe honours.
-     The difference is what it costs to obey it: two uniform writes there, a
-     handful of setPaintProperty calls here. Nothing is re-fetched, and the
-     GeoJSON sources are untouched. */
+     side has to know about the other. Obeying it costs a handful of
+     setPaintProperty calls. Nothing is re-fetched, and the GeoJSON sources are
+     untouched. */
   function refreshTheme(): void {
     p = palette(host);
     map.setPaintProperty('sea', 'background-color', p.sea);
@@ -3912,6 +4184,99 @@ export async function createMapGlobe({
     }
   }
 
+  /* ---- choreography, for the showcase section ---------------------------- */
+  const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
+
+  /** Resolve when the camera stops. Checked AFTER the move was asked for: a
+      zero-length move has already fired its `moveend` by then, and waiting for
+      another would hang. */
+  function whenStill(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!map.isMoving()) {
+        resolve();
+        return;
+      }
+      map.once('moveend', () => resolve());
+    });
+  }
+
+  function flyToTrip(id: string, options: FlyOptions = {}): Promise<void> {
+    const feature = visited[id];
+    if (!feature) return Promise.resolve();
+    const [lat, lon] = feature.at;
+    const target: CameraState = {
+      center: [lon, lat],
+      zoom: options.zoom ?? 4.4,
+      pitch: options.pitch ?? 0,
+      bearing: options.bearing ?? 0,
+    };
+    const duration = options.duration ?? 2400;
+    const offset = options.offset ?? [0, 0];
+    /* Not `essential`: these are decorative flights, so MapLibre's own
+       reduced-motion handling turns them into cuts. The default curve, 1.42,
+       is the value van Wijk's 2003 study found people preferred. An easeTo of
+       zero length is the cut that still honours `offset`, which jumpTo has no
+       option for. Padding is cleared on the way, animated with the flight. */
+    if (duration <= 0) map.easeTo({ ...target, offset, padding: NO_PADDING, duration: 0 });
+    else map.flyTo({ ...target, offset, padding: NO_PADDING, duration });
+    return whenStill();
+  }
+
+  function home(
+    animate = true,
+    zoom?: number,
+    padding: Partial<Record<'top' | 'right' | 'bottom' | 'left', number>> = {},
+  ): Promise<void> {
+    const target = { ...GLOBE_HOME, ...(zoom === undefined ? {} : { zoom }), ...viewAngle() };
+    const pad = { ...NO_PADDING, ...padding };
+    if (animate) map.flyTo({ ...target, padding: pad, duration: 2200 });
+    else map.easeTo({ ...target, padding: pad, duration: 0 });
+    return whenStill();
+  }
+
+  function clearPadding(duration: number): Promise<void> {
+    map.easeTo({ padding: NO_PADDING, duration });
+    return whenStill();
+  }
+
+  function revealTrack(progress: number | null): void {
+    reveal = progress === null ? null : Math.min(1, Math.max(0, progress));
+    paintGradient();
+  }
+
+  function camera(): CameraState {
+    const centre = map.getCenter();
+    return {
+      center: [centre.lng, centre.lat],
+      zoom: map.getZoom(),
+      pitch: map.getPitch(),
+      bearing: map.getBearing(),
+    };
+  }
+
+  function easeTo(target: CameraState, duration: number): Promise<void> {
+    if (duration <= 0) {
+      map.jumpTo(target);
+      return Promise.resolve();
+    }
+    map.easeTo({ ...target, duration });
+    return whenStill();
+  }
+
+  function settled(): Promise<void> {
+    return new Promise((resolve) => {
+      if (map.loaded() && !map.isMoving()) {
+        resolve();
+        return;
+      }
+      const ceiling = setTimeout(resolve, 6000);
+      map.once('idle', () => {
+        clearTimeout(ceiling);
+        resolve();
+      });
+    });
+  }
+
   return {
     setMode: (next) => applyMode(next, true),
     setLayers,
@@ -3927,5 +4292,16 @@ export async function createMapGlobe({
     colourTrack,
     refreshTheme,
     destroy: () => map.remove(),
+    flyToTrip,
+    home,
+    clearPadding,
+    revealTrack,
+    camera,
+    jumpTo: (target) => map.jumpTo(target),
+    easeTo,
+    settled,
+    hasTerrain: () => map.getTerrain() !== null,
+    setQuiet,
+    setTrailFilter,
   };
 }

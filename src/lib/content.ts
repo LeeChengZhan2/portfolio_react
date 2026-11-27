@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ImageMetadata } from 'astro';
 import { getCollection, type CollectionEntry } from 'astro:content';
 
 /**
@@ -95,6 +98,72 @@ function sortKey(iso?: string): string {
 export async function getTrips(): Promise<CollectionEntry<'trips'>[]> {
   const entries = publishable(await getCollection('trips'));
   return entries.sort((a, b) => sortKey(b.data.start).localeCompare(sortKey(a.data.start)));
+}
+
+/**
+ * Photos dropped into src/assets/travel/<trip id>/ as cover.jpg, .png, .webp
+ * or .avif.
+ *
+ * ONLY `cover.*`, because whatever this matches is part of the build. A photo
+ * that is matched and drawn is re-encoded, and its original is not published.
+ * One that is matched and never drawn is published whole, GPS data included.
+ * Both were checked against a build on 25 Nov 2026 with every image in the
+ * folder matched, so do not widen this to take any file name.
+ */
+const droppedCovers = import.meta.glob<{ default: ImageMetadata }>(
+  '/src/assets/travel/*/[Cc]over.{avif,jpeg,jpg,png,webp,AVIF,JPEG,JPG,PNG,WEBP}',
+);
+
+/**
+ * Each trip's photo, by trip id: the `cover` its frontmatter names, or a
+ * cover.* dropped into its folder with no frontmatter to edit (25 Nov 2026).
+ * A trip with neither is not in the map.
+ *
+ * For a photo that is decoration beside its own label, which is what the
+ * showcase's wall draws. A dropped photo has no `coverAlt`, so the timeline
+ * and the trip pages, where the photo is the content, still read `cover`.
+ *
+ * A folder that names no trip throws. Its photo could never show, and the
+ * reason would be a spelling nobody is looking at. A photo dropped in under
+ * the name the camera gave it only warns: it may be there for a gallery.
+ */
+export async function tripPhotos(
+  trips: readonly CollectionEntry<'trips'>[],
+): Promise<Map<string, ImageMetadata>> {
+  const known = new Set((await getCollection('trips')).map((trip) => trip.id));
+  const photos = new Map<string, ImageMetadata>();
+
+  for (const [path, load] of Object.entries(droppedCovers)) {
+    const id = path.split('/').at(-2)!;
+    if (!known.has(id)) {
+      throw new Error(
+        `${path} belongs to no trip: there is no src/content/trips/${id}.md. ` +
+          `Rename the folder to one of: ${[...known].sort().join(', ')}.`,
+      );
+    }
+    if (photos.has(id)) {
+      throw new Error(`src/assets/travel/${id} holds two cover photos. Keep one: the other would be published unused.`);
+    }
+    photos.set(id, (await load()).default);
+  }
+
+  for (const trip of trips) {
+    if (trip.data.cover) photos.set(trip.id, trip.data.cover);
+    if (photos.has(trip.id)) continue;
+
+    const folder = join(process.cwd(), 'src', 'assets', 'travel', trip.id);
+    const others = existsSync(folder)
+      ? readdirSync(folder).filter((file) => /\.(avif|gif|hei[cf]|jpe?g|png|tiff?|webp)$/i.test(file))
+      : [];
+    if (others.length) {
+      console.warn(
+        `[travel photos] ${trip.id} has no photo to show. Its folder holds ${others.join(', ')}; ` +
+          'the one to show must be called cover.jpg, .png, .webp or .avif.',
+      );
+    }
+  }
+
+  return photos;
 }
 
 /** The year an entry belongs to on the timeline rail, or null if undated. */

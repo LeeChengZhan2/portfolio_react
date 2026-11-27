@@ -1,7 +1,7 @@
 ---
 title: Travel
 navLabel: travel
-summary: Eight trips since 2023, most of them long weekends, and what I take away from them.
+summary: Nine trips since 2023, most of them long weekends, and what I take away from them.
 order: 2
 icon: globe
 draft: false
@@ -15,8 +15,9 @@ then one day crossed as someone who had to make a life on the other side of it.
 Two countries that look similar from a distance stop looking similar once you're
 buying groceries in one of them.
 
-Every trip above whose exact days I've actually dug up starts on a Friday —
-five out of five so far. That isn't a coincidence and it isn't a preference:
+Nearly every trip above whose exact days I've actually dug up starts on a
+Friday — five of the six so far, and the sixth on a Thursday. That isn't a
+coincidence and it isn't a preference:
 it's what travel looks like when you have a job you like and a fixed number of
 days off. Four to seven days each, built around a weekend and stretched at one
 end. It's a constraint,
@@ -69,9 +70,10 @@ places held them. Written 18 Aug 2026, drum-touring section added from the CV
 19 Aug 2026, restructured for the grid 20 Aug 2026.
 
 The framing is real (Malaysia → Singapore, the drum tours, camera-led travel)
-and the Friday paragraph is arithmetic off the trip dates — all five trips with
-exact days start on a Friday. Three others (Shanghai, Guangzhou/Shenzhen and
-the Taiwan trip) are
+and the Friday paragraph is arithmetic off the trip dates — five of the six
+trips with exact days start on a Friday, and Seoul & Busan (5 Nov 2026) on a
+Thursday; "five out of five" until that trip was added on 25 Nov 2026. Three
+others (Shanghai, Guangzhou/Shenzhen and the Taiwan trip) are
 month-precision for now, so re-check the claim when their days are filled in.
 The voice is still Claude's.
 

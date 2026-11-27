@@ -18,14 +18,9 @@ export interface Palette {
   sea: string;
   land: string;
   coast: string;
-  border: string;
   boundary: string;
-  graticule: string;
-  dot: string;
-  city: string;
   visited: string;
   visitedEdge: string;
-  limb: string;
   /** The page's text colour — the far end of every ramp above. Exposed for the
       one mark that wants the full step: the MapLibre earth's probe dot and the
       top of its elevation ramp (16 Sep 2026). Not a step of its own. */
@@ -87,23 +82,20 @@ export const lightness = (hex: string): number => rgbToOklab(hexToRgb(hex))[0] *
 
 /**
  * How far each layer steps from the ground toward the text colour. This table
- * is the entire visual design; every look reads from it.
+ * is the entire visual design; every layer on the map reads from it.
+ *
+ * The three.js earth (removed 24 Nov 2026) read four more steps — a hairline
+ * border at 0.15, a graticule, a dot lattice and a limb — and the MapLibre map
+ * never used them, so they went with it.
  */
 const STEPS = {
   sea: 0.1,
   land: 0.2,
   coast: 0.5,
-  border: 0.15,
-  /* Country boundaries drawn OVER the land fill, which is why this is not
-     `border`. That one is 0.15 — lighter than land at 0.20 — and reads as a
-     hairline scored into the surface, which is right for the three.js vector
-     look where borders sit beside the coastline. The MapLibre atlas draws them
-     on top of a shaded land surface and needs them to read as a mark on it,
-     while still staying clearly weaker than the coast at 0.50. */
+  /* Country boundaries drawn OVER a shaded land surface, so they have to read
+     as a mark on it — stronger than land at 0.20 — while staying clearly
+     weaker than the coast at 0.50. */
   boundary: 0.36,
-  graticule: 0.1,
-  dot: 0.34,
-  city: 0.3,
 } as const;
 
 /** Reads a CSS custom property off an element, resolving to a usable hex. */
@@ -146,16 +138,11 @@ export function palette(host: HTMLElement): Palette {
     sea: step(STEPS.sea),
     land: step(STEPS.land),
     coast: step(STEPS.coast),
-    border: step(STEPS.border),
     boundary: step(STEPS.boundary),
-    graticule: step(STEPS.graticule),
-    dot: step(STEPS.dot),
-    city: step(STEPS.city),
     // The one colour that is not derived: the visited cities are the page's own
     // accent, because they are the only thing here meant to be looked at first.
     visited: accent,
     visitedEdge: mix(accent, fg, 0.25),
-    limb: step(0.3),
     ink: fg,
   };
 }

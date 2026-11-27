@@ -40,23 +40,13 @@ export default defineConfig({
     // carousel renders its three static cards and does not move. Pre-bundling
     // them at server start means there is nothing left to discover.
     // Production builds never had this — they resolve the whole graph up front.
-    // `three` is here for the same reason and it is not hypothetical: the globe
-    // engine on /about/travel-preview is a dynamic import behind an
-    // IntersectionObserver, so Vite first sees three.js when the visitor
-    // scrolls — and the in-flight import dies on `504 (Outdated Optimize Dep)`.
-    // Observed, not guessed.
-    // `maplibre-gl` is here for exactly the same reason as `three`: the
-    // MapLibre earth on the same preview page is a dynamic import behind an
-    // IntersectionObserver, so Vite would first see it mid-scroll.
+    // `maplibre-gl` is here for the same reason and it is not hypothetical: the
+    // earth on /about/travel-preview is a dynamic import behind an
+    // IntersectionObserver, so Vite first sees it when the visitor scrolls —
+    // and the in-flight import dies on `504 (Outdated Optimize Dep)`. It was
+    // observed with three.js, which sat on the same page until 24 Nov 2026.
     optimizeDeps: {
-      include: [
-        'gsap',
-        'gsap/ScrollTrigger',
-        '@gsap/react',
-        'three',
-        'three/addons/controls/OrbitControls.js',
-        'maplibre-gl',
-      ],
+      include: ['gsap', 'gsap/ScrollTrigger', '@gsap/react', 'maplibre-gl'],
     },
   },
 });

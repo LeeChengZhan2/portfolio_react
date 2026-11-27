@@ -85,9 +85,9 @@ behaviour would cost ~2 KB. The island is a deliberate learning-goal decision
 Legacy CRA shipped 101.8 KB gz and it blocked first paint.
 
 Routes live: `/`, `/about`, `/about/{personal,travel,photography,investing}`,
-`/about/travel/{chengdu,tokyo,phuket,taiwan,bali,guangzhou-shenzhen,shanghai,bangkok}`, `/work`,
+`/about/travel/{seoul-busan,chengdu,tokyo,phuket,taiwan,bali,guangzhou-shenzhen,shanghai,bangkok}`, `/work`,
 `/work/{ai-agent-bms,cloud-data-platform,bms-platform,alliance-bank,bank-negara,school-fyp,open-source}`,
-`/404`, `/theme-preview`, `/about/travel-preview` — 25 pages. The last two are `noindex` and
+`/404`, `/theme-preview`, `/about/travel-preview` — 26 pages. The last two are `noindex` and
 excluded from the sitemap. `/theme-preview` is the eight light themes side by side, reachable
 from the picker in the header; `/about/travel-preview` is the travel page with a 3D earth under
 the timeline, reachable from a small link on `/about/travel`. Both are throwaway.
@@ -148,7 +148,8 @@ not finished prose. `/about/travel` and `/about/investing` additionally carry th
    unwatched there are the ones needing real photos: the cover frame and the gallery grid.
 
 **After responsive, phase 5 — content.** The travel half is now scaffolded rather than written:
-eight trip files exist with real dates and empty day headings (20 Aug 2026), and filling them
+nine trip files exist with real dates and empty day headings (eight from 20 Aug 2026, Seoul &
+Busan from 25 Nov 2026), and filling them
 is the author's job, not Claude's — see "Travel" under Content. No longer stubs: the 19 Aug
 2026 CV pass took every work entry to 300–500 words of true, specific material. What is left is the author's own
 voice and the details a CV cannot carry — each file's closing comment lists them per page.
@@ -158,9 +159,7 @@ building-data standard on `cloud-data-platform`.
 New PDF CV — `public/assets/documents/` still holds only the Mar 2023 `.docx`, which now
 describes a role two jobs out of date, and `Footer.astro` still links it as "Download CV".
 
-**Open decisions, not code.** Which of the three navigation models the MapLibre earth should
-use — see "The interaction mock-up" below, which is on `/about/travel-preview` and is where that
-question now lives rather than in this file. Site-wide `noindex` until launch (`BaseLayout` supports it per
+**Open decisions, not code.** Site-wide `noindex` until launch (`BaseLayout` supports it per
 page, defaults false, and canonicals point at the unregistered `leechengzhan.com`). Carousel
 pause control — reduced motion and keyboard focus are handled, but a visible pause button is
 still the letter of WCAG 2.2.2; it adds visible UI, so it waits on design direction
@@ -356,6 +355,11 @@ finally pointed at the prose.
 **`src/content/` is deliberately NOT excluded.** It is prose too, but it is prose the site
 renders, so a class a content author legitimately used would be silently dropped.
 
+**`public/globe/README.md` is not excluded either, and nothing says that was deliberate.** It is
+prose the site never renders, and Tailwind scans it: on 24 Nov 2026 an edit to its text alone
+moved the shared sheet 10,120 → 10,109 B gz between two otherwise identical builds. Add
+`@source not "../../public/globe/README.md";` to `global.css` if that is not wanted.
+
 Two consequences worth keeping in mind:
 
 - **This file can now discuss class names freely.** That is what makes it possible to write
@@ -363,6 +367,22 @@ Two consequences worth keeping in mind:
 - **A section like the one above that quotes a measured byte count for a utility is only true
   while the docs stay excluded.** If those `@source not` lines ever go, every class name in
   this file starts shipping again.
+
+### `@apply` in a scoped block still ships site-wide
+
+**A utility used only inside one component's scoped `<style>` is still emitted into the shared
+stylesheet** — `BaseLayout.css`, on all 25 pages — because Tailwind scans the component's source
+and finds the class name in the `@apply` line. The rule using it is page-scoped; the utility it
+generates is not. Measured on the travel preview's interaction mock-up (10 Sep 2026): six
+utilities used by that file alone cost **0.21 KB gz site-wide**, and written as plain CSS
+declarations they cost nothing. Removing it and the three.js earth (24 Nov 2026) took the shared
+sheet from 10.22 to 10.12 KB gz.
+
+So **a value only one component uses is a plain declaration, not `@apply`.** Utilities the site
+already uses elsewhere stay as `@apply`; they cost nothing. Keep comments in those files free of
+utility names too — a comment is source text, and a comment alone has leaked a utility into the
+shared sheet twice (see the showcase layout under "Content"). `cmp` the built `BaseLayout.*.css`
+before and after a change to know for certain.
 
 ## Theming contract
 
@@ -536,95 +556,95 @@ its row.
 **Dim slate was cut** (22 Aug 2026, author's call) — a 94.9 L* cool slate that was the darkest
 of the original three candidates. Sepia now sits lowest at 94.3, so "too dark" was not the
 objection; do not reintroduce it under another name.
-## The 3D earth (`/about/travel-preview`, 23 Aug 2026)
+## The travel earth (`/about/travel-preview`)
 
-Six stylised globes on one three.js engine, one at a time behind a switcher. It exists to
-settle a choice: the author rejected five earlier library studies **on appearance** —
-a satellite globe reads as an embedded widget in a typographic page, whatever library draws
-it — so round 2 compares looks rather than libraries.
+**The MapLibre earth, twice, since 24 Nov 2026**: the original section (next) and, under it, the
+same engine with a redesigned frontend (see "The showcase"). The preview page used to carry two
+other sections, and both were removed at the author's call:
 
-**`/about/travel-preview` is throwaway.** `noindex`, out of the sitemap, reachable only from
-a small link in the `/about/travel` header. When a look is chosen: move `GlobeStage` onto the
-real page, delete the switcher, this route, and the link.
+- a **three.js earth** in six stylised looks behind a switcher (23 Aug 2026). The MapLibre one was
+  built beside it so the two could be judged in the same page, and MapLibre won on what it can do:
+  routes draped on real terrain, place names, the route views;
+- an **interaction mock-up** — three proposals for navigating the map, drawn as chrome over
+  schematic SVGs (10 Sep 2026). Its argument had already been built (the index rail, a route click
+  that stays in `All`), and what was left argued against a three-tab row that no longer existed.
+  Its two lessons that apply everywhere now live under "Tailwind v4 gotcha" and "Styling".
+
+Gone with them: `GlobeStage.astro`, `src/scripts/globe/{engine,index,looks}.ts`,
+`MapUxPreview.astro`, `src/scripts/map-ux-preview.ts`, four data files (see
+`public/globe/README.md`), and the `three` and `@types/three` packages. Git history has all of
+it. **`src/scripts/globe/palette.ts` stayed where it is** because the MapLibre engine imports it;
+it lost the four steps only three.js read (`border`, `graticule`, `dot`, `limb`) and the `city`
+step nothing read.
+
+Measured in one session, before and after, against the production build:
+
+| | before | after |
+|---|---|---|
+| `/about/travel-preview` HTML | 22.00 | **15.07** KB gz |
+| its CSS | 8.89 | **5.85** KB gz |
+| its eager script | 4.20 | **3.38** KB gz |
+| site-wide CSS (`BaseLayout.css`, 25 pages) | 10.22 | **10.12** KB gz |
+| three.js engine, on scroll | 141.31 | — |
+| `land-mask.webp` + `cities.json`, on scroll | 127 | — |
+| MapLibre engine, on scroll | 253.43 | **254.42** KB gz |
+
+The site-wide line is the mock-up's own `@apply` utilities leaving the shared sheet. The MapLibre
+engine grew by a kilobyte only because `palette.ts`, which used to be a chunk shared by the two
+engines, is now bundled into it — one request fewer, not new code. And `land.json` is now
+MapLibre's own download, 257 KB gz, where the three.js earth used to pay for it; "Two land files"
+in `public/globe/README.md` says how to drop it.
+
+**The three.js earth did not draw the poles correctly**, which matters because "The MapLibre
+earth" below weighed its own Antarctic wedge against that claim. Found in a review the day the
+earth was removed: `land-mask.webp` had been rasterised from `land.json`'s antimeridian-wrapping
+rings, so four of the six looks — dots, hex, vector and relief — carried a full-width line at
+70.9°N with the Arctic fill inverted around it, and no land south of 84.5°S. Only its coastline
+strokes were right. Nothing in `scripts/` generated that mask; `public/globe/README.md` says what
+to rasterise if one is ever wanted again.
+
+**`/about/travel-preview` is throwaway.** `noindex`, out of the sitemap, reachable only from a
+small link in the `/about/travel` header. When the earth is ready: move `MapGlobeStage` onto the
+real page, then delete this route and the link.
 
 **The body of both pages is `TravelContent.astro`.** Extracted from `about/travel/index.astro`
 so the preview renders the real page rather than a copy of it — two pages claiming to show "all
 the travel information" from two sets of markup is a second source of truth that agrees at first
-and stops later. The globe goes in its `after-timeline` slot; a page that passes nothing renders
+and stops later. The map goes in its `after-timeline` slot; a page that passes nothing renders
 nothing there, so `/about/travel` is untouched by the preview's existence.
 
 **Not an island, and it is not close.** The engine is a dynamic `import()` behind an
 `IntersectionObserver` with `rootMargin: 600px`. That is the same deferral `client:visible`
 gives, without 55.9 KB of React runtime to drive a canvas React never touches. Nothing loads
-until the globe is a screen away, so a visitor who reads the timeline and leaves pays nothing.
+until the map is a screen away, so a visitor who reads the timeline and leaves pays nothing.
 
-**`three` is in `vite.optimizeDeps.include`, and it has to be.** Same failure as the carousel,
-same cause: a dep first reached from a lazy import is discovered mid-session, Vite re-optimizes,
-the hash changes, and the in-flight import dies on `504 (Outdated Optimize Dep)`. Observed on
-this page in `npm run dev`, not guessed. Production builds never had it.
+**`maplibre-gl` is in `vite.optimizeDeps.include`, and it has to be.** Same failure as the
+carousel, same cause: a dep first reached from a lazy import is discovered mid-session, Vite
+re-optimizes, the hash changes, and the in-flight import dies on `504 (Outdated Optimize Dep)`.
+Observed on this page in `npm run dev` — with three.js first — not guessed. Production builds
+never had it.
 
 ### The colour contract
 
-**Nothing about the globe's colour is chosen.** `src/scripts/globe/palette.ts` steps a fixed
-*perceptual* distance in OKLab from whatever is painted behind the canvas toward
-`--color-fg`: sea 0.10, land 0.20, coastline 0.50, dots 0.34. One table, nine themes, no
-per-theme values anywhere — and in dark the ramp inverts on its own, because the colour it walks
-toward is now the light one. Verified in Chrome: mean canvas colour `rgb(226,227,231)` in
-Classic, `rgb(36,36,41)` in dark, on the same globe.
+**Nothing about the map's colour is chosen.** `src/scripts/globe/palette.ts` steps a fixed
+*perceptual* distance in OKLab from whatever is painted behind the map toward `--color-fg`: sea
+0.10, land 0.20, boundary 0.36, coastline 0.50. One table, nine themes, no per-theme values
+anywhere — and in dark the ramp inverts on its own, because the colour it walks toward is now the
+light one. Measured as the mean colour of an element screenshot, the Terrain view goes 200 → 54 →
+200 across a light → dark → light round trip (24 Nov 2026).
 
 The one colour not derived is the highlight: visited cities are `--color-accent` at full
-strength, because they are the only thing on the globe meant to be looked at first.
+strength, because they are the only thing on the map meant to be looked at first.
 
 **It steps off the *ground*, not the page.** `groundColour()` walks up from the canvas until it
 finds something painted. The stage sits in a `bg-band` panel, so the sea steps off the band; drop
-the globe onto a plain section and it steps off the page instead. Get this wrong and the sea
+the map onto a plain section and it steps off the page instead. Get this wrong and the sea
 matches its own frame and the globe reads as a hole.
 
-**A theme change is two uniform writes.** `index.ts` watches `<html>` for class changes with a
-`MutationObserver` — the site's theme controls only add and remove classes, so neither side needs
-to know about the other. Nothing is redrawn, because the land mask carries no colour.
-
-### Things that look like bugs and are not
-
-- **The land mask is black and white, never themed.** Where the land is is a fact about the
-  planet; what colour it is drawn in is a fact about the page. An earlier revision rasterised it
-  in the theme's own colours and asked "is this pixel land?" by colour distance — on first paint
-  the engine had the dark tokens while the page had not yet applied its variables, land and sea
-  came out one unit apart, **every dot and hex lattice was silently empty in dark**, and the
-  cached result survived every later theme change.
-- **Every custom shader ends with `#include <colorspace_fragment>`.** three.js appends its
-  output transform to its own materials only. A `ShaderMaterial` that assigns `gl_FragColor`
-  gets none, the linear value lands in an sRGB buffer, and the whole globe renders far too dark —
-  in dark theme it collapsed to under 1 L* of separation. Measured off the canvas, invisible in
-  a screenshot.
-- **`resize()` widens the vertical field of view for portrait frames.** `fov` is the vertical
-  angle, so as the frame narrows the horizontal view narrows with it and a globe that fits the
-  height spills out of the width. At 390px that clipped Asia off both sides.
-- **A `ResizeObserver`, not a window resize listener.** The stage is sized by CSS that can change
-  after the script runs; measuring once at boot is how the camera ends up with a 1280:1 aspect and
-  the earth renders as a vertical line. It did.
-- **Every city carries a marker as well as its footprint.** Phuket's built-up area is 76 km²,
-  which is under half a pixel across when the whole earth is in frame. The marker never falls
-  below eleven pixels and dissolves once the real footprint grows past it, so the two never both
-  claim to be the city.
-- **The globe owns the wheel while it can still zoom, and hands it back when it cannot.**
-  OrbitControls calls `preventDefault` on the wheel, which stops the *browser* scrolling — but
-  this site scrolls with Lenis, which has its own window listener that `preventDefault` does
-  nothing about, so the page moved while the globe zoomed. Lenis honours `data-lenis-prevent` on
-  an ancestor of the event target; the engine sets it per event, and **removes it at either zoom
-  limit** so the page is never trapped under the cursor. Verified: scrollY pinned across eight
-  wheel events in both directions, then released at distance 6.
-- **The relief look shades from an elevation-derived normal map, lit from the north-west.**
-  That is the cartographic convention and not a preference: lit from below, the eye reads ridges
-  as valleys. The ocean is deliberately left flat — the normal map carries bathymetry, and
-  shading the sea floor is noise here.
-- **The frame breaks out of the reading column, and uses `left/transform`, not
-  `margin-inline: calc(50% - 50vw)`.** 100vw includes the scrollbar, so the usual full-bleed
-  trick overflows by its width and puts a horizontal scrollbar on the page. `min(96vw, 74rem)`
-  keeps a gutter wider than any scrollbar. Measured 0 overflow at 1920, 1440, 1280, 834 and 390.
-- **Labels are decluttered greedily, and hidden rather than faded.** Six of the eight cities sit
-  inside one 2,000 km square. The one most squarely facing the camera keeps its space; a link
-  that cannot be read must not be clickable either. Eight labels at 1280px, four at 390px.
+**A theme change is a handful of `setPaintProperty` calls.** `index.ts` watches `<html>` for
+class changes with a `MutationObserver` — the site's theme controls only add and remove classes,
+so neither side needs to know about the other. A draped terrain view needs one more step: the
+`once('idle')` re-attach under "The route picker".
 
 ### The highlights are built-up areas, and that is why they do not match Google
 
@@ -647,30 +667,25 @@ excludes the neighbouring cities you probably did visit); a higher-resolution bu
 (same meaning, sharper edge); or the actual places visited as a track or a set of points, which
 is the only one that is true to "where I went" rather than "which city".
 
-### Terrain, and what the relief look does not do
-
-The relief look shows real topography at **global** scale — the Himalaya, the Tibetan plateau and
-the Japanese ranges all read clearly. It is a 2048×1024 normal map, which is about **20 km per
-pixel**.
-
-Planning a hike needs something like **10 m per pixel**, three orders of magnitude finer, and
-absolute heights rather than a shading vector. That is not a bigger texture on this globe; it is
-a different component — a per-trip terrain view over a real DEM for one mountain, with a GPX
-track and an elevation profile beside it. Do not try to grow the globe into it.
-
 Data, provenance and the regeneration traps live in `public/globe/README.md`. The ids in
 `visited.json` are trip ids and must track `src/content/trips/*.md` filenames.
 
+**A trip to two cities far apart has two footprints** (25 Nov 2026). Seoul and Busan are 325 km
+apart and share no built-up area, so `seoul-busan` carries Busan's outline under `more`, and
+`regionPolygons` draws the pair as one MultiPolygon. Its `at` and `span` cover both outlines, so
+the trip's card and the showcase's flight centre between the two cities, and `placeBounds` takes
+in both when the index rail frames the trip. New entries come from `scripts/build-footprint.mjs`.
+
 ## The MapLibre earth (`/about/travel-preview`, 2 Sep 2026)
 
-A **second** earth, directly under the three.js one on the same preview page, so the two can be
-judged in the same page and the same theme rather than from screenshots. `MapGlobeStage.astro`
-plus `src/scripts/mapglobe/`. Both sections are throwaway: when one wins, delete the loser, this
-route and the link to it.
+The page's one map since 24 Nov 2026. It was built as a **second** earth, directly under the
+three.js one, so the two could be judged in the same page and the same theme rather than from
+screenshots; "The travel earth" above records how that ended. `MapGlobeStage.astro` plus
+`src/scripts/mapglobe/`.
 
-It exists because of the section immediately above this one. The relief look cannot grow into a
-trail view, so the question is not "is three.js good enough" but "what does the thing that *can*
-do both look like on this page". **Three modes, one `Map` object** — two from 7 Sep 2026, when
+It exists because the three.js relief look could not grow into a trail view, so the question was
+never "is three.js good enough" but "what does the thing that *can* do both look like on this
+page". **Three modes, one `Map` object** — two from 7 Sep 2026, when
 four were cut to two, and a third added on 9 Sep; see "Two tabs, not four" and "The All tab"
 below. **In switcher order, `All` first — and it is where the page opens** (14 Sep 2026; see
 "All opens the section" below).
@@ -817,8 +832,7 @@ nothing; since 7 Sep 2026 it is carried by `DEFAULT_LAYERS` being two local file
 Verified in Chrome against the production build: with the map loaded and left as it arrives, the
 set of third-party hosts contacted is empty, and MapLibre has fetched exactly `land-polygons.json`,
 `borders.json` and `atlas-countries.json`. It becomes `tiles.mapterhorn.com` the moment Relief or
-Trails is picked. (`cities.json` is fetched on that page by the **three.js** earth above and is
-not MapLibre's — an easy thing to misread in a request log.)
+Trails is picked.
 
 Things that look like shortcuts and are not:
 
@@ -873,7 +887,7 @@ Things that look like shortcuts and are not:
   hidden rather than faded. MapLibre declutters `symbol` layers but does nothing for HTML markers,
   and six of the eight cities sit inside one 2,000 km square — the default view stacked five cards
   on top of each other. Nearest to frame centre wins its space. A label that cannot be read must
-  not be clickable either. Same rule the three.js engine follows; 7 of 8 show at 1400px.
+  not be clickable either. 7 of 8 show at 1400px.
   **Since 10 Sep 2026 this is the losing half of the story for the atlas ranks only.** A CARD that
   loses its space is now drawn on the winner instead of being dropped — see "Cards merge instead
   of disappearing" below, which is the same pass and the same boxes.
@@ -896,9 +910,8 @@ Things that look like shortcuts and are not:
 - **`map.on('error')` is wired to the console.** MapLibre reports tile, source and style failures
   as events rather than by throwing, so a 404ing DEM tile or a rejected paint property is
   otherwise a map that silently does nothing.
-- **The wheel is handed back at either zoom limit**, via `data-lenis-prevent`, exactly as the
-  three.js globe does it and for exactly the same reason — MapLibre's `preventDefault` stops the
-  browser scrolling but not Lenis.
+- **The wheel is handed back at either zoom limit**, via `data-lenis-prevent`, because
+  MapLibre's `preventDefault` stops the browser scrolling but not Lenis.
 - **Ascent is summed off a 3 m threshold.** GPS altitude noise is a couple of metres per sample;
   summing raw positive deltas turns a flat walk into a thousand metres of climbing.
 - **`land.json` rings fill as polygons with no hole handling.** The source carries no outer/inner
@@ -1056,11 +1069,13 @@ Things that look like bugs or shortcuts and are not:
   the drag that starts on it, and these are not links. `block` is load-bearing too — MapLibre
   positions a marker with `transform`, which does not apply to a non-replaced inline element, so a
   bare `<span>` sits in the corner of the frame.
-- **The city dot takes the *coastline's* colour, not `p.city`.** `city` steps 0.30 off the ground
-  against land's 0.20 — a tenth of the ramp apart, and invisible the moment the hillshade started
-  texturing the land under it. `palette.ts` also gained one step, `boundary` at 0.36: the existing
-  `border` at 0.15 is *lighter* than land and reads as a hairline scored into the surface, which is
-  right for the three.js vector look and wrong for a boundary drawn over shaded relief.
+- **The city dot takes the *coastline's* colour, not a step of its own.** The palette's old
+  `city` step sat 0.30 off the ground against land's 0.20 — a tenth of the ramp apart, and
+  invisible the moment the hillshade started texturing the land under it. `palette.ts` also gained
+  one step, `boundary` at 0.36: the existing `border` at 0.15 was *lighter* than land and read as a
+  hairline scored into the surface, which was right for the three.js vector look and wrong for a
+  boundary drawn over shaded relief. Both `city` and `border` left the palette with the three.js
+  earth (24 Nov 2026).
 - **Relief is one strength, and it is `faint`** (settled 3 Sep 2026). The author's first note was
   that the relief showed height but not obviously; the replacement came back as *too* obvious; the
   third answer was a `RELIEF_LEVELS` ladder of five and a row of chips, the same conclusion the
@@ -1250,7 +1265,7 @@ including immediately after a toggle with the camera still; 390px gives 5/5 clic
 Japan and Thailand — declutter working as designed, since a card naming the city says more than
 the country name under it. And a cluster of peaks loses most of its names to itself: the Himalaya
 carries a dozen candidates in one degree and greedy decluttering keeps two. That is a property of
-the collision rule rather than of these layers, and it is the same rule the three.js earth uses.
+the collision rule rather than of these layers.
 
 ### The route picker (4 Sep 2026)
 
@@ -1660,10 +1675,11 @@ overflow; the pitched overview and the pitched group view screenshotted in both 
 clean throughout. The light↔dark round trip re-measured on the pitched views: overview
 226 → 38 → 226, one route 201 → 46 → 201, `explore` unchanged at 233 → 33. The overview's figures moved from the 207 → 52 recorded above when it went back to the globe, and the reason is the frame rather than the map: a sphere with the ground colour around it is lighter in light and darker in dark than a map that fills every pixel.
 
-**A caution for the next probe.** `.switch` is not unique on that page — the three.js earth above
-has its own look switcher with the same class, and a check for "the switcher is on one line" that
-forgets to scope to `[data-mapglobe]` measures the OTHER one, which has six options and two rows.
-It failed for exactly that reason before it passed.
+**A caution for the next probe.** `.switch` was not unique on that page until 24 Nov 2026 — the
+three.js earth above had its own look switcher with the same class, and a check for "the switcher
+is on one line" that forgot to scope to `[data-mapglobe]` measured the OTHER one. It failed for
+exactly that reason before it passed. The class is unique now, but scope probes to
+`[data-mapglobe]` anyway: it is what keeps them true when the map moves onto `/about/travel`.
 
 ### Never statically import a value from a lazily-imported engine
 
@@ -1682,8 +1698,8 @@ src/scripts/globe/index.ts but also statically imported by …, dynamic import w
 move module into another chunk.
 ```
 
-The fix is a third module holding just the constant — `globe/looks.ts` and `mapglobe/modes.ts` —
-imported by both sides. **Types are free** (erased before Rollup sees them), so `import type` from
+The fix is a third module holding just the constant — `mapglobe/modes.ts`, and `globe/looks.ts`
+until the three.js earth went — imported by both sides. **Types are free** (erased before Rollup sees them), so `import type` from
 an engine is fine. Values are not.
 
 Measured on `/about/travel-preview`, gzipped:
@@ -1734,8 +1750,9 @@ continent, and wrong to stroke: as a line that edge is a circle of latitude, and
 ring around the south pole. The `coast` layer is therefore built from `land.json` instead, whose
 Antarctic ring is pure coast (-85.19 to -63.23) with no closure, by `coastLines()` in the engine —
 which splits a ring wherever consecutive points jump more than 180° of longitude, since that jump
-is exactly where a line on a sphere wraps around the back. No extra download on the preview page:
-the other earth already fetches that file.
+is exactly where a line on a sphere wraps around the back. That was free while the three.js earth
+fetched the same file; since it went (24 Nov 2026) it is a download of its own, 257 KB gz — see
+"Two land files" in `public/globe/README.md` for how to drop it.
 
 **What is NOT fixed, and cannot be from the data side.** Antarctica renders with a wedge missing
 when you spin to the south pole, and it degenerates further as you zoom in there. This is
@@ -1744,9 +1761,9 @@ the same polygon fills correctly under `mercator`; the data was verified (no ant
 over 5.72°, `minLat -89.99`, 257 distinct vertices on the pole ring); and clamping the pole edge
 to -89.99, to the Web Mercator limit -85.05, and to the true -90 all render identically.
 
-**This is a real result for the comparison, not just a defect.** The three.js earth draws the
-poles correctly and MapLibre does not — worth weighing alongside the capability gap, since the
-preview page exists to decide between them. It is out of frame in the default Asia-centred view.
+**It was weighed against the three.js earth**, which was said to draw the poles correctly. That
+held only for its coastline strokes — its filled looks had polar faults of their own, recorded
+under "The travel earth" above. It is out of frame in the default Asia-centred view.
 If it ever needs to go, the move is to drop Antarctica from the *fill* and leave it as coastline
 only, which removes the pole-enclosing polygon entirely; that is an appearance decision, so it
 has not been taken unilaterally.
@@ -1851,7 +1868,7 @@ unmoved — `explore` 233 → 33 → 233, the overview 226 → 38 → 226, one r
 
 ### The `All` tab's view switch, and the panel's corner (10 Sep 2026)
 
-Built out of the mock-up below, at the author's request: they liked its two-state
+Built out of the interaction mock-up (removed 24 Nov 2026), at the author's request: they liked its two-state
 `Globe | Terrain` control and asked for it in the real `All` tab, with the filter section left
 alone — *"This button should change the view only."* It shipped as two positions, and the tilted
 one drew the objection that produced the version described here: **"can see global but cannot
@@ -2027,7 +2044,8 @@ below 640px, with a stored answer beating both. That is a **sixth storage key**,
 pairs a route with a trip when the route's date falls inside the trip's range — three walks
 inside Chengdu, one inside Phuket. Until now the site knew that nowhere: `src/content/trips/`
 and `src/data/trails.json` are two lists that never mention each other, and the only place it
-surfaced was a merged card that happened to name both. The interaction mock-up below carried a
+surfaced was a merged card that happened to name both. The interaction mock-up (removed 24 Nov
+2026) carried a
 hardcoded `WALKED_ON` table of exactly these four pairings **as part of its argument**; this is
 that argument taken up.
 
@@ -2160,8 +2178,9 @@ Read that way the answer is exact: the shared card sits at **x = 479** in Terrai
 | `/about/travel-preview` CSS | 5.46 | **5.89** KB gz |
 | site-wide CSS (`BaseLayout.css`, 25 pages) | 10.09 | **10.13** KB gz |
 
-The 0.04 KB site-wide is `@apply` utilities the rail uses and nothing else does — the trade the
-mock-up section records, taken again for the same reason: this section is going to be deleted.
+The 0.04 KB site-wide is `@apply` utilities the rail uses and nothing else does — the trade
+described under "`@apply` in a scoped block still ships site-wide", taken for a throwaway
+section's sake: it is going to be deleted.
 
 **Verified in Chrome against the production build** — :4322, not the dev server — 74 checks,
 all passing, plus a re-run of the 41 on the four-view work and the 77 on the mock-up with no
@@ -2608,7 +2627,7 @@ Things that look like shortcuts and are not:
 
 Site-wide CSS does not move because `border-accent` and `text-accent` were already used in this
 component, so the two new rules emit no utility the shared sheet did not already carry — which is
-the trap the mock-up section documents, checked rather than assumed.
+the trap recorded under "Tailwind v4 gotcha", checked rather than assumed.
 
 **Measure these two figures in ONE session, before and after, by swapping the files.** The absolute
 chunk sizes are not comparable across sessions — the baseline measured 247.89 here against the
@@ -2808,8 +2827,8 @@ heart rate taken from the nearer fix.
   Home/End jump, Escape clears. Two series against distance with a cursor is a hundred lines; a
   charting dependency on a page that already ships two map engines would be one more thing to defer.
 - **`var()` works in these charts because every colour is a CSS class**, never a presentation
-  attribute — the trap the interaction mock-up below records, which renders a black shape in both
-  themes and passes every build.
+  attribute — the trap recorded under "Styling", which renders a black shape in both themes and
+  passes every build.
 - **The Colour view paints the line through `line-gradient`, which needs `lineMetrics: true` on the
   track source.** MapLibre only computes the along-line progress a gradient keys on when the source
   asks for it. The ramp runs accent → `--color-fg`, so the lowest ground on the route looks exactly
@@ -2859,8 +2878,8 @@ down on another day is worthless:
 | one route's profile, on first use | — | 1.7–4.3 KB gz |
 
 Site-wide CSS does not move because the card's styles are written as plain declarations wherever
-the utility was not already used in this file — the `@apply`-emits-into-the-shared-sheet trap the
-mock-up section records, checked rather than assumed.
+the utility was not already used in this file — the `@apply`-emits-into-the-shared-sheet trap
+recorded under "Tailwind v4 gotcha", checked rather than assumed.
 
 **Verified in Chrome against the production build** — driven with `playwright-core` against the
 installed Chrome, since Playwright's own browsers are not installed on this machine — 54 checks,
@@ -3056,7 +3075,7 @@ stage width.
 
 The 1.7 KB of CSS is six complete layouts and is the whole cost of the exercise; five of them are
 deleted when one wins. Site-wide CSS does not move because every rule is written as plain
-declarations rather than `@apply` — the trap the mock-up section records.
+declarations rather than `@apply` — the trap recorded under "Tailwind v4 gotcha".
 
 **Verified in Chrome against the production build**, 42 checks on the layout tabs plus a re-run of
 the 54 on `All`, `Trips` and `Trails` with no regression: nine tabs in the right order with one
@@ -3075,131 +3094,874 @@ row is on one line" reported two rows for a row that was on one — it had measu
 earth's own look switcher, which shares the class and has six options over two rows. Scope every
 selector on this page to `[data-mapglobe]`.
 
-## The interaction mock-up (`/about/travel-preview`, 10 Sep 2026)
+## The showcase — the MapLibre earth, redesigned (`/about/travel-preview`, 24 Nov 2026)
 
-A **third** section on the preview page, and the only one that is not an earth. The author's
-complaint about the MapLibre section was not about how it looks but about how it is driven —
-*"only TRAILS and ALL is needed because ALL have included the trips information"* — so this is
-three proposals for the navigation, drawn as chrome over four schematic SVGs.
-`MapUxPreview.astro` plus `src/scripts/map-ux-preview.ts`. Throwaway like the rest of the route.
+The author asked for the MapLibre section to be duplicated under itself and its frontend redesigned
+as "an impressive version", with proper research at the design stage. The duplicate is
+`MapShowcase.astro`, `src/scripts/mapglobe/showcase.ts` (the eager bootstrap, an
+IntersectionObserver and nothing else) and `showcase-app.ts` (the app, imported on approach). Same
+engine, same data, same colour contract; the original section above is untouched apart from one
+guard, recorded below. Both are on the page so they can be compared.
 
-**The diagnosis, which is what the section argues.** Six of the seven faults below are the same
-fault wearing different clothes: **the tab row describes an axis the data does not have.** There
-is one map and four depths — the world, the routes, an area, a route.
+### The research, and what it decided
 
-1. **Two of the three tabs are the same map.** `All` with its Trails chip off *is* `Trips` — the
-   row asks the reader to choose between a set and a subset, and what separates them is a chip
-   inside one of the two. This is the redundancy the author spotted.
-2. **Depth is spelled as a mode.** World → area → route is a zoom, driven by a control whose
-   whole meaning is "switch to a different thing".
-3. **The row and the map disagree about who is steering.** A route card moves the selected tab
-   under the reader; a group card does not. Two identical-looking cards do two different things.
-4. **The panel changes identity in place** — same corner, same styling, five independent toggles
-   in one tab and an eleven-item single choice in another, with nothing marking the swap.
-5. **The route picker is an index dressed as a filter** — eleven proper nouns in `fg-faint`,
-   already recorded above as 2.31:1 in Classic.
-6. **There is no way back.** From a route at z13 the exits are the tab row and a chip in a
-   scrolling list. The map itself offers none, and the map is where the reader is looking.
-7. **The readout exists in one tab out of three**, so two thirds of the time nothing says what is
-   on screen or what was just clicked.
+Gathered by a research subagent from primary sources: Strava, AllTrails and Komoot help pages, the
+MapLibre docs, Apple's HIG (maps, sheets, materials), the WCAG 2.2 understanding docs, WAI-ARIA
+APG, and the Stripe, GitHub and Mapbox engineering write-ups. What it decided, decision by decision:
 
-**The three proposals**, one at a time behind a switcher, over the same four schematics:
+- **One map, no tabs.** World, then a place, then a trail, entered from the map or the timeline,
+  with a breadcrumb (`Earth › Chengdu › Lamasi – Muluozi`) as the way back. Layers behind one
+  button. Tabs that only show subsets of the same data were the first anti-pattern it named.
+- **A headline instead of an essay.** One sentence, three figures, two buttons. The figures were
+  replaced by a photo wall on 25 Nov 2026 — see "A photo wall, and no dates or counts" below.
+- **Solid panels for text, glass only for small controls** (Apple HIG materials, NN/g on
+  glassmorphism). Text never floats on hillshade. The desktop panel docks to the right; a phone
+  gets a bottom sheet with peek, half and full, and the map stays usable behind all three.
+- **Replay only when asked, with real controls.** Pause, speed (1×, 2×, 4×), scrub (on the HUD's
+  bar and on the elevation profile), Re-centre, and any gesture on the map pauses it — the union of
+  Strava's, AllTrails' and Komoot's flyovers. An eased follow camera, never one locked to raw GPS
+  points (Mapbox's cinematic route write-up). The line draws on with a `step` on `line-progress`;
+  MapLibre has no `line-trim-offset`.
+- **Flights:** MapLibre's default curve of 1.42, which is what van Wijk's 2003 study found people
+  preferred, about 2.4 s each, and NOT `essential`, so MapLibre's own reduced-motion handling
+  turns them into cuts.
+- **A first frame before any map:** a theme-coloured sphere that the live globe crossfades over,
+  after GitHub's globe.
+- **The timeline as the keyboard route:** one tab stop, arrows along it (APG); aria-live
+  announcements; the panel focuses its heading and Escape hands focus back.
+- **Proportional digits for large still figures, equal-width digits for numbers that change** —
+  only the flyover's readouts use `tabular-nums`.
+- **Reduced motion:** no flyover at all, so the trail stays framed and fully drawn, and the tour
+  waits for Next instead of advancing (WCAG 2.2.2, 2.3.3).
 
-| | Navigation | Keeps |
+### What is on the stage
+
+- **Panel on the left** of the map on a desktop and above it on a phone, with one face per view and
+  no title. Each face has one handwritten line: right above the photo on the Globe, at the top on
+  the Terrain. On the Globe: the trips' photos one at a time, taking turns, with previous, pause
+  and next at the end of the bar under the photo, then the country and the place's name. On the
+  Terrain: a tile per route drawn as
+  its outline, in a row per kind (climbs, hikes, runs) under its sign. Pointing at a tile or the photo lights the place's card on the map, and
+  pointing at a trip's card brings its photo up. See "One photo at a time, and no title" below.
+  (Until 25 Nov 2026: an eyebrow, "Eight trips. Ten trails.", three counted-up figures and *Play the
+  journey* / *Fly a trail in 3D*; then a two-line slogan per face; then the titles "Trips" and
+  "Trails" over the same line; then, briefly, a sheet with no words at all; then, for a day, a
+  collage that filled the column.)
+- **Controls**, one glass pill: a Globe | Terrain radiogroup (arrows move between them), one
+  popover button (on the Globe the layers: trips, trails, the five layers; on the Terrain the
+  trails filter: climbs, hikes, runs), Home, Full screen. A column down the right edge on a phone,
+  so the breadcrumb gets the frame's width.
+- **Chronology**, the author's own and out of sight until a mouse reaches the foot of the map:
+  every trip as an accent dot and every trail that belongs to no trip as a triangle (hike) or a
+  diamond (run). Shape, not colour, tells them apart. Years sit above the axis, trips on it and
+  trails below it, so nothing overprints at any width. A readout beside it names whatever is under
+  the pointer. Its play button starts the tour.
+- **Panel:** a trip has its summary, the trails walked there and a link to its page. A trail has
+  four figures, an elevation profile whose cursor moves the probe on the map, *Fly this trail in
+  3D*, and *Part of <trip>* where there is one.
+- **Tour:** the trips oldest first, one `flyToTrip` each (zoom 4.2, pitch 40, the bearing turning
+  ±14° step to step), with a caption (country, place, summary), a dwell bar, and previous /
+  pause / next / end. *End* leaves the reader at that trip with its panel open.
+- **Flyover:** a HUD with live distance, elevation and the recording's own local clock. The path
+  still ahead is painted on the casing as a faint accent.
+
+### The engine grew; the original section uses none of it
+
+`tripCards: 'button'` builds trip cards as buttons with `data-mapglobe-trip`, so a click can open a
+panel instead of leaving the page. `reserveRoot` sets where the reserved controls are looked for.
+The new methods are `flyToTrip`, `home(animate, zoom, padding)`, `clearPadding`, `revealTrack`,
+`camera`, `jumpTo`, `easeTo`, `settled`, `hasTerrain` and `setQuiet`. All are additive, and the
+original section never calls them. `showAllTrails` gained an optional `animate` (25 Nov 2026),
+which the original section never passes.
+
+Things that look wrong and are not:
+
+- **On a globe, `offset` turns the earth; only `padding` moves the sphere.** Measured: a home
+  camera with an offset put 99.1°E at the centre instead of 110°E and left the sphere exactly
+  where it was. So the home view uses PADDING — the headline's width plus 24px — to centre the
+  globe in the space to its right, and the placeholder sphere is laid out by the same rule in
+  CSS. Padding persists on the camera, and MapLibre's `fitBounds` frames inside it as well as
+  inside its own padding, so it is cleared before every engine fit. `flyToTrip` animates it to
+  zero as it flies, and every way into Terrain calls `clearPadding` first (`unpad()` in the app).
+  `offset` is still right for a trip beside the open panel, because there the earth should turn.
+- **The original section's click handler now ignores clicks outside its own section.** Both maps
+  build route cards with `data-mapglobe-trail`, and without that one guard a click on a showcase
+  card re-aimed the original map. It is the only change to the original section.
+- **Elements built in script need `:global`**, scoped under `.xp`: the breadcrumb, the panel's
+  buttons and their icons. Astro's scope attribute is only ever on the file's own markup. The first
+  build rendered the breadcrumb as bare stacked text and the Fly button as a 120px play triangle.
+- **`.xp [hidden] { display: none !important }`.** Any element here that sets `display` beats the
+  attribute's UA rule — the trap recorded for the index rail, settled once for the section.
+- **No `@apply` anywhere in MapShowcase.astro.** Every rule is a plain declaration on the tokens,
+  and the shared `BaseLayout.*.css` was byte-identical (`cmp`) across every build of this work.
+
+### Relief is on when the showcase opens (24 Nov 2026)
+
+The author asked for Relief on by default in this section. The Relief switch in the layers popover
+ships `checked`, and the app reads its starting layers and content off the switches
+(`LAYER_ORDER` and `CONTENT_ORDER` in showcase-app.ts), so the markup is the only place a default
+is written. The original section is untouched: its Relief chip still starts off.
+
+- **This section now contacts a third party on arrival, on purpose.** The hillshade reads
+  Mapterhorn's DEM tiles as soon as the map starts. The map starts about a screen before the
+  section scrolls into view, so the top of the page still contacts nobody. Measured: 11 requests
+  and 783 KB on a 1440px desktop, 5 and 411 KB at 390px. The original section alone still
+  contacts nobody, verified with the showcase's script blocked. With Mapterhorn blocked, the land
+  is drawn flat and nothing else breaks.
+- **The credit has to stay readable**, now from the first view. Below 52rem the bottom-right
+  credit was covered by the sheet at half and full height, by the tour caption and by the
+  flyover's readout. There it now sits top-left, under the breadcrumb. Its "i" button is drawn
+  from the tokens: MapLibre's own is a black disc, invisible in the dark theme, and once the map
+  has been dragged that disc is all that is left of the credit. Checked with `elementFromPoint`
+  on the credit: uncovered at home, peek, half, full and during the tour.
+- The switch and the map agree: a screenshot's texture (standard deviation) reads 7.8 with the
+  switch on and 2.58 with it off, unchanged after toggling and after a reload.
+
+### Why the flyover takes every label off the map (24 Nov 2026)
+
+Found while measuring the relief default, and nothing to do with relief. The flyover moves the
+camera with one `jumpTo` per frame, and every `jumpTo` fires `moveend`. MapLibre answers each
+`moveend` by testing every HTML marker against the terrain with `terrain.depthAtPoint`, which is a
+`gl.readPixels`. With 18 labels on the map that was **67 GPU readbacks per frame**, each one a
+stall, and the engine's own `retier` ran on every one of those `moveend`s too.
+
+`setQuiet(true)` takes every label off the map for the flight and makes `retier` and `declutter`
+return at once. `setQuiet(false)` on the way out puts them back. Nothing is lost: the flyover
+follows one line at z13, and no card is there to read. Measured on a real GPU (Intel Arc, mains
+power): **12.5 → 42.5 fps, 0 readbacks**.
+
+Two more attempts measured as nothing, so neither shipped. Do not retry them without a better
+instrument:
+
+- redrawing the line's reveal only every 30 m and the profile's playhead in 400 steps;
+- capping the probe's source at `maxzoom: 12`, so its per-frame `setData` rebuilds fewer tiles.
+
+Three traps in measuring this:
+
+- **SwiftShader makes relief look expensive. On a GPU it is free**: the home view ran at 56 fps
+  with relief on and off. Launch Chrome with
+  `--use-angle=d3d11 --enable-gpu --ignore-gpu-blocklist --headless=new`.
+- **On battery, every case read exactly 30.3 fps**, while a blank page ran at 55. Uncap with
+  `--disable-frame-rate-limit --disable-gpu-vsync` and read the main-thread task time per frame
+  from CDP's `Performance.getMetrics`.
+- **Repeat every case in the same session.** Identical runs on battery ranged from 81 to 119 fps.
+  The single run that first made the `maxzoom` cap look like a fifth faster was one of those.
+
+### A photo wall, and no dates or counts (25 Nov 2026)
+
+> **Its title went the same day, a tile never shows a footprint any more, and the photos are smaller
+> now** — see "One photo at a time, and no title" below. The reasons here still hold.
+
+The author's request: *"I just want to show the trip and image in a glance no need to mention when
+and how many place I have been. No recruiter and interviewer care about this. I just want to show I
+like to travel at a glance with the earth view."* With it: fold the timeline away until it is
+hovered, drop the counts from the headline, keep something there, and drop the "Field atlas" eyebrow
+and its years.
+
+**The headline is a photo wall, and nothing else.** A title, one line ("Pick a trip to fly there,
+or spin the globe."), then a tile per trip, newest first — three across since the panel was
+reworked the same day, see "The panel titles" below. A tile is a button that selects its trip,
+which the existing `[data-xp-trip]` click handler already did.
+
+*Play the journey* and *Fly a trail in 3D* came off the panel the same day, at the author's call:
+*"a bit stupid to show, no one will see."* The tour now starts only from the timeline's play
+button, and the flyover from each trail's own panel. The `[data-xp-fly-best]` handler and the
+reduced-motion `[data-xp-motion]` rule went with them.
+
+- **A tile is the trip's own `cover`**, the field the travel timeline draws, so a photo is added
+  once (`src/assets/travel/<id>/` plus `cover` and `coverAlt` in the trip's frontmatter; see the
+  README there) and appears in both places. No trip has one yet, so every tile shows the trip's
+  footprint instead; a trip with no footprint would show the travel timeline's hatched "photo to
+  come".
+- **A test photo on Bangkok proved the image branch**: a 200w/400w webp pair at `sizes="6rem"`
+  (`7rem` since the wall went three across),
+  cropped to the square, the name on top, and the same photo in the timeline above. The photo and
+  the trip file were then restored, byte for byte against a copy.
+- **The photo's alt is empty.** It is decoration inside a button its visible name already labels;
+  `coverAlt` stays the photo's description where the photo is the content.
+- **The name sits on a fade of `--color-surface`**, so it reads over a photo and over the ruling
+  alike, and flips with the theme.
+
+**No dates and no counts where a glance lands.** Only the timeline, opened on purpose, says when.
+
+| | before | now |
 |---|---|---|
-| **Drill down** (recommended) | no tabs; a breadcrumb `Earth › Johor › Pulai`, and the map is the only control | removes a whole level — the world already shows the three route groups the Trails overview exists to show |
-| **Map & index** | a permanent rail: trips newest first, each with the routes walked on it **nested underneath** | the only one that shows a relationship the site records nowhere |
-| **Two views** | the author's own instinct tidied: drop `Trips`, keep `All` and `Trails`, make the switch two-state and give Terrain the breadcrumb | the one control that says "the routes, alone" |
+| headline | eyebrow "Field atlas · 2023–2026", "Eight trips. Ten trails.", three figures | title, one line, photos |
+| card on the globe | "Tokyo 2026", "Johor 6 routes", "2 trips · 3 routes" | the name alone |
+| tour caption | "01 / 08", the place, country and dates | country, place, summary |
+| trip panel | country and year, dates and length of stay, "3 trails walked here" | country, place, "Trails walked here" |
+| trail panel | the date and the shape | the shape |
 
-**Three changes are worth making whichever model wins**, and they are cheap: the readout under
-the frame at every depth, the layer chips behind a button instead of permanently over the map,
-and a way back that lives on the map rather than beside it. Between them they answer four of the
-seven faults without touching the tab row.
+- **The card's second line is hidden in this section's CSS**, `.mapglobe__label-when` set to
+  `display: none`, not removed in the engine: the original section above still shows it.
+  `display: none` also takes it out of the card's accessible name.
+- **A merged card can still read "Bangkok +2" at 390px.** That is the width budget naming what
+  else is in the card, not a tally of trips, and it is left alone.
+- **A screen reader still hears "1 of 8" in the tour.** On screen nothing counts the trips, but
+  the position is how a listener knows where a slideshow has got to (APG carousel).
+- **The trail panel keeps its four figures and the timeline keeps its years.** Distance and climb
+  describe a walk rather than count places, and the timeline is the "when" view by definition.
 
-**The nesting in proposal 2 is a real fact the site knows nowhere.** Three walks fall inside the
-Chengdu trip and one inside Phuket — visible by putting the dates side by side, and recorded in
-no code: `visited.json` and `trails.json` are two flat lists that never mention each other, and
-the only place it currently surfaces is a merged card that happens to name both. `WALKED_ON` in
-the component is a hardcoded table **on purpose, as part of the argument**.
+**The timeline is the author's own, and nothing on the page says it is there.** *"I want to
+remain this for me only so show only when hover to bottom is ok. user no need to know about the
+timeline."* It shipped for a few hours with a "Timeline" tab at the foot of the map; the tab is
+gone. A mouse within 24px of the frame's bottom edge slides it up, it stays while the mouse is on
+it, and it folds 280ms after the mouse leaves. `data-chrono` on the section carries the state.
 
-**That argument was taken up the same day.** `walkedOn()` in `src/lib/content.ts` now derives
-the pairing from a route's date falling inside a trip's range, throws at build time if a route
-ever falls inside two trips, and the `All` tab's index rail renders it. So the table here is a
-mock-up of something that exists — leave it as it is while the section does, since the point it
-illustrates is the navigation model rather than the data.
+- **The reveal is decided in script from the pointer**, a `pointermove` on the stage, not by an
+  invisible strip in CSS. A strip would sit over the foot of the map catching the clicks and
+  drags meant for it, and over the map's credit in the corner. Checked: with the timeline folded,
+  `elementFromPoint` at the foot returns the map canvas and at the credit returns the credit.
+- **Mouse only, idle only, never mid-drag.** `pointerType` must be `mouse`, no button may be held
+  (a drag that ends at the foot leaves it folded) and no tour or flight may be running.
+- **It slides up flush with the frame's bottom edge, under the pointer**, which is why there is no
+  gap below it. A pointer resting at the foot ends up over the arriving timeline, so it holds. With
+  a gap the pointer would be left on the map and it would fold again.
+- **Folded, it is `visibility: hidden` as well as out of frame**, so its marks take no focus and
+  are out of the accessibility tree. The visibility change waits for the slide, so the drawer is
+  seen to close.
+- **The keyboard and touch never reach it, by the author's intent.** They lose nothing: every trip
+  and every trail is a tile in the panel and a card on the map. The tour is the one thing only the
+  timeline starts.
+- **On a phone it is not there at all** (`display: none` below 52rem).
+- **It is no longer `data-mapglobe-reserve`.** It is a passing overlay now, and a reservation would
+  keep cards off the foot of the globe for a bar that is not there.
+- **It is `display: none` during a tour or a flyover.** Both have their own panel along the foot,
+  and that is what let the caption and the HUD drop from `bottom: 7rem` to `1.5rem`.
+- **The credit sits in the corner and rides up with the timeline**, through `[data-chrono='open']`,
+  desktop only.
 
-Things that look like shortcuts and are not:
+### Two views, two subjects (25 Nov 2026)
 
-- **It is a diagram, not a fourth map, and the schematics are deliberately abstract.** Three
-  working earths to compare three navigation models would take a week and would put the
-  rendering back in front of the question the section exists to ask. Nobody should be judging
-  the coastline here.
-- **The colours are derived exactly as `palette.ts` derives them** — sea 10%, land 20%, coast
-  50% of the way from the frame's `band` ground toward `--color-fg`. So there is no dark block
-  in the file and there must not be one: the ramp inverts on its own because the colour it walks
-  toward is the light one in dark. Verified in Chrome, both themes.
-- **`var()` DOES NOT WORK IN AN SVG PRESENTATION ATTRIBUTE**, and this cost a round. A
-  presentation attribute is meant to behave as a CSS declaration, but `fill="var(--uxp-sea)"` is
-  not substituted in Chrome: the value fails to parse and the shape falls back to the initial
-  `fill`, which is **black**. It fails silently — clean build, `astro check` sees nothing, and
-  the only symptom is a globe that renders as a black disc in *both* themes, which is the tell.
-  Measured: `getComputedStyle(circle).fill` returned `rgb(0, 0, 0)` in light and dark alike.
-  Every colour in all four schematics is a real CSS class instead.
-- **The schematic and its cards share ONE aspect-locked box**, and which dimension binds it
-  flips at 640px — width leads on a phone, height leads on a desktop. Get it the wrong way round
-  and the SVG letterboxes inside a box that is no longer its own shape, at which point every
-  card, positioned in percentages of the box, slides off the dot it names. It is the same
-  problem MapLibre solves with `project()`.
-- **Cards sit ON their anchor, not centred over it.** Centred, a card covers the very mark that
-  says where the place is.
-- **Four of the eight world cards are dropped below 640px.** A card is a fixed pixel width
-  whatever the box is, so eight that sit clear on a 682px schematic are a pile on a 358px one —
-  the same arithmetic the real engine answers with decluttering. The two merged cards are never
-  dropped; they carry the most information per pixel and they are what the section argues about.
-- **The breadcrumb separator is a `::before` on each crumb**, not a span between them. Which
-  crumbs show depends on the proposal *and* the depth — `drill` never shows "All routes",
-  because that level does not exist in it — and a separator that was its own element would
-  survive its crumb being hidden and leave a stray chevron at the head of the trail.
-- **Route lines are not drawn on the globe.** They were, as two-segment ticks, and at that scale
-  they read as stray UI glyphs floating over the Pacific rather than as walks. The footprints
-  say where the page has been; lines start at the area depth where they are long enough to be
-  lines.
+The author, the same day: *"this only make sense when at globe tab if in terrain this not make
+sense the left handside should become the terrain already. and dont jump to a specific trail when
+switch to terrain, I want a global view when switch to terrain and the earth only show the trails
+and left panel change to the trails instead of trips."*
 
-**`@apply` INSIDE A SCOPED ASTRO BLOCK STILL EMITS THE UTILITY INTO THE SHARED SHEET.** Worth
-knowing for every component, not just this one: a utility nothing else on the site references
-lands in `BaseLayout.css`, which is on all 25 pages, even though the rule using it is
-page-scoped. Measured here — six utilities used by this file alone cost **0.21 KB gz
-site-wide**; written out as plain CSS declarations they cost nothing. About eighteen cheaper
-ones are still left as `@apply`, a deliberate trade, since converting all of them would make
-this file stylistically unlike every other component in the repo for a section that is going to
-be deleted. **For a permanent component, convert them** — and see the note below before writing
-the class name down anywhere.
+| | Globe | Terrain |
+|---|---|---|
+| engine mode | `combined`, flat | `terrain` — what the original section's Trails tab uses |
+| on the earth | the trips, and the trails | the trails, and nothing else |
+| on arrival | the whole globe | every route at once, grouped by area, pitched, with relief |
+| the panel | one line, and a photo per trip | one line, and an outline per route, in a row per kind |
+| Home | the whole globe | all the trails the filter shows |
+| layers button | the Globe's layers | the trails filter — see the next section |
+
+- **It used to be `combined`'s own Terrain view**, which needs a route to stand on. So it opened
+  on one the reader never picked: the stored route, or the first. Terrain MODE opens on its
+  overview, and `showAllTrails()` is the way into it from the globe.
+- **A trail is only ever open on the terrain.** Picked anywhere — its tile, a card on the map, a
+  trip's trail row, the timeline — it lands in terrain mode with that route drawn. `loadTrail`
+  does that from the globe by itself. The breadcrumb reads "All trails › area › trail".
+- **A trip is only ever open on the globe.** A trail's "Part of <trip>" button, or a trip on the
+  timeline, switches back first.
+- **The view switches before the panel is built**, in `selectTrail`. Built first, a trail picked
+  from a trip on the globe was crumbed "Earth › …": a bug found by the desktop suite.
+- **The outlines are drawn at build time** in MapShowcase.astro. Each is read off the same
+  geometry file the map fetches, with longitude scaled by the cosine of the latitude so a walk is
+  not stretched east to west. It is fitted to a 100-unit square and thinned with
+  Ramer–Douglas–Peucker, and nothing is fetched for it at runtime. An outline keeps to the top
+  half of its tile: a name runs to two lines, and measured on every tile at 1440 and 390 the
+  closest name sits 4.9px below its line. (The triangle and diamond each tile first carried
+  were replaced by a sign per kind; see the next section.)
+- **The panel has two faces in the markup, swapped by CSS** off `data-view`. With no script the
+  globe's face shows.
+- **`showAllTrails()` gained an optional `animate`**, so the overview is a cut under reduced motion
+  like every other flight here. The original section never passes it.
+
+Verified in Chrome against the production build, all passing: 28 checks for this round, and the
+two earlier suites updated for it at 18 of 18 and 17 of 17. The 28 cover:
+
+- the panel's lack of buttons and of a tab;
+- the foot of the map staying the map;
+- the timeline waking at the foot, holding, folding, and ignoring a drag;
+- Terrain arriving with nothing picked and no trip cards, its panel of ten outlines, the layers
+  button hidden, and Home meaning all trails;
+- a tile flying down to its trail;
+- Home returning to the overview;
+- the flyover from a trail panel;
+- "Part of Phuket" back to the globe;
+- a trip's trail row drilling straight in;
+- the tour from the timeline's play button;
+- reduced motion;
+- the phone.
+
+The original section is unchanged, Trails tab included: 12 of 13, with the same Colour-view
+threshold failure on the same pixel counts. The shared stylesheet is byte-identical and every link
+resolves.
+
+### The Terrain filter, and a sign for each kind of walk (25 Nov 2026)
+
+The author: *"why terrain dont have the filter function and I want to clarify climb hike and run
+with more clear sign."* The layers button had been hidden on the terrain, because none of the
+Globe's switches reach terrain mode; nothing had replaced it.
+
+**Three kinds where the manifest has two.** `trails.json` knows `hike` and `run`. A hike that gains
+**400 m or more is a climb** (`CLIMB_ASCENT_M` in MapShowcase.astro). The routes split cleanly on
+it:
+
+| kind | trails | ascent |
+|---|---|---|
+| Climbs | Belumut, Pulai, Lambak | 529–1,127 m |
+| Hikes | the three Changping Valley legs, Cape Krathing | 94–316 m |
+| Runs | Iskandar City, Kulai, Dato Onn | — |
+
+The split is decided once in the frontmatter and handed on: to the app as `trailKinds` in the
+payload, and through the app to the engine. The original section and the manifest still know two
+kinds. Change the threshold, or the rule, in that one place.
+
+**A sign per kind**: a summit flag on a peak for a climb, a walker with a pole for a hike, a runner
+for a run. Each is drawn once, as 16-unit strokes, in `KIND_ICON`.
+
+- **They are painted as CSS masks filled with their kind's colour** (see the next section), from
+  custom properties the frontmatter writes on the section (`--xp-icon-climb` and the rest, each a
+  data-URI SVG). One mechanism draws all of them: the filter's switches, the panel's row headings,
+  the trail panel's eyebrow, a trip's trail rows, the timeline's trail marks and the route cards
+  on the map. The trail panel and the trip rows are built in script and the cards by the engine,
+  so no inline SVG in this file could reach them. Under forced colours they paint in `CanvasText`,
+  because forced colours repaint backgrounds and a mask is painted with one.
+- **The engine took a `trailKind` option** and writes its answer on each route card as
+  `data-mapglobe-kind`. It defaults to the manifest's `hike` / `run`, so the original section's
+  cards now carry the attribute too, and nothing there styles it. An area card stands for several
+  kinds and carries no sign.
+- **The trail panel's eyebrow leads with the sign**: "Climb · Johor, Malaysia", and a half
+  marathon by name ("Half marathon · Johor, Malaysia"), as before.
+- **The panel's outlines sit in a row per kind**, each under its sign and its name.
+
+**The filter is the layers button again, as "Filter trails"**, and its popover shows Climbs, Hikes
+and Runs with their signs where the Globe's switches would be. CSS swaps the two sets off
+`data-view`.
+
+- **It filters the map and the panel together.** The panel hides the row of a kind that is off.
+  The engine gained `setTrailFilter(ids)`, which re-lays out the overview from the routes already
+  fetched: lines, start dots, cards, the areas they group into, and the extent Home frames. Hiding
+  the runs therefore re-groups Johor rather than leaving its card standing for routes that are not
+  drawn. `buildOverview` was split into the fetch and `layoutOverview()` for this. Nothing outside
+  the `labels` registry holds a route or area card, so dropping them from it is the whole teardown.
+- **The engine never moves the camera for a filter; the page decides.** In the showcase, with no
+  trail open, a switch the reader moved re-frames the overview to what is shown, so "Climbs only"
+  closes in on Johor and turning the rest back on brings the whole collection back. With a trail
+  open, the camera stays on it. This was found by the suite: without the re-frame, coming back to
+  Terrain on climbs alone framed Johor, and switching everything back on left Changping Valley and
+  Cape Krathing on the map but out of frame.
+- **The filter belongs to the terrain.** Leaving for the globe hands the engine every route back,
+  because the globe is about trips and shows all trails, and the Globe popover has no kind
+  switches to explain a gap. Coming back re-applies the filter.
+- **The last kind left on is locked**, so the filter cannot empty the map: an empty map reads as
+  broken, not as a choice.
+
+**The popover's key hint no longer names the timeline.** It read "← → move along the timeline ·
+Esc stops a tour or a flight", which told every visitor about the author's hidden timeline. It now
+reads "Esc closes a panel or stops a flyover".
+
+Verified in Chrome against the production build: 24 new checks, all passing, plus every earlier
+suite updated for the button's return (28 of 28, 18 of 18, 17 of 17). The original section is
+unchanged at 12 of 13, with the same Colour-view threshold failure. The 24 checks cover:
+
+- the button's two labels and two sets of switches;
+- every sign drawing its picture, in the filter, the panel and on a map card;
+- the panel's three rows holding the right trails;
+- Runs off removing its row and leaving only climbs on the cards when zoomed into Johor;
+- the last switch locking;
+- the valley and the coast leaving the map;
+- the globe showing every trail whatever the filter, with the filter holding on the way back;
+- all three back on returning every area;
+- the eyebrows for a climb and a half marathon, and a trip's trail rows carrying their signs;
+- 390px.
+
+The shared stylesheet is byte-identical, and every link resolves.
+
+### A colour for each kind of walk (25 Nov 2026)
+
+The author, on the signs: *"Maybe use different color also?"* So each kind wears a colour beside
+its sign, never instead of it. The shape still tells them apart, and that is why the colours could
+be chosen for contrast and harmony rather than for colour-blind separation alone.
+
+| kind | light (all eight light themes) | dark |
+|---|---|---|
+| Climbs | `#ad390a` burnt orange | `#fb923c` |
+| Hikes | `#166534` forest green | `#4ade80` |
+| Runs | `#7e22ce` purple | `#c084fc` |
+
+**Measured against every theme, not eyeballed**, and the first try failed. The tokens were read
+off each theme and the map's land and sea derived the way `palette.ts` derives them: the stage's
+ground stepped 0.20 and 0.10 toward `--color-fg` in OKLab. The lighter orange and green first
+picked (`#c2410c`, `#15803d`) cleared 4.5:1 on a panel but fell to 2.5:1 on the land of every
+light theme, under the 3:1 a mark needs; the shades shipped clear 3:1 on the land and 4.5:1 on a
+panel in all eight. The dark set's worst figure is 4.15:1, on the land.
+
+**One accent collision is accepted.** In three themes a kind sits near the accent: climbs near
+Sepia's rust and Clay's brick, hikes near Sage's deep green (ΔE 3–5). In the terrain view the
+accent marks only the selected route, and a selected route's neighbours are not drawn, so the two
+never meet on screen.
+
+- **They live under the engine's name, `--mapglobe-kind-<kind>`**, on `.xp`, with the dark set on
+  `:root.dark .xp`. The engine reads them in `kindPaint()`, a `match` on the `kind` property that
+  `layoutOverview` now writes on every line and start dot. `paintTrails` goes through it, and
+  `refreshTheme` goes through `paintTrails`, so a live theme switch repaints the lines in the dark
+  shades; verified by counting pixels before and after. A page that sets no `--mapglobe-kind-*`
+  keeps the accent, which is the original section, unchanged to the pixel.
+- **Anything carrying a kind takes `--xp-kind-colour`**, set by the same rules that set the
+  sign's drawing: a sign, a trail's tile (outline, start dot and hover border), a filter switch's
+  track when on, a route card's sign, and the timeline's trail marks. Those marks were grey
+  triangles and diamonds and are now the signs, so the hidden timeline marks Belumut, Pulai and
+  Lambak as climbs too.
+- **The selected route keeps the accent.** Its card is drawn on the accent, so its sign takes the
+  card's text colour there; a kind colour on the accent would fight it. Its drawn track is the
+  accent as before.
+- **They are scoped to the showcase**, like the WhatsApp palette on the agent page, and not added
+  to the site's tokens. The shared stylesheet is byte-identical.
+
+**Counting a map's pixels needs its overlays hidden.** An element screenshot of the map captures
+whatever floats over it, and the panel's green hike outlines were counted as hike pixels on a map
+with no hikes in frame. The check hides the panel, the controls, the breadcrumb, the timeline and
+the sheet for the one screenshot.
+
+Verified in Chrome against the production build: 17 checks, all passing, plus every earlier suite
+re-run (24, 28, 18 and 17, all passing). They cover:
+
+- each kind's colour in the panel heading, the filter's sign and switch, the tile's outline and
+  start dot, and the timeline, in light and in dark;
+- every route card's sign;
+- Johor's lines drawn in the climb and run colours with no hike pixels (107 and 210 pixels light,
+  96 and 137 dark);
+- a live switch to dark repainting both the lines and the signs.
+
+The original section is unchanged at 12 of 13, with the same pixel counts. Every link resolves.
+
+### The panel titles, and a drawing in every tile (25 Nov 2026)
+
+> **The titles came off later the same day, and so did the footprint drawings** — see "One photo
+> at a time, and no title" below. The line under each title stayed, and so did the simplifier fix,
+> which a walk that ends where it began still needs.
+
+Two rounds on one day, both the author's.
+
+**The slogans went.** On the two-line slogans that headed the panel — "Places I've been. / Paths
+I've walked." on the Globe and "Paths I've walked. / Peaks to roads." on the Terrain: *"This
+looks stupid for me."* The titles are now **"Trips"** and **"Trails"**, and the instruction line
+under each stayed, by request.
+
+- **The words are the author's, not new copy.** They are the names of the original section's two
+  tabs, chosen over a dozen alternatives because both are already true of the data behind them
+  (see "Two tabs, not four"). The rest of this panel already used them: "Filter trails", "All
+  trails", "Back to all trails".
+- **A title names what is listed, and nothing more.** The slogans tried to say something about
+  the author, which is the photos' job. The Globe's also promised "Paths I've walked" over a wall
+  of trips, and "walked" was never true of the three half marathons.
+- **The section is named "Trips and trails"**, with `aria-label`. It used to take the Globe face's
+  slogan through `aria-labelledby`, which named the whole showcase after one of its two views.
+
+**Then the panel was "too empty."** The titles had first been set at the trip panel's 1.75rem, so
+the corner held a small name over nine ruled squares. Four changes followed, none of them new
+copy:
+
+- **The title is back at the slogans' display size**, 2.1–3.4rem, and 2.15rem on a phone. It is
+  the anchor of the corner, and at 1.75rem it could not hold the wall under it.
+- **The trips go three across, larger.** Nine tiles make a square, where four across left Bangkok
+  alone on a third row. A tenth trip starts a fourth. The trails stay four across, a row per kind.
+- **A trip without a photo shows its footprint**: the built-up area the globe lights up for it,
+  read at build time from `visited.json` and drawn the way a trail's tile draws its route. It is
+  filled, because it is an area, in the accent at a fifth of its strength with a full-strength
+  edge, as the globe draws it. Seoul & Busan is two shapes at their true distance apart. A cover
+  photo replaces the drawing, and a trip with no footprint keeps the ruled placeholder.
+- **"Pick a photo" became "Pick a trip"**, because no tile has a photo yet. It pairs with the
+  Terrain's "Pick a trail to fly down to it."
+
+**No list of countries**, though it is the obvious true thing to fill the corner with. The figures
+the author took off the panel included a count of countries, and a list says the same thing.
+
+**The simplifier had a bug only the footprints reached.** Tokyo's and Bangkok's rings repeat their
+first point several times at the end (see `public/globe/README.md`), so a span of the
+Ramer–Douglas–Peucker pass began and ended on one point. Measured against a line of no length,
+every point scored zero, and both cities came out as a dot. `thin` now measures to the point when
+a span has no length. The trail outlines are byte-identical before and after, so no trail had
+reached that case.
+
+| panel height, px | slogans | small title | now |
+|---|---|---|---|
+| Globe, 1440 | 462 | 391 | 500 |
+| Terrain, 1440 | 559 | 488 | 507 |
+| Globe, 390 | 399 | 342 | 449 |
+| Terrain, 390 | 496 | 439 | 454 |
+
+The nine drawings add 3.5 KB gz to the page's HTML: 817 points, thinned at twice the trails'
+tolerance, which is still about half a pixel on a tile.
+
+Verified against the production build by screenshot at 1440 and 390, both views, light and dark,
+and the five showcase suites re-run: 28 of 28, 18 of 18, 17 of 17, 24 of 24 and 17 of 17. The shared stylesheet is byte-identical and
+every link resolves.
+
+### One photo at a time, and no title (25–27 Nov 2026)
+
+Fourteen rounds on the left panel, in the author's words:
+
+1. *"I do not like the trips because everyone know this is the trip. I dont want words to mention
+   what this for. This section is to show my memory only no need to tell anything."*
+2. On the wordless sheet built for that: *"But now ugly eh still can put the desc la just dont but
+   trips word because everyone know this is trips."*
+3. *"No dont show the trips area It should display the photo just I have put the photo in."*
+4. On the collage built for that: *"I think the ratio not nice. This will give user have more
+   attention at left hand side."*
+5. On the answer to that, small equal photos **and the globe moved to the middle**: *"nonono Why
+   cahgne the earth to mid revert it."*
+6. On the small squares, with the globe back: *"I do statisfied with my terrain left and right
+   ratio but for globe the ratio on left and right a bit weird."*
+7. On those squares made the column's width: *"Still weird. Maybe is not only the ratio problem the
+   content and layout make it weird also. I no need to show all trips and photo at a glance. maybe
+   can put other content or show only 1 or few frame at 1 time and use animation to swap it. Show
+   the picture in so small frame also weird."* What answered it is under "The reel" below.
+8. On the reel: *"All good now just this Pick a trip to fly there, or spin the globe. word is weird
+   maybe you change a place to put it or make it smaller."* It moved under the place's name, and
+   was made 0.8rem in `fg-muted` as well.
+9. On that: *"I think the size can remain just put it down."* Back to 0.95rem in `fg-body`, the
+   Terrain line's own size and colour, in the new place.
+10. On that: *"Still weird. Maybe just remove the word or put other thing. you decide."* Removed.
+11. On that: *"ermmm THis looks empty again. Do you have other idea?"* Seven ideas were mocked on the
+    live build and put on a page to compare. One had been built straight into the page first, and
+    came back out: *"I think you list out you idea to let me decide dont change directly."*
+12. On that page: *"use back the word like Pick a trail to fly down to it. but make sure the desc is
+    same as terrain and the font size ratio make sense and both need to be same."* Two places for
+    the line were mocked.
+13. On the one that moved the photo up under the line: *"no dont change the photo location just
+    change the words location and size."* That shipped, and stood for a day.
+14. Then: *"I want more different words front size front type and position."* Given a mixer of
+    eight wordings, five sizes, six typefaces and four places, the author pasted back its settings:
+    *"Words 4 (“Pick a memory to fly there.”) · size S · Handwritten · right above the photo"*.
+    That is what shipped.
+
+- **No "Trips" and no "Trails".** Both stay as headings for a screen reader, hidden with `xp-sr`.
+  **Each face has one line, handwritten, and the two are set alike** (fourteenth round): "Pick a
+  memory to fly there." on the Globe and "Pick a trail to fly down to it." on the Terrain, both in
+  Caveat Medium at 1.23rem, line height 1.15, in `fg`. Caveat's letters are small for their size:
+  1.23rem is the mixer's S, 0.85rem, scaled by 1.45 so it reads about as large as the sans would.
+  The Globe line stands right above the photo, the gap under it the same 1.1rem the Terrain face
+  leaves between its line and the trails. It hangs off the Globe face's top edge (the face is
+  `position: relative`, the line `bottom: calc(100% + 1.1rem)`), out of the flow, so the photo did
+  not move for it. The Terrain line keeps its place at the top of the column; the trails under it
+  moved up 0.15px, the difference between the two line boxes. On a phone, where the panel is in the
+  page's flow, the Globe line leads the face as the Terrain one does, which puts it right above the
+  photo there too. The line had been weird everywhere else: "Pick a trip to fly there, or spin the
+  globe." over the photo, where it read as a title, then under the place's name, smaller and then
+  at full size, then gone for a round, which left the face looking empty, then "Pick a trip to fly
+  there." in the site's sans at the top of the column. Before that, four places had been mocked
+  against sample photos: smaller in the same place, under the name, under the name after a
+  hairline, and pinned at the foot of the column (cut off from the panel, and under the author's
+  timeline when it slides up).
+- **Photos, never the area.** The footprint drawings that filled a tile without a photo are gone,
+  and so is the code that read `visited.json` for them. A trip with no photo holds its frame with
+  the travel timeline's hatching and "Photo to come". The globe still draws the footprints.
+- **The earth stays where it was.** Nobody asked for it to move. It is centred in the space to the
+  right of the panel's column, so the column's width, `min(25rem, 32%)`, is what places it: a wider
+  or narrower panel moves the earth. The photo fills it, as the trails do. At 1440 × 900, light and
+  dark, none of the map's 763,752 pixels differ from before any of this; after the sixth round and
+  again after the seventh, none differ at 1920 × 1080, 1440 × 900 or 1280 × 720 in either theme.
+- **The column's whole width** (sixth round). The photos used to be sized off the stage's height
+  (`clamp(15.5rem, 36%, 19rem)`), which kept one proportion to the globe but stopped them short of
+  the column the globe is centred beside: the space between photos and earth came out at up to
+  twice the globe's margin on its far side (257px against 141 at 1440 × 900), while the Terrain
+  face, which fills that column, was the one the author found right. Filled, the space is the far
+  margin plus 48px at every size, and both faces end at 401px. The seventh round kept this.
+- **Level with the middle of the globe, not in the top corner.** The trails stay at the top, where
+  they stand over the sky.
+- **Trips with a photo come round first**, newest first among themselves, and the frames still
+  waiting after them.
+- **Above the map on a phone the photo is 16:9** and at most 34rem wide, so the map is in view
+  sooner: the panel is 310px tall at 390 wide, where the wall was 309 and the collage 441.
+
+**The handwriting is the site's only web font**, Caveat Medium, and only this page loads it: its
+`@font-face` is in MapShowcase.astro's styles, so it lands in the page's own stylesheet and the
+shared one is byte-identical. The file is `src/assets/fonts/caveat-500.woff2`, emitted hashed into
+`_astro/`.
+
+- **Served from this site, not from Google Fonts**, so the top of the page still contacts no third
+  party (see "Relief is on when the showcase opens").
+- **44,520 B, and that is the floor, not a slip.** Caveat carries an alternate shape for most
+  letters, so a repeated letter does not look stamped: 226 glyphs for 104 characters. Google's
+  Latin cut is 50,904 B; this one is cut to English letters and punctuation, the `unicode-range`
+  in the rule. Hinting is not the weight: Google's Mac file is the same size. An accented letter
+  falls back to the next face in the stack, one letter at a time. The mixer had quoted "about
+  30 KB" from memory; measured, it is 44.5.
+- **To cut it again**, ask the Google Fonts CSS2 API for `family=Caveat:wght@500` with `text=` set
+  to printable ASCII plus the no-break space, `·`, `–`, `—`, `‘`, `’`, `“`, `”` and `…`, sending a
+  browser's User-Agent so it answers in woff2, and download the file the answer names.
+- **No preload, on purpose.** The line is laid out at load like the rest of the page, so its font
+  is requested then: measured, it had arrived 323 ms after navigation with the page never scrolled
+  and the stage 7,362px down. A preload would compete with the first paint for a line seven
+  screens away. `font-display: swap` only shows on a connection slower than the reader's
+  scrolling.
+- **Chrome reports the family as "Caveat Medium"**, the name inside the file, in CDP's
+  `CSS.getPlatformFontsForNode`. A check for "Caveat" alone fails; it cost a run.
+- **The licence is the SIL Open Font License 1.1.** The copyright notice and the licence's URL are
+  in the file's name table, and repeated in the comment over the rule. No licence text file sits in
+  `src/`: Tailwind scans every text file there (see "This file is a build input").
+
+#### The reel (seventh round)
+
+**One frame the column's width, 4:3, and the photos take turns in it.** The photo showing drifts a
+little closer (a 6% zoom over 9 s) and, after 6.5 s, cross-fades to the next. Under it a thin bar
+fills over that dwell, with previous, pause and next at its end; under that, the country as the
+eyebrow and the place's name. The face is 345px tall at 1440 × 900, level with the globe's middle,
+where the Terrain face is 403.
+
+**The globe is the index and the panel is the picture.** Pointing at a trip's card on the globe
+brings its photo up and holds it there while pointed at; a merged card brings up the first of its
+trips. Pointing at the photo lights its card, as the tiles did. A click on either opens the trip,
+and the photo showing afterwards is that trip's.
+
+**No summaries.** Every trip's `summary` is about when — "Bangkok in early November", "a month after
+Shanghai" — and the author keeps that off anything a glance lands on. The caption is the place and
+its country.
+
+Things that look wrong and are not:
+
+- **The timing is CSS, and there is no timer in the script.** Each slide's bar is an animation the
+  length of the dwell, and its `animationend` turns the reel. Bar and drift are set on every slide,
+  paused, and run only on the slide showing while `data-playing` is on the reel, so one attribute
+  stops both where they are and a photo fading out keeps its scale instead of snapping back.
+  Turning to a slide rewinds its two animations with `getAnimations()`.
+- **It stops for a set of reasons, not a flag.** `holds` in showcase-app.ts: the reader's pause, a
+  mouse or pen on it, keyboard focus in it (`:focus-visible` only, or a mouse click on a button would
+  leave it stopped after the pointer had gone), a trip's panel open, the Terrain view, the stage off
+  screen, a hidden tab, and a card on the globe pointed at. It plays only when the set is empty.
+- **WCAG 2.2.2.** It starts by itself and runs past five seconds, so it has a pause button as well as
+  stopping for hover and focus. Under reduced motion it never moves on its own; the arrows step it,
+  and the bar keeps its line so they do not move.
+- **The showing slide's visibility is `inherit`, never `visible`.** The panel is put away with
+  `visibility: hidden` while a trip is open, and a slide that said `visible` stayed clickable and
+  focusable inside it at opacity 0. Found by the map-only pixel check, which hides the panel the same
+  way and suddenly differed by 95,000 pixels.
+- **A card turns the reel only while the reel is out.** With a trip open the globe flies, cards
+  slide under a pointer that never moved, and each was turning the hidden reel. That made the photo
+  that had opened the trip inert, and Escape could not hand focus back to it.
+- **The controls are placed by a padding percentage.** The photo is three quarters of the reel's
+  width tall (nine sixteenths below 52rem), and padding percentages are shares of the width, so
+  `padding-top` puts the buttons on the bar's line at every width without knowing how tall any
+  caption is. They sat on the caption's line first, and dropped below a one-line caption at 1280,
+  where "Guangzhou & Shenzhen" wraps and makes every slide as tall as itself.
+- **Slides are one grid cell**, so the reel is as tall as its tallest caption and nothing under it
+  moves when a long name comes round. Inactive slides are `inert`.
+- **The captions trade places faster than the photos.** The old one is gone in 0.25 s and the new one
+  rises after it, so two names are never seen over each other during the 0.9 s cross-fade.
+
+**The placeholder sphere was in the wrong place, and already was before this work began.** It is
+an SVG pinned with `left` and `right`, and an SVG's automatic width is its own shape's, not the
+space between two edges, so it sat at the left and the globe came up somewhere else. It takes an
+explicit width now, and at eight screen sizes it lands within 1px of where `homeCamera()` puts the
+globe. The formula itself draws the globe about 2% larger than MapLibre does; that was there before
+and is left alone.
+
+**A photo gets in by being dropped in.** `tripPhotos()` in `lib/content.ts` takes the `cover` a
+trip's frontmatter names, or failing that `src/assets/travel/<id>/cover.*`, with nothing to edit.
+Nine empty folders wait for them on the author's machine; git does not track an empty folder.
+
+- **Only `cover.*` is matched, and widening it would leak.** An `import.meta.glob` puts every file
+  it matches in the build. Tested with sample photos carrying GPS data: a matched photo that is
+  drawn is re-encoded, its data stripped and its original not published, but a matched photo that
+  is not drawn was published whole. The same is why two covers in one folder is an error.
+- **A folder that names no trip fails the build** and lists the ids it could have had. A folder with
+  photos but no cover only warns, because they may be for a gallery.
+- **The reel only.** A dropped photo has no `coverAlt`, so the timeline and the trip pages, where the
+  photo is the content, still read `cover` from the frontmatter.
+- **The originals are in the repository with their GPS data**, whatever the build strips.
+- Works in `npm run dev` too, where a photo dropped in appears without a restart.
+
+**One place, two marks.** Pointing at a tile or the photo lights its card on the map (accent edge
+and name) and fades the other cards; pointing at a card lights its tile, or brings its photo up in
+the reel. It is `spot()` in showcase-app.ts, for a
+mouse, a pen or keyboard focus. Not touch, where a tap is a click and would only flash it. It is
+cleared whenever the panel is put away, because a panel hidden under a still pointer gets no
+`pointerout`. The tile of the trip that is open carries `aria-current`, which shows on a phone,
+where the panel stays up.
+
+Things that look wrong and are not:
+
+- **Area and merged cards carry `data-mapglobe-members`**, a space-separated list of trip and route
+  ids. It is how Tokyo finds "Seoul & Busan · Tokyo" and Belumut finds "Johor". Additive: the
+  original section never reads it, and its link-style trip cards carry no id, so its merged cards
+  list only routes.
+- **The panel's box is a full-height column, whatever is in it.** `framePadding` clears a reserved
+  box by its shape: taller than wide sideways, anything else vertically. Sized to its content, the
+  Trails face stops being taller than wide once the filter hides a row, and by the engine's
+  arithmetic the overview fit then fails its 45% test at 1440. The column never does. Checked with
+  the hikes switched off: every card still lands right of it. It passes pointer events through, so
+  the map below the trails can still be dragged.
+- **Faded cards use `filter`, never `opacity`.** MapLibre writes each marker's opacity inline to hide
+  the ones behind the globe, and inline beats the stylesheet.
+- **A card the engine has hidden is never lit**: merged away, decluttered or behind the globe. If
+  none is visible, none fades either. Dimming everything to point at nothing says nothing.
+
+**Tried and dropped, so not retried:**
+
+- One sheet of pictures parted by hairlines, names hidden until hovered, the rest greyed out on
+  hover, and the kinds of walk told by their signs alone. "Ugly."
+- A collage led by one large photo, two medium, then threes, filling the column. "More attention at
+  left hand side." Mixed sizes are half of that: the large one is what pulls the eye.
+- The globe centred in the whole stage, moved right only as far as it needed to clear the photos.
+  Reverted at once.
+- Four quieter shapes, mocked up against sample photos before this one was chosen: a slim film strip
+  down the edge (22% of the disc, but a strip of nine needs a second column on a laptop's short
+  window), a list of small photos with names beside them (10%, reads as a menu), the collage at
+  half size (26%), and two columns (24%).
+- In the sixth round, before 4:3: squares at the column's width (113px frames, 34% of the disc at
+  1440 × 900 and 58% at 1280 × 720, heading back to the collage), and four across in the trails'
+  own 82px frames (Bangkok alone on a third row).
+- Nine tiles at the column's width, 4:3 above 71rem and square below (the sixth round's answer).
+  "Still weird": a grid of nine reads as an index squeezed beside the earth at any size, and every
+  photo in it is small.
+- In the eleventh round, seven things under the place's name, mocked and not chosen: the trip's
+  highlights as white chips, as one line and as a list; a square photo with the chips; two prints
+  peeking out behind the photo; the place's name in its own script; and a line in the author's own
+  words per trip. The chips were built into the page before the author had chosen, and came out.
+- In the twelfth, the whole face moved to the top so the line sat where the Terrain one does. It
+  moved the photo: "dont change the photo location". The other place mocked that round, just above
+  the photo with the photo where it was, is where the line went in the fourteenth.
+- In the thirteenth, the line in the site's sans at 0.95rem in `fg-body`, at the top of the column,
+  set exactly like the Terrain line. The author named nothing wrong with it; they asked for more
+  words, sizes, typefaces and places to choose from, and chose another.
+
+| | before | now |
+|---|---|---|
+| `/about/travel-preview` HTML | 27.16 | **23.70** KB gz (24.00 with nine photos) |
+| its CSS | 12.04 | **12.30** KB gz |
+| showcase app, on approach | 9.00 | **9.31** KB gz |
+| MapLibre engine, on approach | 255.31 | **255.39** KB gz |
+| shared CSS, all 25 pages | 10.14 | **10.14**, byte-identical |
+
+Verified in Chrome, 34 checks against each of two builds, all passing: the real one, which has no
+photos yet, and a copy of the project with nine made-up sample photos (JPG, an upper-case `.JPG`,
+PNG and WebP, landscape, portrait and square). They cover:
+
+- no title on either face, the line leading it, and the names on the tiles;
+- nine equal squares, the globe where it was and clear of them, photos where there are photos, empty
+  frames where there are none, and no area drawing anywhere;
+- a tile lighting its card and a card its tile, a merged card lighting both of its trips, Belumut
+  lighting "Johor", and moving off clearing all of it;
+- Tab, Enter and Escape, with no light left behind and focus back on the tile;
+- the kind rows, the filter, and cards clear of the panel with a row hidden;
+- dark, and a tap at 390px, with no overflow at any width and a clean console.
+
+The ten trail outlines are byte-identical, and every link resolves. The original section was only
+checked for its three tabs switching without errors; its own suite is no longer on disk.
+
+The sixth round was checked in Chrome against the production build, 23 checks with 22 passing:
+the photos ending at the column's edge, the same 352px as the trails' wall; still level with the
+globe's middle; a frame lighting its card and a card its frame; Enter, Escape and a click; Terrain
+showing its own face; no overflow; a clean console; and the caption contrast above, whose 860px
+failure is the one recorded there. Around it: the map with the panel hidden is pixel-identical to
+before (globe at three sizes in both themes; the Terrain map differs only by the run-to-run noise
+that two runs of one build show, in a 60 × 40px box around the Johor card), the phone panel is
+pixel-identical at 390, 700 and 832px, the page's CSS went 12,297 → 12,263 B gz, and the shared
+stylesheet is byte-identical.
+
+The seventh round was checked in Chrome against the production build, 38 checks, all passing:
+
+- it plays on arrival and turns by itself, and stops for a pointer, keyboard focus, its pause button
+  (which says so, and holds after the pointer has gone), a trip open, the Terrain view, and the stage
+  scrolled away; next and previous step it; only the photo showing can take focus;
+- pointing at the photo lights its card, and pointing at a card (Bali, and a merged one) brings up
+  its photo, lit, and holds it;
+- Enter on the photo opens its trip; while it is open the put-away photo can be neither clicked nor
+  focused; Escape returns focus to the photo; a trip opened from its card is the photo after;
+- under reduced motion it never plays, has no pause button, and the arrows step it;
+- the controls centred on the bar and clear of every caption at 1280, 1440 and 1920, every name on
+  one line at 1440, and the photo exactly the column's width;
+- 390 and 700px: no overflow, a tap on the photo opens its trip, consoles clean.
+
+Around it: the globe is pixel-identical to before at three sizes in both themes, the Terrain panel's
+column too (6 stray pixels at 1440, where the moving map shows at its foot), and the shared
+stylesheet is byte-identical. The page's CSS went 12,263 → 12,703 B gz; the showcase app is
+9,897 B gz and the page's HTML 23,936 B gz after it.
+
+The thirteenth round was checked in Chrome against the production build, 34 checks with 33 passing:
+
+- the Globe line at the Terrain line's place, size, weight and colour at 1280, 1440 and 1920 and in
+  dark: (49, 47) in the stage, 15.2px;
+- the photo in the same place with the line and with the line taken out of the layout, and nothing
+  but the line's box differing between the two;
+- against the page before the line, at 1440 with and without photos, only the line's box differs;
+- the Terrain line unchanged;
+- at 390 and 700px the line leads the face, 17.6px above the photo, with no overflow.
+
+The one failure is two Mapterhorn 404s at 1920 after switching to Terrain, for tiles 3/7/0 and
+3/0/0 over the Arctic: the sparse pyramid recorded under "The atlas layers". Around it: the 38 reel
+checks pass, the Terrain panel's column and the globe are pixel-identical (the Terrain map differs
+by the run-to-run noise around the Johor card), and the shared stylesheet is byte-identical. The
+page's CSS is 12,769 B gz and its HTML 23,923 B gz after it.
+
+The fourteenth round was checked in Chrome against the production build, 68 checks, all passing:
+
+- both lines drawn in Caveat Medium and nothing else, read from Chrome's own report of the fonts it
+  used, at 1280, 1440 and 1920, in dark, and at 390 and 700px;
+- 19.68px, weight 500, line height 22.63px, in `fg`, in both themes;
+- the Globe line ending 17.6px above the photo at all four desktop sizes, on one line, from the
+  photo's left edge;
+- the photo in the same place with the line and with it taken out of the layout, and at 1440 where
+  it always was, (49, 220.92) and 352 × 264; against the page before any line, only the new line's
+  box differs, with photos and without;
+- the Terrain line at (49, 47.4), the trails 17.6px under it;
+- the font fetched once, from this site, with nothing from Google, and fetched at load with the
+  page never scrolled;
+- at 390 and 700px both lines leading their faces, 17.6px above the photo and the trails, with no
+  overflow; consoles clean apart from the same two Mapterhorn 404s at 1920.
+
+Around it: the 38 reel checks pass, the shared stylesheet is byte-identical, and every link
+resolves. The page's CSS went 12,769 → 12,913 B gz and its HTML 23,923 → 23,929 B gz; the font is
+44,520 B more, fetched once.
+
+### What it costs
 
 | | before | after |
 |---|---|---|
-| eager page script | 2.32 | **2.72** KB gz |
-| `/about/travel-preview` CSS | 3.14 | **5.37** KB gz |
-| site-wide CSS (`BaseLayout.css`, all 25 pages) | 9.94 | **10.08** KB gz |
-| MapLibre and three.js engines | — | unchanged |
+| `/about/travel-preview` HTML | 15.07 | **18.72** KB gz |
+| its CSS | 5.85 | **11.37** KB gz |
+| its eager script | 3.38 | **3.52** KB gz |
+| showcase app, on approach | — | **8.71** KB gz |
+| MapLibre engine, on approach | 254.42 | **254.94** KB gz |
+| shared CSS, all 25 pages | 10.11 | **10.11** — byte-identical |
 
-**Verified in Chrome against the production build** — :4322, not the dev server — 77 checks, all
-passing: the section opens on Drill down at the world with eight cards, one schematic and one
-readout; the box holds 4:3 at both widths; clicking a card descends and the breadcrumb grows,
-with no chevron before the first crumb and `aria-current` on the last; a crumb flies home; the
-Layers sheet opens, holds five chips and closes on Escape; the route sheet lists all ten and a
-row navigates; the rail nests three routes under Chengdu and one under Phuket, marks the current
-row, and never sits under the map; the twin's two-state switch collapses four depths correctly
-and drops below the breadcrumb at depth; zero pairwise card overlaps at 1400px and at 390px; four
-of eight cards kept at 390px, all clickable, none outside the frame; the rail becomes a bottom
-sheet at 390px; 0 horizontal overflow at both widths; the schematic repaints between themes
-(`oklab(0.89…)` → `oklab(0.28…)`); the MapLibre section above still reaches `ready` with its
-three tabs on one line; console clean throughout.
+The second map also costs a second WebGL context, and a second fetch of the geometry, which the
+browser cache serves after the first. Since relief went on by default, arriving also costs
+Mapterhorn's hillshade tiles, measured above. The table predates that change and was not
+re-measured: chunk sizes are only comparable within one session.
 
-**The Astro whitespace trap caught three more**, all in this file's prose and all invisible in
-the source and in a passing build — "nowhere.Three", "andTrails", "changes.Risk". Note it bites
-in **both** directions: a closing tag ending a line glues to the next line's text just as an
-opening tag starting a line glues to the previous line's. They were found by reading the
-*rendered* text, not the source, which is the only way to find them.
+### Verified
+
+35 checks in Chrome against the production build, all passing. Re-run on 25 Nov 2026 after
+relief went on by default, again after the photo wall, and again after the two views and the
+hidden timeline:
+
+- **Desktop:** the top of the page contacts no third party; the showcase, once ready, contacts
+  Mapterhorn and nobody else; the Relief switch ships on; trip cards are buttons. A trip opens its
+  panel and breadcrumb. A trail opens Terrain with the profile chart, crumbed from "All trails".
+  The flyover runs with live readouts. A drag pauses it and offers Re-centre (the distance holds),
+  Re-centre resumes, speed cycles, and Escape stops it and restores the framing. The tour, started
+  from the timeline's play button, begins on the oldest trip, Next advances, and End keeps the
+  reader at that trip. The layers popover opens and closes. The original section is unaffected.
+  No console errors, no overflow.
+- **390px:** the hero is above the map. The panel opens as a peek (27% of the map), the grabber
+  steps to half, a trail opens Terrain with its breadcrumb, the controls are hit-testable, and
+  there is no tour or timeline control.
+- **Keyboard:** the photo tiles are in the tab order and the folded timeline takes no focus. Enter
+  opens the panel with its heading focused; Escape closes it and returns focus to the tile.
+- **Dark theme:** the flyover runs, and the page has no errors.
+- **Reduced motion:** the trail panel has no fly button and a note says why, and the tour waits
+  for Next.
+- **The original section**, 13 checks. It alone still contacts no third party on arrival, its
+  Relief chip starts off, and its trip cards are still links. Its three tabs, a route drilled
+  from the index, the theme round trip and the detail views all work. The 13th check, the Colour
+  view, fails on its own threshold, not on the map: accent pixels go 1132 → 1033 → 1132, a real
+  repaint and an exact restore. A height ramp that starts at the accent changes fewer pixels
+  than that threshold assumed.
+
+### Known and left alone
+
+- **The route-to-route mis-framing the review found applies here too.** Switching from one trail
+  to another inside Terrain frames the second about 285px high, because the engine's fit
+  starts from a drilled camera. The fix belongs in the engine and would move both sections at once.
+- The tour stays on the globe and never drops into Terrain. With relief on, it still fetches
+  hillshade tiles for each place it stops at.
+- Heart rate is not shown here; the Effort view stays in the original section.
 
 ## Reveal animation contract
 
@@ -3243,6 +4005,10 @@ button under the role line. The "Current" badge is kept out of the h1 for a rela
 
 Tailwind for layout and spacing; scoped styles for component detail.
 
+**Text is set in the system's own faces** (`--font-sans`, `--font-mono`), with one exception: the
+travel showcase's handwritten line, which loads Caveat on that page alone. See "One photo at a
+time, and no title" for why it is served from this site and what it costs.
+
 `src/styles/global.css` holds two `@theme` blocks. The first is the raw palette
 (`kleinblue #002FA7`, `schenbrunnyellow #F7E14D`, `tiffanyblue`, `prusianblue`, `bluenova`,
 `lavendarblue`), carried over from `tailwind.config.js`; five of its six entries are still
@@ -3253,6 +4019,14 @@ unreferenced, pending the design direction docs/REBUILD.md §12 leaves open. The
 like `gray-700`.** See "Theming contract" above for the full set and why. Reaching for a raw
 palette entry is usually also wrong — `kleinblue` is unreadable on the dark background, which
 is exactly what `accent` exists to solve.
+
+**`var()` does not work in an SVG presentation attribute.** `fill="var(--color-band)"` reads like
+a CSS declaration and is not one: Chrome fails to parse it and the shape falls back to the
+initial `fill`, which is **black** — in both themes, with a clean build and nothing from
+`astro check`. Found on the travel preview's interaction mock-up (10 Sep 2026), where a globe
+rendered as a black disc and `getComputedStyle(circle).fill` read `rgb(0, 0, 0)` in light and dark
+alike. Give the shape a class and colour it in CSS — which is why the MapLibre route charts colour
+every mark by class.
 
 ## Content
 
@@ -3797,14 +4571,17 @@ date range should not restate it. The essay below the timeline still talks about
 "four to seven days each"; that is a claim about the shape of the whole list, not a duration
 printed against a single trip, and it stays.
 
-**Two cities in one trip go in one entry** (20 Aug 2026): `Taichung & Taipei, Taiwan` and
-`Guangzhou & Shenzhen, China`. The timeline plots trips, not stops — splitting them would put
+**Two cities in one trip go in one entry** (20 Aug 2026): `Taichung & Taipei, Taiwan`,
+`Guangzhou & Shenzhen, China`, and since 25 Nov 2026 `Seoul & Busan, South Korea`. The timeline
+plots trips, not stops — splitting them would put
 two marks on the rail for one flight out and back, and both halves would carry the same dates.
 
 The two slugs are asymmetric on purpose. `taiwan.md` keeps its name because the country is the
 natural handle for a trip that stayed inside one; `guangzhou-shenzhen.md` was renamed from
 `guangzhou` because `china` is not available as a handle — three separate trips went there.
-Renaming was free before launch and will not be after.
+Renaming was free before launch and will not be after. `seoul-busan.md` (25 Nov 2026) is named
+for its cities rather than `south-korea` for the same reason: a country is a handle only until a
+second trip goes there, which is exactly what took `china` away.
 
 **Quote the dates.** `start: '2023-11-03'`, not `start: 2023-11-03` — YAML reads a bare
 `yyyy-mm-dd` as a timestamp and hands zod a `Date`, which fails the schema. They are stored as
@@ -3832,17 +4609,45 @@ list of days rather than six prose subheadings.
 fails the build on a `cover` with no `coverAlt`, and every gallery entry needs an `alt`, which
 doubles as the visible caption: one description per photo, written once. Until a cover exists
 the frame renders a "Photo to come" placeholder, which is deliberate — the timeline has to look
-composed while eight trips wait for their photos.
+composed while nine trips wait for their photos.
 
 `src/content/sections/travel.md` is now the essay **under** the timeline, not the page. Its
 first heading ("Why the list looks like this") only makes sense in that position.
 
-**All eight trips are Claude-scaffolded drafts (20 Aug 2026) and say so at the foot of each
-file.** Everything in them is calendar arithmetic off the destination and the dates — nothing
-about the trips themselves has been invented, which is why the day headings have no text under
-them. The one real finding worth keeping: every trip whose exact days are known starts on a
-Friday, five out of five. The essay's second paragraph is built on that, so re-check it when
-the three month-precision trips get their days.
+**All nine trips are Claude-scaffolded drafts and say so at the foot of each file** — eight
+from 20 Aug 2026, Seoul & Busan from 25 Nov 2026. Everything in them is calendar arithmetic off
+the destination and the dates — nothing about the trips themselves has been invented, which is
+why the day headings have no text under them. The one real finding worth keeping: five of the
+six trips whose exact days are known start on a Friday, and the sixth, Seoul & Busan, on a
+Thursday. It was five out of five until that trip arrived. The essay's second paragraph is built
+on that, so re-check it when the three month-precision trips get their days.
+
+### Adding a trip (25 Nov 2026)
+
+Done once so far, for Seoul & Busan. Three edits and no code:
+
+1. **`src/content/trips/<id>.md`.** Copy a sibling. Quote the dates, and generate the day
+   headings from them.
+2. **Its footprint:** `node scripts/build-footprint.mjs <urban-areas.geojson> <id> <lon,lat> …`,
+   one point per city, as `public/globe/README.md` describes. Without it the trip is on the
+   timeline and on neither earth — the engine skips a trip it has no footprint for.
+3. **`src/content/sections/travel.md`.** Its summary counts the trips ("Nine trips since
+   2023"), and the essay's Friday paragraph counts their weekdays. Both are written by hand.
+
+And its photo, when there is one: `src/assets/travel/<id>/cover.jpg`, with nothing to edit. The
+README there says the rest.
+
+Nothing else a visitor reads counts the trips. The original earth's intro and legend stopped
+saying "eight" the same day, and the showcase's photos, tour and timeline read the
+collection. Where this file or a code comment says eight trips, it was true when written.
+
+Verified in Chrome against the production build, 12 checks: the trip page, its dates and country
+and its six day headings, Thu 5 Nov to Tue 10 Nov; first on the timeline; the essay's "five of
+the six"; a card on the original earth, whose intro no longer counts; nine tiles on the
+showcase with its own first, opening its panel; the accent footprint in two places; the tour
+ending on it; the About summary; a clean console. The showcase suites were re-run with no
+regression (28 of 28, 18 of 18), and the original section is unchanged at 12 of 13, the same
+Colour-view threshold failure as before.
 
 ## Additional guidelines
 
